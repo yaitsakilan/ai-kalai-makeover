@@ -3496,6 +3496,23 @@ function initAnalyticsCharts() {
       cutout:'60%'
     }
   });
+function normalizeOcrDate(rawDate) {
+  if (!rawDate) return '';
+  let d = new Date(rawDate);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0];
+  }
+  const match = rawDate.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) {
+    const day = match[1].padStart(2, '0');
+    const month = match[2].padStart(2, '0');
+    const year = match[3];
+    let parsedDate = new Date(`${year}-${month}-${day}`);
+    if (!isNaN(parsedDate.getTime())) {
+      return parsedDate.toISOString().split('T')[0];
+    }
+  }
+  return '';
 }
 
 // ——— OCR Scanner ———
@@ -3615,6 +3632,7 @@ async function saveOcrToSupabase() {
   if(!parsed) { showToast('No scan data to save','error'); return; }
 
   const storeName = document.getElementById('ocr-store')?.value || parsed.store || 'Unknown';
+  const billDate = document.getElementById('ocr-date')?.value || new Date().toISOString().split('T')[0];
   const itemSummary = (parsed.items || []).map(i => `${i.name} (₹${(i.amount || 0).toLocaleString()})`).join(', ');
 
   // Save as bill scan
@@ -3622,14 +3640,14 @@ async function saveOcrToSupabase() {
     store: storeName,
     items: parsed.items || [],
     total: parsed.total || 0,
-    scan_date: parsed.date || new Date().toLocaleDateString()
+    scan_date: billDate
   });
 
   // Also save as expense
   await addExpense({
     category: 'Products',
     amount: parsed.total || 0,
-    date: new Date().toISOString().split('T')[0],
+    date: billDate,
     note: `Bill from ${storeName}${itemSummary ? ' | Items: ' + itemSummary : ''}`
   });
 
@@ -3647,10 +3665,19 @@ function renderOcrResult() {
   
   parsed.total = (parsed.items || []).reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
   
+  const dateFromBill = normalizeOcrDate(parsed.date);
+  const displayDate = dateFromBill || new Date().toISOString().split('T')[0];
+  const dateWarning = dateFromBill ? '' : '<span style="color:#d97706;font-size:11px;margin-top:4px;display:block;"><i class="ti ti-alert-triangle"></i> Date not found in bill. Defaulted to today. Please check and adjust manually.</span>';
+
   dataEl.innerHTML = `
     <div style="margin-bottom:12px">
       <div class="form-label">Store / Vendor</div>
       <input class="form-input" id="ocr-store" value="${parsed.store || ''}" oninput="window._lastOcrResult.store = this.value">
+    </div>
+    <div style="margin-bottom:12px">
+      <div class="form-label">Bill Date</div>
+      <input class="form-input" id="ocr-date" type="date" value="${displayDate}" oninput="window._lastOcrResult.date = this.value">
+      ${dateWarning}
     </div>
     <div style="margin-bottom:12px">
       <div class="form-label" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">

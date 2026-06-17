@@ -718,6 +718,8 @@ async function fetchBillScans() {
 }
 
 async function addCustomer(customer) {
+  if (customer.amount !== undefined) customer.amount = Math.round(Number(customer.amount) || 0);
+  if (customer.total_spend !== undefined) customer.total_spend = Math.round(Number(customer.total_spend) || 0);
   let {data, error} = await db.from('customers').insert([customer]).select();
   if (error && error.code === 'PGRST204' && 'rating' in customer) {
     console.warn('Database schema cache error PGRST204: rating column missing. Retrying without rating...');
@@ -736,6 +738,9 @@ async function addCustomer(customer) {
 }
 
 async function addEvent(event) {
+  if (event.total !== undefined) event.total = Math.round(Number(event.total) || 0);
+  if (event.advance !== undefined) event.advance = Math.round(Number(event.advance) || 0);
+  if (event.pending !== undefined) event.pending = Math.round(Number(event.pending) || 0);
   let {data, error} = await db.from('events').insert([event]).select();
   if (error && error.code === 'PGRST204') {
     console.warn('Database schema cache error PGRST204: some columns might be missing. Retrying with base event columns...');
@@ -762,6 +767,7 @@ async function addEvent(event) {
 }
 
 async function addExpense(expense) {
+  if (expense.amount !== undefined) expense.amount = Math.round(Number(expense.amount) || 0);
   const {data, error} = await db.from('expenses').insert([expense]).select();
   if(error) { console.error('Add expense error:', error); showToast('Failed to add expense','error'); return null; }
   showToast('Expense added successfully!');
@@ -795,6 +801,13 @@ async function deleteReelsIdea(id) {
 }
 
 async function addBillScan(scan) {
+  if (scan.total !== undefined) scan.total = Math.round(Number(scan.total) || 0);
+  if (scan.items) {
+    scan.items = scan.items.map(item => ({
+      name: item.name,
+      amount: Math.round(Number(item.amount) || 0)
+    }));
+  }
   const {data, error} = await db.from('bill_scans').insert([scan]).select();
   if(error) { console.error('Add bill_scan error:', error); showToast('Failed to save scan','error'); return null; }
   showToast('Bill scan saved!');
@@ -3611,7 +3624,20 @@ async function handleBillUpload(input) {
       const data = await resp.json();
       const raw = data.choices?.[0]?.message?.content||'{}';
       let parsed;
-      try { parsed=JSON.parse(raw.replace(/```json|```/g,'').trim()); } catch(err) { parsed={}; }
+      try { 
+        parsed = JSON.parse(raw.replace(/```json|```/g,'').trim()); 
+        if (parsed && parsed.items) {
+          parsed.items = parsed.items.map(it => ({
+            name: it.name,
+            amount: Math.round(Number(it.amount) || 0)
+          }));
+        }
+        if (parsed && parsed.total) {
+          parsed.total = Math.round(Number(parsed.total) || 0);
+        }
+      } catch(err) { 
+        parsed = {}; 
+      }
 
       // Store parsed data for saving
       window._lastOcrResult = parsed;

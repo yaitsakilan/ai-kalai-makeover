@@ -1,0 +1,3 @@
+[build]
+  publish = "billl"
+  command = "echo \"window.GROQ_API_KEY = '$GROQ_API_KEY';\" > billl/config.js"

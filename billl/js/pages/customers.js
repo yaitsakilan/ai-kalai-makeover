@@ -35,27 +35,32 @@ export async function renderCustomers() {
 }
 
 export function renderCustomerList(customers) {
-  if(!customers.length) return '<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No customers found</div>';
-  const colors=['av-gold','av-teal','av-rose','av-purple'];
-  return customers.map((c,i)=>`
+  if (!customers.length) return '<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No customers found</div>';
+  const colors = ['av-gold', 'av-teal', 'av-rose', 'av-purple'];
+  return customers.map((c, i) => `
     <div class="card" style="margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:14px">
-        <div class="avatar ${colors[i%4]}" style="width:44px;height:44px;font-size:15px">${(c.name||'').split(' ').map(n=>n[0]).join('').slice(0,2)}</div>
+        <div class="avatar ${colors[i % 4]}" style="width:44px;height:44px;font-size:15px">${(c.name || '').split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
             <span style="font-size:14px;font-weight:600">${c.name}</span>
-            ${(c.visits||0)>=5?'<span class="badge badge-blue">⭐ Regular</span>':''}
-            ${c.rating ? `<span style="color:#d97706;font-size:11px;margin-left:6px;letter-spacing:1px;" title="Owner rating: ${c.rating}/5">${'★'.repeat(c.rating)}${'☆'.repeat(5-c.rating)}</span>` : ''}
+            ${(c.visits || 0) >= 5 ? '<span class="badge badge-blue">⭐ Regular</span>' : ''}
+            ${c.rating ? `<span style="color:#d97706;font-size:11px;margin-left:6px;letter-spacing:1px;" title="Owner rating: ${c.rating}/5">${'★'.repeat(c.rating)}${'☆'.repeat(5 - c.rating)}</span>` : ''}
             ${c.referred_by ? `<span class="badge badge-amber" title="Referred by: ${c.referred_by}">📢 Ref: ${c.referred_by}</span>` : ''}
           </div>
-          <div style="font-size:12px;color:#888">${c.phone||'No phone'} · ${c.location||'No location'}</div>
-          <div style="font-size:12px;color:#aaa;margin-top:2px">${(c.services||[]).join(', ')} · Last: ${c.last_visit||'N/A'}</div>
+          <div style="font-size:12px;color:#888">${c.phone || 'No phone'} · ${c.location || 'No location'}</div>
+          <div style="font-size:12px;color:#aaa;margin-top:2px">${(c.services || []).join(', ')} · Last: ${c.last_visit || 'N/A'}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:14px;font-weight:700;color:#d97706">₹${(c.total_spend||0).toLocaleString()}</div>
-          <div style="font-size:11px;color:#bbb">${c.visits||0} visits</div>
-          <span class="badge ${c.payment_status==='paid'?'badge-green':'badge-red'}" style="margin-top:4px">${c.payment_status||'pending'}</span>
+          <div style="font-size:14px;font-weight:700;color:#d97706">₹${(c.total_spend || 0).toLocaleString()}</div>
+          <div style="font-size:11px;color:#bbb">${c.visits || 0} visits</div>
+          <span class="badge ${c.payment_status === 'paid' ? 'badge-green' : 'badge-red'}" style="margin-top:4px">${c.payment_status || 'pending'}</span>
         </div>
+        ${c.phone ? `
+        <div onclick="window.promptWhatsAppBillFromId('${c.id}')" style="cursor:pointer;color:#25d366;padding:8px;border-radius:8px;transition:all 0.15s" onmouseover="this.style.color='#20ba5a';this.style.background='#e8fced'" onmouseout="this.style.color='#25d366';this.style.background='transparent'" title="Send WhatsApp Bill">
+          <i class="ti ti-brand-whatsapp" style="font-size:16px"></i>
+        </div>
+        ` : ''}
         <div onclick="window.handleDeleteCustomer('${c.id}')" style="cursor:pointer;color:#ccc;padding:8px;border-radius:8px;transition:all 0.15s" onmouseover="this.style.color='#dc2626';this.style.background='#fee2e2'" onmouseout="this.style.color='#ccc';this.style.background='transparent'">
           <i class="ti ti-trash" style="font-size:16px"></i>
         </div>
@@ -65,18 +70,18 @@ export function renderCustomerList(customers) {
 }
 
 export function filterCustomers(q) {
-  const customers = (window._cachedCustomers || []).filter(c=>
-    (c.name||'').toLowerCase().includes(q.toLowerCase()) || (c.phone||'').includes(q)
+  const customers = (window._cachedCustomers || []).filter(c =>
+    (c.name || '').toLowerCase().includes(q.toLowerCase()) || (c.phone || '').includes(q)
   );
   const el = document.getElementById('customer-list');
-  if(el) el.innerHTML = renderCustomerList(customers);
+  if (el) el.innerHTML = renderCustomerList(customers);
 }
 
 export function filterByPayment(status) {
   let customers = window._cachedCustomers || [];
-  if(status !== 'all') customers = customers.filter(c => c.payment_status === status);
+  if (status !== 'all') customers = customers.filter(c => c.payment_status === status);
   const el = document.getElementById('customer-list');
-  if(el) el.innerHTML = renderCustomerList(customers);
+  if (el) el.innerHTML = renderCustomerList(customers);
 }
 
 export function showAddCustomerModal() {
@@ -123,8 +128,8 @@ export function showAddCustomerModal() {
     </div>
   `, async () => {
     const name = document.getElementById('m-cust-name').value.trim();
-    if(!name) { showToast('Please enter customer name','error'); return; }
-    
+    if (!name) { showToast('Please enter customer name', 'error'); return; }
+
     const phoneInput = document.getElementById('m-cust-phone').value.trim();
     let phoneVal = '';
     if (phoneInput) {
@@ -140,7 +145,7 @@ export function showAddCustomerModal() {
       name,
       phone: phoneVal,
       location: document.getElementById('m-cust-location').value.trim(),
-      services: document.getElementById('m-cust-services').value.split(',').map(s=>s.trim()).filter(Boolean),
+      services: document.getElementById('m-cust-services').value.split(',').map(s => s.trim()).filter(Boolean),
       amount: parseInt(document.getElementById('m-cust-amount').value) || 0,
       payment_status: document.getElementById('m-cust-status').value,
       last_visit: new Date().toISOString().split('T')[0],
@@ -154,7 +159,7 @@ export function showAddCustomerModal() {
 }
 
 export async function handleDeleteCustomer(id) {
-  if(!confirm('Delete this customer?')) return;
+  if (!confirm('Delete this customer?')) return;
   await deleteCustomer(id);
   if (typeof window.render === 'function') window.render();
 }
@@ -167,7 +172,7 @@ export async function analyzeShopCustomers() {
       <div style="font-size:12px;color:#999;margin-top:6px;">Comparing services, locations, and revenue patterns</div>
     </div>
   `, null);
-  
+
   const saveBtn = document.getElementById('modal-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
   const cancelBtn = document.querySelector('#modal-container .btn-outline');
@@ -176,7 +181,7 @@ export async function analyzeShopCustomers() {
   try {
     const customers = await fetchCustomers();
     const shopCustomers = customers.filter(c => !c.services || !c.services.includes('Classes'));
-    
+
     if (shopCustomers.length === 0) {
       document.getElementById('modal-body').innerHTML = `
         <div style="text-align:center;padding:20px;color:#999;">
@@ -301,9 +306,9 @@ export function openShopCustomerForm() {
           </div>
           <div class="form-group">
             <div class="chip-group" id="sf-service-chips">
-              ${['Threading','Facial','Bleach','Detan','Hair Spa','Layer Haircut','Black Hair Color','Pedicure','Smoothening','Wax','Others'].map(s =>
-                `<div class="chip" onclick="window.serviceChipToggle(this)">${s}</div>`
-              ).join('')}
+              ${['Threading', 'Facial', 'Bleach', 'Detan', 'Hair Spa', 'Layer Haircut', 'Black Hair Color', 'Pedicure', 'Smoothening', 'Wax', 'Others'].map(s =>
+    `<div class="chip" onclick="window.serviceChipToggle(this)">${s}</div>`
+  ).join('')}
             </div>
             <div class="chip-other-input">
               <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
@@ -323,7 +328,7 @@ export function openShopCustomerForm() {
           </div>
           <div class="form-group">
             <div class="star-rating" id="star-rating-group">
-              ${[1,2,3,4,5].map(i => `<span onclick="window.setStarRating(${i})">★</span>`).join('')}
+              ${[1, 2, 3, 4, 5].map(i => `<span onclick="window.setStarRating(${i})">★</span>`).join('')}
             </div>
             <input type="hidden" id="form-rating-value" value="0">
             <div style="font-size:11px;color:#999;margin-top:6px">Rate the customer experience (as shop owner)</div>
@@ -341,7 +346,7 @@ export function serviceChipToggle(chipEl) {
   const serviceName = chipEl.textContent.trim();
   chipEl.classList.toggle('selected');
   const amountList = document.getElementById('sf-service-amounts');
-  
+
   if (serviceName === 'Others') {
     const otherInput = chipEl.closest('.form-group').querySelector('.chip-other-input');
     if (chipEl.classList.contains('selected')) {
@@ -381,7 +386,7 @@ export function addOtherServiceAmount() {
   const otherNameInput = document.getElementById('sf-service-other');
   const otherName = otherNameInput ? otherNameInput.value.trim() : '';
   if (!otherName) { showToast('Please enter the service name first', 'error'); return; }
-  
+
   const amountList = document.getElementById('sf-service-amounts');
   const rowId = 'sa-row-other-' + Date.now();
   const row = document.createElement('div');
@@ -453,7 +458,7 @@ export async function submitShopCustomerForm() {
 
   const serviceAmounts = getServiceAmounts();
   if (serviceAmounts.length === 0) { showToast('Please select at least one service', 'error'); return; }
-  
+
   const hasZero = serviceAmounts.some(s => s.amount <= 0);
   if (hasZero) { showToast('Please enter amount for all selected services', 'error'); return; }
 
@@ -487,11 +492,108 @@ export async function submitShopCustomerForm() {
   if (result) {
     closeFormOverlay();
     const svcSummary = serviceAmounts.map(s => `${s.name}: ₹${s.amount.toLocaleString()}`).join(' · ');
-    state.chatMessages.push({role:'ai', text: `✅ <strong>${name}</strong> saved via Shop Customer Form! 🎉<br><span style="font-size:11px;color:#888">${svcSummary}<br>Total: ₹${totalAmount.toLocaleString()} · Rating: ${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</span>`});
+    state.chatMessages.push({ role: 'ai', text: `✅ <strong>${name}</strong> saved via Shop Customer Form! 🎉<br><span style="font-size:11px;color:#888">${svcSummary}<br>Total: ₹${totalAmount.toLocaleString()} · Rating: ${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</span>` });
     if (typeof window.render === 'function') window.render();
+
+    if (phoneVal) {
+      setTimeout(() => {
+        promptWhatsAppBill(name, phoneVal, serviceNames, totalAmount, date, 'paid', serviceAmounts);
+      }, 400);
+    }
   } else {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Save Customer'; }
   }
+}
+
+export function promptWhatsAppBill(customerName, phone, services, amount, date, paymentStatus, serviceBreakdown = null) {
+  if (!phone) {
+    showToast('Customer phone number is missing!', 'error');
+    return;
+  }
+
+  const cleanedPhone = validateAndCleanPhone(phone);
+  if (!cleanedPhone) {
+    showToast('Please enter a valid 10-digit phone number', 'error');
+    return;
+  }
+
+  let servicesText = '';
+  if (serviceBreakdown && Array.isArray(serviceBreakdown) && serviceBreakdown.length > 0) {
+    servicesText = serviceBreakdown.map(s => `- ${s.name}: ₹${s.amount.toLocaleString()}`).join('\n');
+  } else if (Array.isArray(services)) {
+    servicesText = services.map(s => `- ${s}`).join('\n');
+  } else {
+    servicesText = `- ${services}`;
+  }
+
+  const formattedDate = date ? new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const formattedStatus = paymentStatus ? paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1) : 'Paid';
+
+  const defaultMessage = `Hello ${customerName},
+
+Thank you for visiting Kalai Makeover. We hope you enjoyed our service.
+
+Please find your invoice details below:
+
+
+Service(s):
+${servicesText}
+Total Amount: ₹${amount.toLocaleString()}
+
+
+We would love to hear your feedback. Your review helps us improve and serve you better. https://g.page/r/CRpMmps5Ku6gEAI/review
+
+Thank you,
+Kalai Makeover
+📞 8870236006`;
+
+  showModal('Send Bill via WhatsApp', `
+    <div style="font-size:13px;color:#555;margin-bottom:14px">
+      Review and customize the bill message for <strong>${customerName}</strong> (${phone}):
+    </div>
+    <div class="form-group">
+      <label class="form-label">WhatsApp Message Preview</label>
+      <textarea class="form-input" id="wa-bill-message" style="height:200px;font-family:monospace;white-space:pre-wrap;resize:vertical;line-height:1.4;">${defaultMessage}</textarea>
+    </div>
+  `, () => {
+    const editedMessage = document.getElementById('wa-bill-message').value.trim();
+    if (!editedMessage) {
+      showToast('Message text cannot be empty.', 'error');
+      return;
+    }
+    const fullPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone;
+    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(editedMessage)}`;
+    window.open(url, '_blank');
+    closeModal();
+    showToast('WhatsApp opened in a new tab!');
+  });
+
+  // Customize modal save button to represent WhatsApp action
+  setTimeout(() => {
+    const saveBtn = document.getElementById('modal-save-btn');
+    if (saveBtn) {
+      saveBtn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Send Bill';
+      saveBtn.style.background = '#25d366';
+      saveBtn.style.borderColor = '#25d366';
+      saveBtn.style.color = '#fff';
+    }
+  }, 50);
+}
+
+export function promptWhatsAppBillFromId(customerId) {
+  const customer = (window._cachedCustomers || []).find(c => c.id === customerId);
+  if (!customer) {
+    showToast('Customer not found.', 'error');
+    return;
+  }
+  promptWhatsAppBill(
+    customer.name,
+    customer.phone,
+    customer.services,
+    customer.amount || customer.total_spend || 0,
+    customer.last_visit,
+    customer.payment_status
+  );
 }
 
 // Bind to window to allow HTML inline click handlers to execute
@@ -507,3 +609,5 @@ window.filterByPayment = filterByPayment;
 window.analyzeShopCustomers = analyzeShopCustomers;
 window.showAddCustomerModal = showAddCustomerModal;
 window.handleDeleteCustomer = handleDeleteCustomer;
+window.promptWhatsAppBill = promptWhatsAppBill;
+window.promptWhatsAppBillFromId = promptWhatsAppBillFromId;

@@ -43,6 +43,18 @@ export function toggleMobileSidebar() {
 
 export function showPage(page) {
   state.currentPage = page;
+  if (page === 'customers') {
+    window._selectedMonth = 'all';
+    window._searchQuery = '';
+    window._monthFilterExpanded = false;
+    window._searchFieldExpanded = false;
+  }
+  if (page === 'events') {
+    window._selectedEventMonth = 'all';
+    window._eventSearchQuery = '';
+    window._eventMonthFilterExpanded = false;
+    window._eventSearchFieldExpanded = false;
+  }
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const navEl = document.getElementById('nav-' + page);
   if(navEl) navEl.classList.add('active');

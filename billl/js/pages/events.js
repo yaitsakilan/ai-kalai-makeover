@@ -7,7 +7,45 @@ import { callGroqAPI } from '../api.js';
 
 export async function renderEvents() {
   const events = await fetchEvents();
-  const totalPending = events.filter(e=>(e.pending||0)>0).reduce((s,e)=>s+(e.pending||0),0);
+  window._cachedEvents = events;
+
+  if (window._selectedEventMonth === undefined) window._selectedEventMonth = 'all';
+  if (window._eventSearchQuery === undefined) window._eventSearchQuery = '';
+  if (window._eventMonthFilterExpanded === undefined) window._eventMonthFilterExpanded = false;
+  if (window._eventSearchFieldExpanded === undefined) window._eventSearchFieldExpanded = false;
+
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  // Apply filters initially
+  let filtered = [...events];
+  if (window._eventSearchQuery) {
+    const q = window._eventSearchQuery.toLowerCase();
+    filtered = filtered.filter(e =>
+      (e.customer || '').toLowerCase().includes(q) ||
+      (e.phone || '').includes(q) ||
+      (e.type || '').toLowerCase().includes(q)
+    );
+  }
+  if (window._selectedEventMonth !== 'all') {
+    filtered = filtered.filter(e => {
+      if (!e.date) return false;
+      const parts = e.date.split('-');
+      if (parts.length < 2) return false;
+      const m = parseInt(parts[1], 10) - 1;
+      return m === window._selectedEventMonth;
+    });
+  }
+
+  const activeBtnStyle = window._eventMonthFilterExpanded
+    ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
+    : '';
+
+  const activeSearchBtnStyle = window._eventSearchFieldExpanded
+    ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
+    : '';
 
   return `
   <div class="top-bar">
@@ -16,27 +54,174 @@ export async function renderEvents() {
       <button class="btn btn-outline" onclick="window.analyzeEvents()">
         <i class="ti ti-chart-bar" style="color:#d97706"></i> AI Analysis
       </button>
+      <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Events">
+        <i class="ti ti-search" style="color:#d97706"></i>
+      </button>
+      <button class="btn btn-outline" onclick="window.toggleEventMonthFilter()" id="toggle-evt-filter-btn" style="${activeBtnStyle}">
+        <i class="ti ti-filter" style="color:#d97706"></i> Filter
+      </button>
       <button class="btn btn-gold" onclick="window.openEventCustomerForm()"><i class="ti ti-plus"></i> Book Event</button>
     </div>
   </div>
-  <div class="metric-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-    <div class="metric-card mc-teal">
-      <div class="metric-label">Total Events</div>
-      <div class="metric-value">${events.length}</div>
-      <div class="metric-sub">All time</div>
+
+  <div id="event-metrics-container">
+    ${renderEventMetrics(filtered)}
+  </div>
+
+  <div class="card" id="event-search-card" style="margin-bottom:16px; display: ${window._eventSearchFieldExpanded ? 'block' : 'none'};">
+    <input class="form-input" placeholder="Search by name, phone, or event type..." id="event-search-input" value="${window._eventSearchQuery || ''}" oninput="window.filterEventCustomers(this.value)">
+  </div>
+
+  <div class="card" id="event-month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._eventMonthFilterExpanded ? 'block' : 'none'};">
+    <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
+      <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter by Month
     </div>
-    <div class="metric-card mc-rose">
-      <div class="metric-label">Pending Amount</div>
-      <div class="metric-value">₹${totalPending.toLocaleString()}</div>
-      <div class="metric-sub">${events.filter(e=>(e.pending||0)>0).length} events pending</div>
-    </div>
-    <div class="metric-card mc-gold">
-      <div class="metric-label">Completed</div>
-      <div class="metric-value">${events.filter(e=>e.status==='Completed').length}</div>
-      <div class="metric-sub">Fully paid</div>
+    <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
+      <div class="chip ${window._selectedEventMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterEventByMonth('all')" id="evt-month-chip-all">All Months</div>
+      ${MONTHS.map((m, idx) => `
+        <div class="chip ${window._selectedEventMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterEventByMonth(${idx})" id="evt-month-chip-${idx}">${m}</div>
+      `).join('')}
     </div>
   </div>
-  ${events.map(e=>`
+
+  <div id="event-list">
+    ${renderEventList(filtered)}
+  </div>`;
+}
+
+export function renderEventMetrics(events) {
+  const totalBookings = events.length;
+  const completedBookings = events.filter(e => e.status === 'Completed').length;
+  const totalRevenue = events.reduce((sum, e) => sum + (e.total || 0), 0);
+  const totalPending = events.reduce((sum, e) => sum + (e.pending || 0), 0);
+
+  return `
+  <div class="metric-grid" style="margin-bottom: 16px;">
+    <div class="metric-card mc-gold">
+      <div class="metric-label">Total Bookings</div>
+      <div class="metric-value">${totalBookings}</div>
+      <div class="metric-icon"><i class="ti ti-calendar-event"></i></div>
+    </div>
+    <div class="metric-card mc-teal">
+      <div class="metric-label">Completed Bookings</div>
+      <div class="metric-value">${completedBookings}</div>
+      <div class="metric-icon"><i class="ti ti-checkbox"></i></div>
+    </div>
+    <div class="metric-card mc-rose">
+      <div class="metric-label">Total Revenue</div>
+      <div class="metric-value">₹${totalRevenue.toLocaleString('en-IN')}</div>
+      <div class="metric-icon"><i class="ti ti-currency-rupee"></i></div>
+    </div>
+    <div class="metric-card mc-purple">
+      <div class="metric-label">Pending Payments</div>
+      <div class="metric-value">₹${totalPending.toLocaleString('en-IN')}</div>
+      <div class="metric-icon"><i class="ti ti-alert-triangle"></i></div>
+    </div>
+  </div>`;
+}
+
+export function applyEventFilters() {
+  let events = window._cachedEvents || [];
+
+  if (window._eventSearchQuery) {
+    const q = window._eventSearchQuery.toLowerCase();
+    events = events.filter(e =>
+      (e.customer || '').toLowerCase().includes(q) ||
+      (e.phone || '').includes(q) ||
+      (e.type || '').toLowerCase().includes(q)
+    );
+  }
+
+  if (window._selectedEventMonth !== undefined && window._selectedEventMonth !== 'all') {
+    events = events.filter(e => {
+      if (!e.date) return false;
+      const parts = e.date.split('-');
+      if (parts.length < 2) return false;
+      const m = parseInt(parts[1], 10) - 1;
+      return m === window._selectedEventMonth;
+    });
+  }
+
+  // Update List HTML
+  const listEl = document.getElementById('event-list');
+  if (listEl) {
+    listEl.innerHTML = renderEventList(events);
+  }
+
+  // Update Metrics HTML
+  const metricsEl = document.getElementById('event-metrics-container');
+  if (metricsEl) {
+    metricsEl.innerHTML = renderEventMetrics(events);
+  }
+}
+
+export function filterEventCustomers(q) {
+  window._eventSearchQuery = q;
+  applyEventFilters();
+}
+
+export function filterEventByMonth(monthIndex) {
+  window._selectedEventMonth = monthIndex;
+
+  // Update active states of chips in UI
+  const chips = document.querySelectorAll('.chip[id^="evt-month-chip-"]');
+  chips.forEach(chip => {
+    chip.classList.remove('selected');
+  });
+
+  const activeChip = document.getElementById(`evt-month-chip-${monthIndex}`);
+  if (activeChip) {
+    activeChip.classList.add('selected');
+  }
+
+  applyEventFilters();
+}
+
+export function toggleEventMonthFilter() {
+  window._eventMonthFilterExpanded = !window._eventMonthFilterExpanded;
+  const el = document.getElementById('event-month-filter-card');
+  const btn = document.getElementById('toggle-evt-filter-btn');
+  if (el) {
+    el.style.display = window._eventMonthFilterExpanded ? 'block' : 'none';
+  }
+  if (btn) {
+    if (window._eventMonthFilterExpanded) {
+      btn.style.borderColor = '#f5c842';
+      btn.style.background = 'rgba(245, 200, 66, 0.1)';
+    } else {
+      btn.style.borderColor = '';
+      btn.style.background = '';
+    }
+  }
+}
+
+export function toggleEventSearchField() {
+  window._eventSearchFieldExpanded = !window._eventSearchFieldExpanded;
+  const el = document.getElementById('event-search-card');
+  const btn = document.getElementById('toggle-evt-search-btn');
+  if (el) {
+    el.style.display = window._eventSearchFieldExpanded ? 'block' : 'none';
+    if (window._eventSearchFieldExpanded) {
+      setTimeout(() => {
+        const input = document.getElementById('event-search-input');
+        if (input) input.focus();
+      }, 50);
+    }
+  }
+  if (btn) {
+    if (window._eventSearchFieldExpanded) {
+      btn.style.borderColor = '#f5c842';
+      btn.style.background = 'rgba(245, 200, 66, 0.1)';
+    } else {
+      btn.style.borderColor = '';
+      btn.style.background = '';
+    }
+  }
+}
+
+export function renderEventList(events) {
+  if (!events.length) return '<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-calendar-event" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No event bookings found</div>';
+  return events.map(e => `
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
@@ -70,7 +255,7 @@ export async function renderEvents() {
         <div style="font-size:11px;color:#888;margin-top:3px">Advance ₹${(e.advance||0).toLocaleString()} / ₹${(e.total||0).toLocaleString()} (${e.total?Math.round(((e.advance||0)/e.total)*100):0}%)</div>
       </div>
     </div>
-  `).join('')}`;
+  `).join('');
 }
 
 export function showAddEventModal() {
@@ -169,6 +354,12 @@ export async function analyzeEvents() {
       return;
     }
 
+    // Pre-calculate exact event metrics to prevent LLM bad-math hallucinations
+    const eventCount = events.length;
+    const totalRevenue = events.reduce((sum, e) => sum + (e.total || 0), 0);
+    const totalAdvance = events.reduce((sum, e) => sum + (e.advance || 0), 0);
+    const totalPending = events.reduce((sum, e) => sum + (e.pending || 0), 0);
+
     const resData = await callGroqAPI('chat/completions', {
       model: 'llama-3.3-70b-versatile',
       messages: [
@@ -185,10 +376,16 @@ Use standard classes from our app:
 
 Guidelines:
 - All monetary values in the report must be strictly formatted in INR using the Rupee symbol (₹) (e.g., ₹12,500). Never use USD, dollars, or the $ symbol.
+- Use these EXACT pre-calculated metrics in your report and metric grid:
+  * Total Events Booked: ${eventCount}
+  * Total Revenue: ₹${totalRevenue.toLocaleString('en-IN')}
+  * Total Advance Collected: ₹${totalAdvance.toLocaleString('en-IN')}
+  * Total Pending Amount: ₹${totalPending.toLocaleString('en-IN')}
+  Do NOT calculate or estimate these metrics yourself; use the exact values above.
 
 The HTML should contain:
-1. Executive Summary: Short overview of event booking performance.
-2. Metric Grid: Styled list or columns showing: Total Events Booked, Total Revenue, Total Advance Collected, Total Pending Amount.
+1. Executive Summary: Short overview of event booking performance using the exact metrics.
+2. Metric Grid: Styled list or columns showing these exact metrics.
 3. Top Function & Makeup Types: Which functions and makeup types are driving the most revenue.
 4. Business Growth Tips: Actionable suggestions for Kalai to secure bookings, collect pending payments on time, and promote high-ticket event makeup packages.
 Make it concise, insightful, and formatted beautifully.`
@@ -392,3 +589,10 @@ window.filterEvents = renderEvents; // Backwards compatible filter mapping if us
 window.analyzeEvents = analyzeEvents;
 window.showAddEventModal = showAddEventModal;
 window.handleDeleteEvent = handleDeleteEvent;
+window.filterEventCustomers = filterEventCustomers;
+window.filterEventByMonth = filterEventByMonth;
+window.toggleEventMonthFilter = toggleEventMonthFilter;
+window.toggleEventSearchField = toggleEventSearchField;
+window.applyEventFilters = applyEventFilters;
+window.renderEventMetrics = renderEventMetrics;
+window.renderEventList = renderEventList;

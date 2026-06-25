@@ -9,6 +9,42 @@ export async function renderCustomers() {
   const customers = await fetchCustomers();
   window._cachedCustomers = customers;
 
+  if (window._selectedMonth === undefined) window._selectedMonth = 'all';
+  if (window._searchQuery === undefined) window._searchQuery = '';
+  if (window._monthFilterExpanded === undefined) window._monthFilterExpanded = false;
+  if (window._searchFieldExpanded === undefined) window._searchFieldExpanded = false;
+
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  // Apply filters initially
+  let filtered = [...customers];
+  if (window._searchQuery) {
+    const q = window._searchQuery.toLowerCase();
+    filtered = filtered.filter(c =>
+      (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q)
+    );
+  }
+  if (window._selectedMonth !== 'all') {
+    filtered = filtered.filter(c => {
+      if (!c.last_visit) return false;
+      const parts = c.last_visit.split('-');
+      if (parts.length < 2) return false;
+      const m = parseInt(parts[1], 10) - 1;
+      return m === window._selectedMonth;
+    });
+  }
+
+  const activeBtnStyle = window._monthFilterExpanded
+    ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
+    : '';
+
+  const activeSearchBtnStyle = window._searchFieldExpanded
+    ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
+    : '';
+
   return `
   <div class="top-bar">
     <h2>Customer Management</h2>
@@ -16,22 +52,171 @@ export async function renderCustomers() {
       <button class="btn btn-outline" onclick="window.analyzeShopCustomers()">
         <i class="ti ti-chart-bar" style="color:#d97706"></i> AI Analysis
       </button>
+      <button class="btn btn-outline btn-icon" onclick="window.toggleSearchField()" id="toggle-search-btn" style="${activeSearchBtnStyle}" title="Search Customers">
+        <i class="ti ti-search" style="color:#d97706"></i>
+      </button>
+      <button class="btn btn-outline" onclick="window.toggleMonthFilter()" id="toggle-filter-btn" style="${activeBtnStyle}">
+        <i class="ti ti-filter" style="color:#d97706"></i> Filter
+      </button>
       <button class="btn btn-gold" onclick="window.openShopCustomerForm()">
         <i class="ti ti-plus"></i> Add Customer
       </button>
     </div>
   </div>
-  <div class="card" style="margin-bottom:16px">
-    <div style="display:flex;gap:10px">
-      <input class="form-input" style="flex:1" placeholder="Search by name or phone..." id="customer-search" oninput="window.filterCustomers(this.value)">
-      <select class="form-input form-select" style="width:160px" onchange="window.filterByPayment(this.value)">
-        <option value="all">All Payments</option><option value="paid">Paid</option><option value="pending">Pending</option>
-      </select>
+
+  <div id="customer-metrics-container">
+    ${renderCustomerMetrics(filtered)}
+  </div>
+
+  <div class="card" id="search-card" style="margin-bottom:16px; display: ${window._searchFieldExpanded ? 'block' : 'none'};">
+    <input class="form-input" placeholder="Search by name or phone..." id="customer-search" value="${window._searchQuery || ''}" oninput="window.filterCustomers(this.value)">
+  </div>
+
+  <div class="card" id="month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._monthFilterExpanded ? 'block' : 'none'};">
+    <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
+      <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter by Month
+    </div>
+    <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
+      <div class="chip ${window._selectedMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth('all')" id="month-chip-all">All Months</div>
+      ${MONTHS.map((m, idx) => `
+        <div class="chip ${window._selectedMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth(${idx})" id="month-chip-${idx}">${m}</div>
+      `).join('')}
     </div>
   </div>
+
   <div id="customer-list">
-    ${renderCustomerList(customers)}
+    ${renderCustomerList(filtered)}
   </div>`;
+}
+
+export function renderCustomerMetrics(customers) {
+  const totalCustomers = customers.length;
+  const repeatedCustomers = customers.filter(c => (c.visits || 0) > 1).length;
+  const totalAmount = customers.reduce((sum, c) => sum + (c.total_spend || 0), 0);
+  const avgSpend = totalCustomers > 0 ? Math.round(totalAmount / totalCustomers) : 0;
+
+  return `
+  <div class="metric-grid" style="margin-bottom: 16px;">
+    <div class="metric-card mc-gold">
+      <div class="metric-label">Total Customers</div>
+      <div class="metric-value">${totalCustomers}</div>
+      <div class="metric-icon"><i class="ti ti-users"></i></div>
+    </div>
+    <div class="metric-card mc-teal">
+      <div class="metric-label">Repeated Customers</div>
+      <div class="metric-value">${repeatedCustomers}</div>
+      <div class="metric-icon"><i class="ti ti-refresh"></i></div>
+    </div>
+    <div class="metric-card mc-rose">
+      <div class="metric-label">Total Amount</div>
+      <div class="metric-value">₹${totalAmount.toLocaleString('en-IN')}</div>
+      <div class="metric-icon"><i class="ti ti-currency-rupee"></i></div>
+    </div>
+    <div class="metric-card mc-purple">
+      <div class="metric-label">Average Spend</div>
+      <div class="metric-value">₹${avgSpend.toLocaleString('en-IN')}</div>
+      <div class="metric-icon"><i class="ti ti-wallet"></i></div>
+    </div>
+  </div>`;
+}
+
+export function applyFilters() {
+  let customers = window._cachedCustomers || [];
+
+  // 1. Search Query
+  if (window._searchQuery) {
+    const q = window._searchQuery.toLowerCase();
+    customers = customers.filter(c =>
+      (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q)
+    );
+  }
+
+  // 2. Month Filter
+  if (window._selectedMonth !== undefined && window._selectedMonth !== 'all') {
+    customers = customers.filter(c => {
+      if (!c.last_visit) return false;
+      const parts = c.last_visit.split('-');
+      if (parts.length < 2) return false;
+      const m = parseInt(parts[1], 10) - 1;
+      return m === window._selectedMonth;
+    });
+  }
+
+  // Update List HTML
+  const listEl = document.getElementById('customer-list');
+  if (listEl) {
+    listEl.innerHTML = renderCustomerList(customers);
+  }
+
+  // Update Metrics HTML
+  const metricsEl = document.getElementById('customer-metrics-container');
+  if (metricsEl) {
+    metricsEl.innerHTML = renderCustomerMetrics(customers);
+  }
+}
+
+export function filterCustomers(q) {
+  window._searchQuery = q;
+  applyFilters();
+}
+
+export function filterByMonth(monthIndex) {
+  window._selectedMonth = monthIndex;
+
+  // Update active states of chips in UI
+  const chips = document.querySelectorAll('.chip[id^="month-chip-"]');
+  chips.forEach(chip => {
+    chip.classList.remove('selected');
+  });
+
+  const activeChip = document.getElementById(`month-chip-${monthIndex}`);
+  if (activeChip) {
+    activeChip.classList.add('selected');
+  }
+
+  applyFilters();
+}
+
+export function toggleMonthFilter() {
+  window._monthFilterExpanded = !window._monthFilterExpanded;
+  const el = document.getElementById('month-filter-card');
+  const btn = document.getElementById('toggle-filter-btn');
+  if (el) {
+    el.style.display = window._monthFilterExpanded ? 'block' : 'none';
+  }
+  if (btn) {
+    if (window._monthFilterExpanded) {
+      btn.style.borderColor = '#f5c842';
+      btn.style.background = 'rgba(245, 200, 66, 0.1)';
+    } else {
+      btn.style.borderColor = '';
+      btn.style.background = '';
+    }
+  }
+}
+
+export function toggleSearchField() {
+  window._searchFieldExpanded = !window._searchFieldExpanded;
+  const el = document.getElementById('search-card');
+  const btn = document.getElementById('toggle-search-btn');
+  if (el) {
+    el.style.display = window._searchFieldExpanded ? 'block' : 'none';
+    if (window._searchFieldExpanded) {
+      setTimeout(() => {
+        const input = document.getElementById('customer-search');
+        if (input) input.focus();
+      }, 50);
+    }
+  }
+  if (btn) {
+    if (window._searchFieldExpanded) {
+      btn.style.borderColor = '#f5c842';
+      btn.style.background = 'rgba(245, 200, 66, 0.1)';
+    } else {
+      btn.style.borderColor = '';
+      btn.style.background = '';
+    }
+  }
 }
 
 export function renderCustomerList(customers) {
@@ -54,7 +239,6 @@ export function renderCustomerList(customers) {
         <div style="text-align:right">
           <div style="font-size:14px;font-weight:700;color:#d97706">₹${(c.total_spend || 0).toLocaleString()}</div>
           <div style="font-size:11px;color:#bbb">${c.visits || 0} visits</div>
-          <span class="badge ${c.payment_status === 'paid' ? 'badge-green' : 'badge-red'}" style="margin-top:4px">${c.payment_status || 'pending'}</span>
         </div>
         ${c.phone ? `
         <div onclick="window.promptWhatsAppBillFromId('${c.id}')" style="cursor:pointer;color:#25d366;padding:8px;border-radius:8px;transition:all 0.15s" onmouseover="this.style.color='#20ba5a';this.style.background='#e8fced'" onmouseout="this.style.color='#25d366';this.style.background='transparent'" title="Send WhatsApp Bill">
@@ -68,22 +252,6 @@ export function renderCustomerList(customers) {
     </div>
   `).join('');
 }
-
-export function filterCustomers(q) {
-  const customers = (window._cachedCustomers || []).filter(c =>
-    (c.name || '').toLowerCase().includes(q.toLowerCase()) || (c.phone || '').includes(q)
-  );
-  const el = document.getElementById('customer-list');
-  if (el) el.innerHTML = renderCustomerList(customers);
-}
-
-export function filterByPayment(status) {
-  let customers = window._cachedCustomers || [];
-  if (status !== 'all') customers = customers.filter(c => c.payment_status === status);
-  const el = document.getElementById('customer-list');
-  if (el) el.innerHTML = renderCustomerList(customers);
-}
-
 export function showAddCustomerModal() {
   showModal('Add New Customer', `
     <div class="form-group">
@@ -191,6 +359,16 @@ export async function analyzeShopCustomers() {
       return;
     }
 
+    // Pre-calculate exact shop metrics to ensure consistency and prevent LLM bad-math hallucinations
+    const shopCount = shopCustomers.length;
+    const shopRevenue = shopCustomers.reduce((sum, c) => sum + (c.total_spend || 0), 0);
+    const shopAvgSpend = shopCount > 0 ? Math.round(shopRevenue / shopCount) : 0;
+    const shopRepeated = shopCustomers.filter(c => (c.visits || 0) > 1).length;
+    const ratedCustomers = shopCustomers.filter(c => (c.rating || 0) > 0);
+    const shopAvgRating = ratedCustomers.length > 0
+      ? (ratedCustomers.reduce((sum, c) => sum + (c.rating || 0), 0) / ratedCustomers.length).toFixed(1)
+      : '5.0';
+
     const resData = await callGroqAPI('chat/completions', {
       model: 'llama-3.3-70b-versatile',
       messages: [
@@ -208,10 +386,17 @@ Use standard classes from our app:
 
 Guidelines:
 - All monetary values in the report must be strictly formatted in INR using the Rupee symbol (₹) (e.g., ₹12,500). Never use USD, dollars, or the $ symbol.
+- Use these EXACT pre-calculated metrics in your report and metric grid:
+  * Customer Count: ${shopCount}
+  * Total Shop Revenue: ₹${shopRevenue.toLocaleString('en-IN')}
+  * Average Spend/Customer: ₹${shopAvgSpend.toLocaleString('en-IN')}
+  * Repeated Customers: ${shopRepeated}
+  * Average Rating: ${shopAvgRating}/5
+  Do NOT calculate or estimate these metrics yourself; use the exact values above.
 
 The HTML should contain:
-1. Executive Summary: Short overview of shop performance.
-2. Metric Grid: Styled list or columns showing: Total Shop Revenue, Customer Count, Average Spend/Customer, Average Rating.
+1. Executive Summary: Short overview of shop performance using the exact metrics.
+2. Metric Grid: Styled list or columns showing these exact metrics.
 3. Top Services & Locations: What services are most requested, where do the highest-paying customers live.
 4. Business Growth Tips: Actionable suggestions for Kalai to boost her business.
 Make it concise, insightful, and formatted beautifully.`
@@ -605,7 +790,11 @@ window.removeServiceRow = removeServiceRow;
 window.updateServiceTotal = updateServiceTotal;
 window.setStarRating = setStarRating;
 window.filterCustomers = filterCustomers;
-window.filterByPayment = filterByPayment;
+window.filterByMonth = filterByMonth;
+window.toggleMonthFilter = toggleMonthFilter;
+window.toggleSearchField = toggleSearchField;
+window.applyFilters = applyFilters;
+window.renderCustomerMetrics = renderCustomerMetrics;
 window.analyzeShopCustomers = analyzeShopCustomers;
 window.showAddCustomerModal = showAddCustomerModal;
 window.handleDeleteCustomer = handleDeleteCustomer;

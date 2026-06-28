@@ -637,3 +637,42 @@
   }
 }
 
+.sa-name-input {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  color: inherit !important;
+  padding: 2px 4px !important;
+  margin: 0 !important;
+  outline: none !important;
+  width: 100% !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  cursor: text !important;
+  transition: all 0.15s ease !important;
+  border-radius: 4px !important;
+}
+
+.sa-name-input:hover {
+  background: rgba(180, 83, 9, 0.05) !important;
+  border-bottom: 1px dashed #b45309 !important;
+}
+
+.sa-name-input:focus {
+  background: #fff !important;
+  border-color: #fde68a !important;
+  box-shadow: 0 0 0 2px rgba(245,200,66,0.15) !important;
+}
+
+/* Hide number input spinners globally */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+

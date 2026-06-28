@@ -1,7 +1,7 @@
 // billl/js/pages/aichat.js
 import { state } from '../state.js';
 import { callGroqAPI, transcribeAudio } from '../api.js';
-import { addCustomer, addEvent, addExpense, addReelsIdea } from '../db.js';
+import { addCustomer, addEvent, addExpense } from '../db.js';
 import { showToast } from '../ui.js';
 import { validateAndCleanPhone } from '../utils.js';
 
@@ -347,12 +347,12 @@ Extract the fields and return ONLY a JSON object:
   "phone": string of 10 digits (default null),
   "location": string (default null),
   "date": "YYYY-MM-DD" format (default null),
-  "services": Array of objects: [{"name": string, "amount": number}] (default empty array),
+  "services": Array of objects: [{"name": string, "amount": number, "method": "Cash" | "GPay" | "Both" (default "Cash")}] (default empty array),
   "rating": number between 1 and 5 (default null),
   "referred_by": string (default null)
 }
 Guidelines:
-- Identify common salon services from Tamil/English inputs (e.g. threading, facial, haircut, bleach, detan, hair spa, pedicure, wax, smoothening).
+- Identify common salon services from Tamil/English inputs (e.g. threading, saree prepleating, facial, haircut, bleach, detan, hair spa, pedicure, wax, smoothening).
 - Standardize phone numbers to 10 digits.
 - All monetary amounts must be strictly in Indian Rupees (INR). If a currency symbol like $ or currency name like USD/dollar is specified, convert it to INR (assume 1 USD = 80 INR) or treat the numeric value directly as INR, returning a raw number representing INR.
 - Extract who referred the customer if mentioned (e.g., "referred by Anita", "Priya recommended me") and store in "referred_by".
@@ -405,15 +405,6 @@ Guidelines:
 - If you hear item name and amount, map them to the correct category ("products" or "makeup").
 - All monetary amounts must be strictly in Indian Rupees (INR). If a currency symbol like $ or currency name like USD/dollar is specified, convert it to INR (assume 1 USD = 80 INR) or treat the numeric value directly as INR, returning a raw number representing INR.
 - Output ONLY valid JSON, no other text.`;
-    } else if (type === 'reels_idea') {
-      systemPrompt = `You are an AI assistant parsing transcribed voice inputs into structured data for an Instagram Reels Idea.
-Extract the core concept/idea for the Instagram Reel/Video from the input.
-Return ONLY a JSON object:
-{
-  "idea": string (the video idea description, default null)
-}
-Guidelines:
-- Output ONLY valid JSON, no other text.`;
     }
 
     const parsed = await callGroqAPI('chat/completions', {
@@ -440,7 +431,15 @@ Guidelines:
         if (chk) {
           chk.checked = true;
           document.getElementById('sf-referrer-div').style.display = 'block';
-          document.getElementById('sf-referrer').value = parsed.referred_by;
+          const selectEl = document.getElementById('sf-referrer');
+          if (selectEl) {
+            const val = parsed.referred_by.toLowerCase();
+            if (val.includes('instagram') || val.includes('insta')) {
+              selectEl.value = 'Instagram';
+            } else {
+              selectEl.value = 'Relatives';
+            }
+          }
         }
       }
       
@@ -459,11 +458,8 @@ Guidelines:
             row.className = 'service-amount-row';
             row.id = rowId;
             row.dataset.service = chip.textContent.trim();
-            row.innerHTML = `
-              <div class="sa-name"><i class="ti ti-sparkles"></i>${chip.textContent.trim()}</div>
-              <span style="font-size:12px;color:#888">₹</span>
-              <input type="number" placeholder="Amount" value="${svc.amount || 0}" oninput="window.updateServiceTotal()">
-              <div class="sa-remove" onclick="window.removeServiceRow('${rowId}', '${chip.textContent.trim()}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+            const svcMethod = svc.method || 'Cash';
+            row.innerHTML = window.getServiceRowHtml(chip.textContent.trim(), rowId, svc.amount || 0, svcMethod, chip.textContent.trim());
             document.getElementById('sf-service-amounts').appendChild(row);
           } else {
             const otherChip = Array.from(document.querySelectorAll('#sf-service-chips .chip'))
@@ -478,11 +474,8 @@ Guidelines:
             row.className = 'service-amount-row';
             row.id = rowId;
             row.dataset.service = svc.name;
-            row.innerHTML = `
-              <div class="sa-name"><i class="ti ti-sparkles"></i>${svc.name}</div>
-              <span style="font-size:12px;color:#888">₹</span>
-              <input type="number" placeholder="Amount" value="${svc.amount || 0}" oninput="window.updateServiceTotal()">
-              <div class="sa-remove" onclick="window.removeServiceRow('${rowId}', null)" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+            const svcMethod = svc.method || 'Cash';
+            row.innerHTML = window.getServiceRowHtml(svc.name, rowId, svc.amount || 0, svcMethod);
             document.getElementById('sf-service-amounts').appendChild(row);
           }
         });
@@ -524,7 +517,11 @@ Guidelines:
         
         const chip = Array.from(chips).find(c => c.textContent.trim().toLowerCase() === parsed.makeupType.toLowerCase());
         if (chip) {
-          chip.classList.add('selected');
+          if (typeof window.makeupTypeChipToggle === 'function') {
+            window.makeupTypeChipToggle(chip, 5000);
+          } else {
+            chip.classList.add('selected');
+          }
         } else {
           const otherChip = Array.from(chips).find(c => c.textContent.trim() === 'Others');
           if (otherChip) {
@@ -541,7 +538,15 @@ Guidelines:
         if (chk) {
           chk.checked = true;
           document.getElementById('ef-referrer-div').style.display = 'block';
-          document.getElementById('ef-referrer').value = parsed.referred_by;
+          const selectEl = document.getElementById('ef-referrer');
+          if (selectEl) {
+            const val = parsed.referred_by.toLowerCase();
+            if (val.includes('instagram') || val.includes('insta')) {
+              selectEl.value = 'Instagram';
+            } else {
+              selectEl.value = 'Relatives';
+            }
+          }
         }
       }
     } else if (type === 'class') {
@@ -558,7 +563,15 @@ Guidelines:
         if (chk) {
           chk.checked = true;
           document.getElementById('cf-referrer-div').style.display = 'block';
-          document.getElementById('cf-referrer').value = parsed.referred_by;
+          const selectEl = document.getElementById('cf-referrer');
+          if (selectEl) {
+            const val = parsed.referred_by.toLowerCase();
+            if (val.includes('instagram') || val.includes('insta')) {
+              selectEl.value = 'Instagram';
+            } else {
+              selectEl.value = 'Relatives';
+            }
+          }
         }
       }
     } else if (type === 'product_expense') {
@@ -656,8 +669,6 @@ Guidelines:
         });
       }
       if (typeof window.updateProductExpenseTotal === 'function') window.updateProductExpenseTotal();
-    } else if (type === 'reels_idea') {
-      if (parsed.idea) document.getElementById('m-reels-text').value = parsed.idea;
     }
 
     showToast('Form autofilled with voice details!');
@@ -707,7 +718,7 @@ Goal:
 
 Extract and return ONLY a JSON object with these fields (use null for missing):
 {
-  "type": "customer_visit" or "event_booking" or "expense" or "multiple_expenses" or "reels_idea" or "greeting" or "unknown",
+  "type": "customer_visit" or "event_booking" or "expense" or "multiple_expenses" or "greeting" or "unknown",
   "conversational_reply": string or null,
   "customer": string or null,
   "service": string or null,
@@ -715,6 +726,7 @@ Extract and return ONLY a JSON object with these fields (use null for missing):
   "payment_status": "paid" or "pending" or "advance" or null,
   "location": string or null,
   "phone": string or null,
+  "payment_method": "Cash" or "GPay" or "Both" (default "Cash"),
   "rating": number or null,
   "event_type": string or null,
   "makeup_type": string or null,
@@ -722,22 +734,20 @@ Extract and return ONLY a JSON object with these fields (use null for missing):
   "date": "YYYY-MM-DD" format or null,
   "expense_category": string or null,
   "expense_note": string or null,
-  "reels_idea": string or null,
   "expenses": array of objects or null (use ONLY for type: "multiple_expenses", each object: {"expense_category": string, "amount": number, "expense_note": string, "date": "YYYY-MM-DD" or null}),
   "missing_fields": ["list of what is missing"],
   "follow_up_question": string or null (ask for most important missing field)
 }
 
 Guidelines:
-1. For customer_visit type, target fields to collect: customer, service, amount, payment_status, location, phone, rating. If missing, list in missing_fields.
+1. For customer_visit type, target fields to collect: customer, service, amount, payment_status, payment_method, location, phone, rating. If missing, list in missing_fields.
 2. For event_booking type, target fields to collect: customer, phone, date, location, event_type (one of: "Puberty Function", "Baby Shower", "Engagement", "Reception", "Muhurtham", "Party Makeup", "Others"), makeup_type (one of: "Basic Makeup", "HD Makeup", "Advanced Makeup", "Airbrush Makeup", "Glass Skin Makeup", "Water Proof Makeup", "Others"), amount (total booking amount), and advance_amount.
 3. For single expense type, target fields: expense_category (Rent, Salary, Products, Electricity, Water, Travel, Miscellaneous), amount, and expense_note (the specific item or description, e.g. "hair dryer", "shampoo", "Rent for June"). Classify inputs about operational costs, salaries, bills, rent, or buying supplies as "expense".
 4. For multiple_expenses type, if the user lists multiple items/expenses with their respective amounts (e.g. a list of products purchased or a list of separate operational costs, e.g., "Chutti 159, Gloves 174, Apron 186 on May 31"), classify as "multiple_expenses" and populate the "expenses" array with each item extracted. Map categories for each item appropriately (usually Products for supplies, Utilities for bills, Rent, Travel, etc.).
-5. For reels_idea type, target fields: reels_idea (the description of the reels/instagram idea). If the user mentions "reels", "insta", "instagram", "video idea", "post idea", "reel concept" or similar, classify it as "reels_idea".
-6. For greeting type, if the user greets you or says hello (e.g. "hi", "hello", "நமஸ்தே", "thank you"), reply back warmly addressing the owner "Kalai" directly (e.g. "Vanakkam Kalai! How can I assist you with your salon management today?" or "Hello Kalai! Ready to update some salon entries?"). Provide a helpful, friendly message in Tamil or English (matching her style). Store this message in "conversational_reply".
-7. Common Tamil transliterations: facial=facial, threading=threading, paid=paid, advance=advance.
-8. Currency and Numeric Rules: All monetary amounts (amount, advance_amount, etc.) must be strictly numeric in Indian Rupees (INR). NEVER output arithmetic expressions (e.g. "100 + 200") for numeric fields. Compute the sum or keep them as separate objects in multiple_expenses. If the user inputs currency symbols/words like "$", "USD", "dollars", convert to INR (1 USD = 80 INR) or interpret directly as INR, returning a raw number.
-9. Referrals: Extract who referred the customer/booking (e.g., "referred by Anita") and store in "referred_by".
+5. For greeting type, if the user greets you or says hello (e.g. "hi", "hello", "நமஸ்தே", "thank you"), reply back warmly addressing the owner "Kalai" directly (e.g. "Vanakkam Kalai! How can I assist you with your salon management today?" or "Hello Kalai! Ready to update some salon entries?"). Provide a helpful, friendly message in Tamil or English (matching her style). Store this message in "conversational_reply".
+6. Common Tamil transliterations: facial=facial, threading=threading, saree prepleating=saree prepleating, paid=paid, advance=advance.
+7. Currency and Numeric Rules: All monetary amounts (amount, advance_amount, etc.) must be strictly numeric in Indian Rupees (INR). NEVER output arithmetic expressions (e.g. "100 + 200") for numeric fields. Compute the sum or keep them as separate objects in multiple_expenses. If the user inputs currency symbols/words like "$", "USD", "dollars", convert to INR (1 USD = 80 INR) or interpret directly as INR, returning a raw number.
+8. Referrals: Extract who referred the customer/booking (e.g., "referred by Anita") and store in "referred_by".
 
 Return ONLY the JSON, no other text.`;
 
@@ -758,7 +768,7 @@ Return ONLY the JSON, no other text.`;
 
     let reply = '';
     if (parsed.type === 'greeting') {
-      reply = parsed.conversational_reply || 'Vanakkam Kalai! 👋 How can I help you manage your salon today? You can enter a customer visit, log an expense, or note a Reels idea!';
+      reply = parsed.conversational_reply || 'Vanakkam Kalai! 👋 How can I help you manage your salon today? You can enter a customer visit or log an expense!';
       state.pendingData = null;
     } else {
       if (parsed.type && parsed.type !== 'unknown') {
@@ -774,8 +784,8 @@ Return ONLY the JSON, no other text.`;
         }
       }
 
-      if(state.pendingData.type==='unknown' || (!state.pendingData.customer && !state.pendingData.expense_category && !state.pendingData.reels_idea && (!state.pendingData.expenses || state.pendingData.expenses.length === 0))) {
-        reply = `I didn't understand that. Try something like:<br><em>"Priya facial 1200 paid"</em> or <em>"Expense rent 15000"</em> or <em>"Insta idea: facial kit demo video"</em>`;
+      if(state.pendingData.type==='unknown' || (!state.pendingData.customer && !state.pendingData.expense_category && (!state.pendingData.expenses || state.pendingData.expenses.length === 0))) {
+        reply = `I didn't understand that. Try something like:<br><em>"Priya facial 1200 paid"</em> or <em>"Expense rent 15000"</em>`;
       } else {
         const missing = [];
         if (state.pendingData.type === 'customer_visit') {
@@ -797,8 +807,6 @@ Return ONLY the JSON, no other text.`;
           if (!state.pendingData.amount) missing.push('amount');
         } else if (state.pendingData.type === 'multiple_expenses') {
           // No missing fields needed for multiple expenses
-        } else if (state.pendingData.type === 'reels_idea') {
-          if (!state.pendingData.reels_idea) missing.push('reels_idea');
         }
         state.pendingData.missing_fields = missing;
 
@@ -906,8 +914,7 @@ function updateLastChatMessagePreview() {
   } else if (state.pendingData.type === 'expense') {
     if (!state.pendingData.expense_category) missing.push('expense_category');
     if (!state.pendingData.amount) missing.push('amount');
-  } else if (state.pendingData.type === 'reels_idea') {
-    if (!state.pendingData.reels_idea) missing.push('reels_idea');
+
   }
 
   state.pendingData.missing_fields = missing;
@@ -921,7 +928,7 @@ function updateLastChatMessagePreview() {
       location: "Where is the event located?",
       rating: `How would you rate ${state.pendingData.customer || 'the customer'}?`,
       expense_category: "What is the expense category?",
-      reels_idea: "What is the reels idea?",
+
       date: "What is the date of the event?",
       event_type: "What is the function type?",
       makeup_type: "What is the makeup type?"
@@ -954,9 +961,10 @@ function buildPreviewHtml(p) {
     fields.push({ key: 'amount', label: 'Amount', value: p.amount || 0, type: 'number', placeholder: 'Amount' });
     fields.push({ key: 'phone', label: 'Phone', value: p.phone || '', placeholder: '10-digit phone number', error: (!isPhoneValid && p.phone) ? 'Invalid 10-digit number' : null });
     fields.push({ key: 'service', label: 'Service Taken', value: p.service || '', placeholder: 'e.g. Haircut' });
+    fields.push({ key: 'payment_method', label: 'Payment Method', value: p.payment_method || 'Cash', type: 'payment_method' });
     fields.push({ key: 'location', label: 'Location', value: p.location || '', placeholder: 'e.g. Chennai' });
     fields.push({ key: 'rating', label: 'Rating', value: p.rating || '', type: 'rating' });
-    fields.push({ key: 'referred_by', label: 'Referred By', value: p.referred_by || '', placeholder: 'e.g. Priya' });
+    fields.push({ key: 'referred_by', label: 'Referred By', value: p.referred_by || '', type: 'referred_by' });
   } else if (p.type === 'event_booking') {
     fields.push({ key: 'customer', label: 'Customer', value: p.customer || '', placeholder: 'Name (required)', required: true });
     fields.push({ key: 'phone', label: 'Phone', value: p.phone || '', placeholder: '10-digit phone number', error: (!isPhoneValid && p.phone) ? 'Invalid 10-digit number' : null });
@@ -966,9 +974,8 @@ function buildPreviewHtml(p) {
     fields.push({ key: 'makeup_type', label: 'Makeup Type', value: p.makeup_type || '', placeholder: 'e.g. HD Makeup' });
     fields.push({ key: 'amount', label: 'Total Amount', value: p.amount || 0, type: 'number', placeholder: 'Total' });
     fields.push({ key: 'advance_amount', label: 'Advance Paid', value: p.advance_amount || 0, type: 'number', placeholder: 'Advance' });
-    fields.push({ key: 'referred_by', label: 'Referred By', value: p.referred_by || '', placeholder: 'e.g. Kavitha' });
-  } else if (p.type === 'reels_idea') {
-    fields.push({ key: 'reels_idea', label: 'Reels Idea', value: p.reels_idea || '', placeholder: 'e.g. Bridal makeup demo video', required: true });
+    fields.push({ key: 'referred_by', label: 'Referred By', value: p.referred_by || '', type: 'referred_by' });
+
   } else if (p.type === 'multiple_expenses') {
     // Custom table rendering for multiple expenses, handled below
   } else {
@@ -980,6 +987,17 @@ function buildPreviewHtml(p) {
   let fieldsHtml = '';
   if (isEditing) {
     fieldsHtml = fields.map(f => {
+      if (f.type === 'payment_method') {
+        return `
+          <div style="margin-bottom: 8px;">
+            <label class="form-label" style="font-size:11px;color:#777;margin-bottom:2px;display:block;">${f.label}</label>
+            <select class="form-input" style="padding:6px 8px;font-size:12px;height:30px;" onchange="window.updatePendingDataField('payment_method', this.value)">
+              <option value="Cash" ${f.value === 'Cash' ? 'selected' : ''}>Cash</option>
+              <option value="GPay" ${f.value === 'GPay' ? 'selected' : ''}>GPay</option>
+              <option value="Both" ${f.value === 'Both' ? 'selected' : ''}>Both</option>
+            </select>
+          </div>`;
+      }
       if (f.type === 'rating') {
         return `
           <div style="margin-bottom: 8px;">
@@ -994,15 +1012,18 @@ function buildPreviewHtml(p) {
             </select>
           </div>`;
       }
-      if (f.key === 'reels_idea') {
+      if (f.type === 'referred_by') {
         return `
           <div style="margin-bottom: 8px;">
-            <label class="form-label" style="font-size:11px;color:#777;margin-bottom:2px;display:block;">${f.label} ${f.required ? '<span style="color:red">*</span>' : ''}</label>
-            <textarea class="form-input" style="padding:6px 8px;font-size:12px;resize:vertical;" rows="3"
-                   placeholder="${f.placeholder}" 
-                   oninput="window.updatePendingDataField('${f.key}', this.value)">${f.value}</textarea>
+            <label class="form-label" style="font-size:11px;color:#777;margin-bottom:2px;display:block;">${f.label}</label>
+            <select class="form-input" style="padding:6px 8px;font-size:12px;height:30px;" onchange="window.updatePendingDataField('referred_by', this.value)">
+              <option value="" ${!f.value ? 'selected' : ''}>Not Referred</option>
+              <option value="Instagram" ${f.value === 'Instagram' ? 'selected' : ''}>Instagram</option>
+              <option value="Relatives" ${f.value === 'Relatives' ? 'selected' : ''}>Relatives</option>
+            </select>
           </div>`;
       }
+
       return `
         <div style="margin-bottom: 8px;">
           <label class="form-label" style="font-size:11px;color:#777;margin-bottom:2px;display:block;">${f.label} ${f.required ? '<span style="color:red">*</span>' : ''}</label>
@@ -1070,10 +1091,7 @@ function buildPreviewHtml(p) {
 
   let headerTitle = 'Extracted Visit Details';
   let headerIcon = 'ti-id-card';
-  if (p.type === 'reels_idea') {
-    headerTitle = 'Extracted Reels Idea';
-    headerIcon = 'ti-brand-instagram';
-  } else if (p.type === 'expense' || p.type === 'multiple_expenses') {
+  if (p.type === 'expense' || p.type === 'multiple_expenses') {
     headerTitle = p.type === 'multiple_expenses' ? 'Extracted Bulk Expenses' : 'Extracted Expense Details';
     headerIcon = 'ti-receipt';
   } else if (p.type === 'event_booking') {
@@ -1119,13 +1137,21 @@ export async function confirmEntry() {
     let saved = false;
 
     if(p.type === 'customer_visit') {
+      const svcMethod = p.payment_method || 'Cash';
+      const servicesList = (p.service || 'Others')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => `${s} (${svcMethod})`);
+
       const result = await addCustomer({
         name: p.customer || 'Unknown',
         phone: p.phone || '',
         location: p.location || '',
-        services: p.service ? [p.service] : [],
+        services: servicesList,
         amount: p.amount || 0,
         payment_status: p.payment_status || 'pending',
+        payment_method: svcMethod,
         last_visit: new Date().toISOString().split('T')[0],
         total_spend: p.amount || 0,
         visits: 1,
@@ -1174,24 +1200,20 @@ export async function confirmEntry() {
       }
       saved = successCount > 0;
       p.saved_count = successCount;
-    } else if(p.type === 'reels_idea') {
-      const result = await addReelsIdea(p.reels_idea || 'New Reels Idea');
-      saved = !!result;
+
     }
 
     state.isTyping = false;
-    const name = p.type === 'multiple_expenses' ? `${p.saved_count || (p.expenses || []).length} bulk expense items` : (p.customer || p.expense_category || p.reels_idea || 'Record');
+    const name = p.type === 'multiple_expenses' ? `${p.saved_count || (p.expenses || []).length} bulk expense items` : (p.customer || p.expense_category || 'Record');
 
     if(saved) {
       let typeName = 'customer records';
       if (p.type === 'expense' || p.type === 'multiple_expenses') typeName = 'expenses';
       else if (p.type === 'event_booking') typeName = 'events';
-      else if (p.type === 'reels_idea') typeName = 'Reels Ideas';
       
       let viewSection = 'Customers';
       if (p.type === 'expense') viewSection = 'Expenses';
       else if (p.type === 'event_booking') viewSection = 'Events';
-      else if (p.type === 'reels_idea') viewSection = 'Reels Ideas';
 
       state.chatMessages.push({role:'ai',text:`✅ <strong>${name.length > 60 ? name.substring(0, 60) + '...' : name}</strong> saved to Database successfully! 🎉<br><span style="font-size:11px;color:#888">Record added to ${typeName}. View it in the ${viewSection} section.</span>`});
     } else {

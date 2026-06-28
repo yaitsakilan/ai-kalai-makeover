@@ -6,7 +6,7 @@ import { renderAIChat, scrollChatBottom } from './pages/aichat.js';
 import { renderCustomers } from './pages/customers.js';
 import { renderEvents } from './pages/events.js';
 import { renderExpenses } from './pages/expenses.js';
-import { renderReels } from './pages/reels.js';
+
 import { renderAnalytics, initAnalyticsCharts } from './pages/analytics.js';
 import { renderOCR } from './pages/ocr.js';
 
@@ -111,10 +111,7 @@ export async function render() {
         main.innerHTML = loadingHtml();
         main.innerHTML = await renderOCR();
         break;
-      case 'reels':
-        main.innerHTML = loadingHtml();
-        main.innerHTML = await renderReels();
-        break;
+
     }
   } catch(err) {
     console.error('Render error:', err);

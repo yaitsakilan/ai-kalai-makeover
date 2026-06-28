@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS customers (
   services TEXT[] DEFAULT '{}',
   amount INTEGER DEFAULT 0,
   payment_status TEXT DEFAULT 'pending',
+  payment_method TEXT DEFAULT 'Cash',
   last_visit DATE DEFAULT CURRENT_DATE,
   total_spend INTEGER DEFAULT 0,
   visits INTEGER DEFAULT 1,
@@ -61,13 +62,7 @@ CREATE TABLE IF NOT EXISTS bill_scans (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. REELS IDEAS TABLE
-CREATE TABLE IF NOT EXISTS reels_ideas (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  idea TEXT NOT NULL,
-  status TEXT DEFAULT 'Planned',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+
 
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
@@ -78,7 +73,7 @@ ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bill_scans ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reels_ideas ENABLE ROW LEVEL SECURITY;
+
 
 -- Customers policies
 CREATE POLICY "Allow public read customers" ON customers FOR SELECT USING (true);
@@ -104,11 +99,7 @@ CREATE POLICY "Allow public insert bill_scans" ON bill_scans FOR INSERT WITH CHE
 CREATE POLICY "Allow public update bill_scans" ON bill_scans FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public delete bill_scans" ON bill_scans FOR DELETE USING (true);
 
--- Reels ideas policies
-CREATE POLICY "Allow public read reels_ideas" ON reels_ideas FOR SELECT USING (true);
-CREATE POLICY "Allow public insert reels_ideas" ON reels_ideas FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update reels_ideas" ON reels_ideas FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public delete reels_ideas" ON reels_ideas FOR DELETE USING (true);
+
 
 -- ============================================================
 -- SEED DATA — Your existing mock data

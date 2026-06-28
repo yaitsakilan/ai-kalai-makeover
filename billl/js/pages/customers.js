@@ -481,7 +481,10 @@ export function openShopCustomerForm() {
               <label for="sf-referred" class="form-label" style="margin-bottom:0;cursor:pointer;font-weight:500;">Came from Referral?</label>
             </div>
             <div class="form-group" id="sf-referrer-div" style="margin-bottom:0;display:none;">
-              <input class="form-input" id="sf-referrer" placeholder="Referrer Name">
+              <select class="form-input form-select" id="sf-referrer">
+                <option value="Instagram">Instagram</option>
+                <option value="Relatives">Relatives</option>
+              </select>
             </div>
           </div>
 
@@ -491,7 +494,7 @@ export function openShopCustomerForm() {
           </div>
           <div class="form-group">
             <div class="chip-group" id="sf-service-chips">
-              ${['Threading', 'Facial', 'Bleach', 'Detan', 'Hair Spa', 'Layer Haircut', 'Black Hair Color', 'Pedicure', 'Smoothening', 'Wax', 'Others'].map(s =>
+              ${['Threading', 'Saree Prepleating', 'Facial', 'Bleach', 'Detan', 'Hair Spa', 'Layer Haircut', 'Black Hair Color', 'Pedicure', 'Smoothening', 'Wax', 'Others'].map(s =>
     `<div class="chip" onclick="window.serviceChipToggle(this)">${s}</div>`
   ).join('')}
             </div>
@@ -527,6 +530,56 @@ export function openShopCustomerForm() {
     </div>`;
 }
 
+export function getServiceRowHtml(serviceName, rowId, amount = 0, method = 'Cash', chipName = '') {
+  const isBoth = method === 'Both';
+  const amountHtml = isBoth
+    ? `
+      <input type="number" placeholder="Cash" class="sa-cash-input" value="${amount ? Math.round(amount/2) : ''}" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+      <span style="font-size:10px;color:#999">+</span>
+      <input type="number" placeholder="GPay" class="sa-gpay-input" value="${amount ? Math.round(amount/2) : ''}" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+    `
+    : `
+      <span style="font-size:12px;color:#888">₹</span>
+      <input type="number" placeholder="Amount" class="sa-amount-input" value="${amount || ''}" oninput="window.updateServiceTotal()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+    `;
+    
+  const removeAttr = chipName ? `'${rowId}', '${chipName}'` : `'${rowId}', null`;
+  return `
+    <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${serviceName}"></div>
+    <div class="sa-amount-container" style="display:inline-flex; align-items:center; gap:4px;">
+      ${amountHtml}
+    </div>
+    <select class="form-input form-select sa-method" style="width: 90px; padding: 4px; font-size: 11px; height: 32px; margin-left: 6px;" onchange="window.handleServiceMethodChange(this)">
+      <option value="Cash" ${method === 'Cash' ? 'selected' : ''}>Cash</option>
+      <option value="GPay" ${method === 'GPay' ? 'selected' : ''}>GPay</option>
+      <option value="Both" ${method === 'Both' ? 'selected' : ''}>Both</option>
+    </select>
+    <div class="sa-remove" onclick="window.removeServiceRow(${removeAttr})" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>
+  `;
+}
+
+export function handleServiceMethodChange(selectEl) {
+  const row = selectEl.closest('.service-amount-row');
+  if (!row) return;
+  const container = row.querySelector('.sa-amount-container');
+  if (!container) return;
+  
+  const val = selectEl.value;
+  if (val === 'Both') {
+    container.innerHTML = `
+      <input type="number" placeholder="Cash" class="sa-cash-input" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+      <span style="font-size:10px;color:#999">+</span>
+      <input type="number" placeholder="GPay" class="sa-gpay-input" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+    `;
+  } else {
+    container.innerHTML = `
+      <span style="font-size:12px;color:#888">₹</span>
+      <input type="number" placeholder="Amount" class="sa-amount-input" oninput="window.updateServiceTotal()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+    `;
+  }
+  updateServiceTotal();
+}
+
 export function serviceChipToggle(chipEl) {
   const serviceName = chipEl.textContent.trim();
   chipEl.classList.toggle('selected');
@@ -552,11 +605,7 @@ export function serviceChipToggle(chipEl) {
       row.className = 'service-amount-row';
       row.id = rowId;
       row.dataset.service = serviceName;
-      row.innerHTML = `
-        <div class="sa-name"><i class="ti ti-sparkles"></i>${serviceName}</div>
-        <span style="font-size:12px;color:#888">₹</span>
-        <input type="number" placeholder="Amount" oninput="window.updateServiceTotal()">
-        <div class="sa-remove" onclick="window.removeServiceRow('${rowId}', '${serviceName}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+      row.innerHTML = getServiceRowHtml(serviceName, rowId, 0, 'Cash', serviceName);
       amountList.appendChild(row);
     }
   } else {
@@ -578,11 +627,7 @@ export function addOtherServiceAmount() {
   row.className = 'service-amount-row';
   row.id = rowId;
   row.dataset.service = otherName;
-  row.innerHTML = `
-    <div class="sa-name"><i class="ti ti-sparkles"></i>${otherName}</div>
-    <span style="font-size:12px;color:#888">₹</span>
-    <input type="number" placeholder="Amount" oninput="window.updateServiceTotal()">
-    <div class="sa-remove" onclick="window.removeServiceRow('${rowId}', null)" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+  row.innerHTML = getServiceRowHtml(otherName, rowId, 0, 'Cash');
   amountList.appendChild(row);
   otherNameInput.value = '';
   otherNameInput.focus();
@@ -602,7 +647,16 @@ export function removeServiceRow(rowId, serviceName) {
 export function updateServiceTotal() {
   const rows = document.querySelectorAll('#sf-service-amounts .service-amount-row');
   let total = 0;
-  rows.forEach(r => { total += parseInt(r.querySelector('input')?.value) || 0; });
+  rows.forEach(r => {
+    const method = r.querySelector('.sa-method')?.value || 'Cash';
+    if (method === 'Both') {
+      const cash = parseInt(r.querySelector('.sa-cash-input')?.value) || 0;
+      const gpay = parseInt(r.querySelector('.sa-gpay-input')?.value) || 0;
+      total += cash + gpay;
+    } else {
+      total += parseInt(r.querySelector('.sa-amount-input')?.value) || 0;
+    }
+  });
   const el = document.getElementById('sf-total-amount');
   if (el) el.textContent = '₹' + total.toLocaleString();
   const bar = document.getElementById('sf-total-bar');
@@ -613,9 +667,22 @@ function getServiceAmounts() {
   const rows = document.querySelectorAll('#sf-service-amounts .service-amount-row');
   const services = [];
   rows.forEach(r => {
-    const name = r.dataset.service;
-    const amount = parseInt(r.querySelector('input')?.value) || 0;
-    if (name) services.push({ name, amount });
+    const nameInput = r.querySelector('.sa-name-input');
+    const name = nameInput ? nameInput.value.trim() : r.dataset.service;
+    const method = r.querySelector('.sa-method')?.value || 'Cash';
+    let amount = 0;
+    let cash = 0;
+    let gpay = 0;
+    if (method === 'Both') {
+      cash = parseInt(r.querySelector('.sa-cash-input')?.value) || 0;
+      gpay = parseInt(r.querySelector('.sa-gpay-input')?.value) || 0;
+      amount = cash + gpay;
+    } else {
+      amount = parseInt(r.querySelector('.sa-amount-input')?.value) || 0;
+    }
+    if (name) {
+      services.push({ name, amount, method, cash, gpay });
+    }
   });
   return services;
 }
@@ -648,7 +715,15 @@ export async function submitShopCustomerForm() {
   if (hasZero) { showToast('Please enter amount for all selected services', 'error'); return; }
 
   const totalAmount = serviceAmounts.reduce((s, a) => s + a.amount, 0);
-  const serviceNames = serviceAmounts.map(s => s.name);
+  const serviceNames = serviceAmounts.map(s => {
+    if (s.method === 'Both') {
+      return `${s.name} (Cash: ₹${s.cash}, GPay: ₹${s.gpay})`;
+    }
+    return `${s.name} (${s.method})`;
+  });
+
+  const methods = [...new Set(serviceAmounts.map(s => s.method))];
+  const overallPaymentMethod = methods.length === 1 ? methods[0] : 'Both';
 
   const rating = parseInt(document.getElementById('form-rating-value').value) || 5;
   const location = document.getElementById('sf-location').value.trim();
@@ -667,6 +742,7 @@ export async function submitShopCustomerForm() {
     services: serviceNames,
     amount: totalAmount,
     payment_status: 'paid',
+    payment_method: overallPaymentMethod,
     last_visit: date,
     total_spend: totalAmount,
     visits: 1,
@@ -676,7 +752,12 @@ export async function submitShopCustomerForm() {
 
   if (result) {
     closeFormOverlay();
-    const svcSummary = serviceAmounts.map(s => `${s.name}: ₹${s.amount.toLocaleString()}`).join(' · ');
+    const svcSummary = serviceAmounts.map(s => {
+      if (s.method === 'Both') {
+        return `${s.name} (Cash: ₹${s.cash}, GPay: ₹${s.gpay})`;
+      }
+      return `${s.name} (${s.method}): ₹${s.amount.toLocaleString()}`;
+    }).join(' · ');
     state.chatMessages.push({ role: 'ai', text: `✅ <strong>${name}</strong> saved via Shop Customer Form! 🎉<br><span style="font-size:11px;color:#888">${svcSummary}<br>Total: ₹${totalAmount.toLocaleString()} · Rating: ${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</span>` });
     if (typeof window.render === 'function') window.render();
 
@@ -781,6 +862,121 @@ export function promptWhatsAppBillFromId(customerId) {
   );
 }
 
+export function openClassesForm() {
+  const today = new Date().toISOString().split('T')[0];
+  const container = document.getElementById('form-overlay-container');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="form-overlay" onclick="window.closeFormOverlay()">
+      <div class="form-panel" onclick="event.stopPropagation()">
+        <div class="form-panel-header">
+          <h3><i class="ti ti-school" style="color:#0d9488"></i> Class Enrollment Form</h3>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-outline btn-icon" id="form-mic-btn" onclick="window.startVoiceRecording('class')" title="Fill form with voice" style="width:34px; height:34px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; border-color:#e5e5e5; transition: all 0.2s ease;">
+              <i class="ti ti-microphone" style="font-size:16px; color:#0d9488;"></i>
+            </button>
+            <div onclick="window.closeFormOverlay()" style="cursor:pointer;color:#999;font-size:22px;padding:4px;display:flex;align-items:center;"><i class="ti ti-x"></i></div>
+          </div>
+        </div>
+        <div class="form-panel-body">
+          <div id="form-voice-container"></div>
+          <div class="form-section-title" style="border-top:none;margin-top:0;padding-top:0">
+            <i class="ti ti-user"></i> Student Details
+          </div>
+          <div class="form-group">
+            <label class="form-label">Student Name *</label>
+            <input class="form-input" id="cf-name" placeholder="Enter student name">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Phone Number *</label>
+              <input class="form-input" id="cf-phone" placeholder="10-digit number" maxlength="10">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Location</label>
+              <input class="form-input" id="cf-location" placeholder="e.g. Chennai">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <input class="form-input" id="cf-date" type="date" value="${today}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Class Fee (₹) *</label>
+              <input class="form-input" id="cf-amount" type="number" placeholder="Enter class fee amount">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.2fr 1.5fr;gap:12px;margin-bottom:14px;align-items:center;">
+            <div class="form-group" style="margin-bottom:0;display:flex;align-items:center;gap:6px;">
+              <input type="checkbox" id="cf-referred" onchange="document.getElementById('cf-referrer-div').style.display = this.checked ? 'block' : 'none'" style="width:16px;height:16px;cursor:pointer;">
+              <label for="cf-referred" class="form-label" style="margin-bottom:0;cursor:pointer;font-weight:500;">Came from Referral?</label>
+            </div>
+            <div class="form-group" id="cf-referrer-div" style="margin-bottom:0;display:none;">
+              <select class="form-input form-select" id="cf-referrer">
+                <option value="Instagram">Instagram</option>
+                <option value="Relatives">Relatives</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="form-panel-footer">
+          <button class="btn btn-outline" onclick="window.closeFormOverlay()"><i class="ti ti-x"></i> Cancel</button>
+          <button class="btn btn-gold" onclick="window.submitClassesForm()" id="cf-submit-btn" style="background:#0d9488; color:white; border-color:#0d9488;"><i class="ti ti-check"></i> Save Student</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+export async function submitClassesForm() {
+  const name = document.getElementById('cf-name').value.trim();
+  if (!name) { showToast('Please enter student name', 'error'); return; }
+
+  const phoneInput = document.getElementById('cf-phone').value.trim();
+  if (!phoneInput) { showToast('Please enter phone number', 'error'); return; }
+  const phoneVal = validateAndCleanPhone(phoneInput);
+  if (phoneVal === null) { showToast('Please enter a valid 10-digit phone number', 'error'); return; }
+
+  const amount = parseInt(document.getElementById('cf-amount').value) || 0;
+  if (amount <= 0) { showToast('Please enter the class fee amount', 'error'); return; }
+
+  const location = document.getElementById('cf-location').value.trim();
+  const date = document.getElementById('cf-date').value || new Date().toISOString().split('T')[0];
+
+  const isReferred = document.getElementById('cf-referred')?.checked;
+  const referredBy = isReferred ? document.getElementById('cf-referrer')?.value.trim() : '';
+
+  const btn = document.getElementById('cf-submit-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="dot-anim"><span></span><span></span><span></span></div> Saving...'; }
+
+  const result = await addCustomer({
+    name,
+    phone: phoneVal,
+    location,
+    services: ['Classes'],
+    amount: amount,
+    payment_status: 'paid',
+    payment_method: 'Cash',
+    last_visit: date,
+    total_spend: amount,
+    visits: 1,
+    rating: 5,
+    referred_by: referredBy || null
+  });
+
+  if (result) {
+    closeFormOverlay();
+    state.chatMessages.push({ role: 'ai', text: `✅ Student <strong>${name}</strong> enrolled in Classes! 🎉<br><span style="font-size:11px;color:#888">Fee: ₹${amount.toLocaleString()} · Location: ${location || 'N/A'}</span>` });
+    if (typeof window.render === 'function') window.render();
+
+    setTimeout(() => {
+      promptWhatsAppBill(name, phoneVal, ['Classes'], amount, date, 'paid');
+    }, 400);
+  } else {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Save Student'; }
+  }
+}
+
 // Bind to window to allow HTML inline click handlers to execute
 window.openShopCustomerForm = openShopCustomerForm;
 window.submitShopCustomerForm = submitShopCustomerForm;
@@ -800,3 +996,7 @@ window.showAddCustomerModal = showAddCustomerModal;
 window.handleDeleteCustomer = handleDeleteCustomer;
 window.promptWhatsAppBill = promptWhatsAppBill;
 window.promptWhatsAppBillFromId = promptWhatsAppBillFromId;
+window.openClassesForm = openClassesForm;
+window.submitClassesForm = submitClassesForm;
+window.getServiceRowHtml = getServiceRowHtml;
+window.handleServiceMethodChange = handleServiceMethodChange;

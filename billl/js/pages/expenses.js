@@ -342,6 +342,250 @@ Make it concise, insightful, and formatted beautifully.`
   }
 }
 
+export function openProductExpenseForm() {
+  const today = new Date().toISOString().split('T')[0];
+  const container = document.getElementById('form-overlay-container');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="form-overlay" onclick="window.closeFormOverlay()">
+      <div class="form-panel" onclick="event.stopPropagation()" style="width:650px; max-width:95vw;">
+        <div class="form-panel-header">
+          <h3><i class="ti ti-receipt-2" style="color:#7c3aed"></i> Product Expense Form</h3>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-outline btn-icon" id="form-mic-btn" onclick="window.startVoiceRecording('product_expense')" title="Fill form with voice" style="width:34px; height:34px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; border-color:#e5e5e5; transition: all 0.2s ease;">
+              <i class="ti ti-microphone" style="font-size:16px; color:#7c3aed;"></i>
+            </button>
+            <div onclick="window.closeFormOverlay()" style="cursor:pointer;color:#999;font-size:22px;padding:4px;display:flex;align-items:center;"><i class="ti ti-x"></i></div>
+          </div>
+        </div>
+        <div class="form-panel-body" style="max-height:65vh; overflow-y:auto;">
+          <div id="form-voice-container"></div>
+          
+          <div class="form-group">
+            <label class="form-label">Expense Date</label>
+            <input class="form-input" id="pe-date" type="date" value="${today}">
+          </div>
+
+          <div class="form-section-title" style="color:#6d28d9">
+            <i class="ti ti-package"></i> Salon Product Items
+            <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">Tap a product, then enter amount</span>
+          </div>
+          <div class="form-group">
+            <div class="chip-group" id="pe-product-chips">
+              ${['Thread', 'Facial Kit Cream', 'Hair Color Cream', 'Hair Color Powder', 'Spa Cream', 'Pedicure Cream', 'Wax Cream', 'Smoothening Cream', 'Others'].map(s =>
+                `<div class="chip" onclick="window.productExpenseChipToggle(this, 'product')">${s}</div>`
+              ).join('')}
+            </div>
+            <div class="chip-other-input" id="pe-product-other-div">
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                <input class="form-input" id="pe-product-other" placeholder="Enter custom product name..." style="flex:1">
+                <button class="btn btn-gold" onclick="window.addOtherProductExpenseAmount('product')" style="padding:8px 14px;font-size:12px;white-space:nowrap;background:#7c3aed;border-color:#7c3aed;color:white;"><i class="ti ti-plus" style="font-size:14px"></i> Add</button>
+              </div>
+            </div>
+            <div class="service-amount-list" id="pe-product-amounts"></div>
+          </div>
+
+          <div class="form-section-title" style="color:#be185d">
+            <i class="ti ti-brush"></i> Makeup Items & Accessories
+            <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">Tap an item, then enter amount</span>
+          </div>
+          <div class="form-group">
+            <div class="chip-group" id="pe-makeup-chips">
+              ${['Extension', 'Lashes', 'Hair Spray', 'Hair Pin', 'Safety Pin', 'Serum', 'Others'].map(s =>
+                `<div class="chip" onclick="window.productExpenseChipToggle(this, 'makeup')">${s}</div>`
+              ).join('')}
+            </div>
+            <div class="chip-other-input" id="pe-makeup-other-div">
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                <input class="form-input" id="pe-makeup-other" placeholder="Enter custom makeup item name..." style="flex:1">
+                <button class="btn btn-gold" onclick="window.addOtherProductExpenseAmount('makeup')" style="padding:8px 14px;font-size:12px;white-space:nowrap;background:#be185d;border-color:#be185d;color:white;"><i class="ti ti-plus" style="font-size:14px"></i> Add</button>
+              </div>
+            </div>
+            <div class="service-amount-list" id="pe-makeup-amounts"></div>
+          </div>
+
+          <div class="sa-total-bar" id="pe-total-bar" style="display:none; background:#f5f3ff; border:1px solid #ddd6fe; justify-content:space-between; align-items:center; padding:12px 16px; border-radius:10px; margin-top: 18px;">
+            <span class="sa-total-label" style="color:#6d28d9; font-weight:600;">Grand Total</span>
+            <span class="sa-total-value" id="pe-total-amount" style="color:#7c3aed; font-size:20px; font-weight:700;">₹0</span>
+          </div>
+        </div>
+        <div class="form-panel-footer">
+          <button class="btn btn-outline" onclick="window.closeFormOverlay()"><i class="ti ti-x"></i> Cancel</button>
+          <button class="btn btn-gold" onclick="window.submitProductExpenseForm()" id="pe-submit-btn" style="background:#7c3aed; color:white; border-color:#7c3aed;"><i class="ti ti-check"></i> Save Expenses</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+export function productExpenseChipToggle(chipEl, category) {
+  const name = chipEl.textContent.trim();
+  chipEl.classList.toggle('selected');
+  
+  const targetAmountsId = category === 'product' ? 'pe-product-amounts' : 'pe-makeup-amounts';
+  const amountList = document.getElementById(targetAmountsId);
+  if (!amountList) return;
+
+  if (name === 'Others') {
+    const otherDivId = category === 'product' ? 'pe-product-other-div' : 'pe-makeup-other-div';
+    const otherInput = document.getElementById(otherDivId);
+    if (chipEl.classList.contains('selected')) {
+      if (otherInput) otherInput.classList.add('show');
+    } else {
+      if (otherInput) otherInput.classList.remove('show');
+    }
+    return;
+  }
+
+  const prefix = category === 'product' ? 'pe-row-prod-' : 'pe-row-make-';
+  const rowId = prefix + name.replace(/\s+/g, '-').toLowerCase();
+
+  if (chipEl.classList.contains('selected')) {
+    if (!document.getElementById(rowId)) {
+      const row = document.createElement('div');
+      row.className = 'service-amount-row';
+      row.id = rowId;
+      row.dataset.name = name;
+      row.dataset.category = category;
+      
+      const icon = category === 'product' ? 'ti-package' : 'ti-brush';
+      const color = category === 'product' ? '#6d28d9' : '#be185d';
+      
+      row.innerHTML = `
+        <div class="sa-name" style="color:${color}"><i class="ti ${icon}"></i><input type="text" class="sa-name-input" value="${name}"></div>
+        <span style="font-size:12px;color:#888">₹</span>
+        <input type="number" placeholder="Amount" oninput="window.updateProductExpenseTotal()" style="width: 80px;">
+        <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', '${name}', '${category}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+      amountList.appendChild(row);
+    }
+  } else {
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+  }
+  updateProductExpenseTotal();
+}
+
+export function addOtherProductExpenseAmount(category) {
+  const otherInputId = category === 'product' ? 'pe-product-other' : 'pe-makeup-other';
+  const otherNameInput = document.getElementById(otherInputId);
+  const otherName = otherNameInput ? otherNameInput.value.trim() : '';
+  if (!otherName) { showToast('Please enter the name first', 'error'); return; }
+
+  const targetAmountsId = category === 'product' ? 'pe-product-amounts' : 'pe-makeup-amounts';
+  const amountList = document.getElementById(targetAmountsId);
+  if (!amountList) return;
+
+  const rowId = `pe-row-${category === 'product' ? 'prod' : 'make'}-other-${Date.now()}`;
+  const row = document.createElement('div');
+  row.className = 'service-amount-row';
+  row.id = rowId;
+  row.dataset.name = otherName;
+  row.dataset.category = category;
+
+  const icon = category === 'product' ? 'ti-package' : 'ti-brush';
+  const color = category === 'product' ? '#6d28d9' : '#be185d';
+
+  row.innerHTML = `
+    <div class="sa-name" style="color:${color}"><i class="ti ${icon}"></i><input type="text" class="sa-name-input" value="${otherName}"></div>
+    <span style="font-size:12px;color:#888">₹</span>
+    <input type="number" placeholder="Amount" oninput="window.updateProductExpenseTotal()" style="width: 80px;">
+    <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', null, '${category}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+  amountList.appendChild(row);
+  
+  otherNameInput.value = '';
+  otherNameInput.focus();
+  updateProductExpenseTotal();
+}
+
+export function removeProductExpenseRow(rowId, name, category) {
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
+  if (name) {
+    const chipContainerId = category === 'product' ? 'pe-product-chips' : 'pe-makeup-chips';
+    const chips = document.querySelectorAll(`#${chipContainerId} .chip`);
+    chips.forEach(c => { if (c.textContent.trim() === name) c.classList.remove('selected'); });
+  }
+  updateProductExpenseTotal();
+}
+
+export function updateProductExpenseTotal() {
+  const productRows = document.querySelectorAll('#pe-product-amounts .service-amount-row');
+  const makeupRows = document.querySelectorAll('#pe-makeup-amounts .service-amount-row');
+  
+  let total = 0;
+  productRows.forEach(r => { total += parseInt(r.querySelector('input')?.value) || 0; });
+  makeupRows.forEach(r => { total += parseInt(r.querySelector('input')?.value) || 0; });
+
+  const el = document.getElementById('pe-total-amount');
+  if (el) el.textContent = '₹' + total.toLocaleString();
+
+  const bar = document.getElementById('pe-total-bar');
+  if (bar) {
+    bar.style.display = (productRows.length > 0 || makeupRows.length > 0) ? 'flex' : 'none';
+  }
+}
+
+export async function submitProductExpenseForm() {
+  const productRows = document.querySelectorAll('#pe-product-amounts .service-amount-row');
+  const makeupRows = document.querySelectorAll('#pe-makeup-amounts .service-amount-row');
+  
+  const date = document.getElementById('pe-date').value || new Date().toISOString().split('T')[0];
+  const items = [];
+
+  productRows.forEach(r => {
+    const nameInput = r.querySelector('.sa-name-input');
+    const name = nameInput ? nameInput.value.trim() : r.dataset.name;
+    const amount = parseInt(r.querySelector('input')?.value) || 0;
+    if (amount > 0) {
+      items.push({ category: 'Products', amount, date, note: `Products: ${name}` });
+    }
+  });
+
+  makeupRows.forEach(r => {
+    const nameInput = r.querySelector('.sa-name-input');
+    const name = nameInput ? nameInput.value.trim() : r.dataset.name;
+    const amount = parseInt(r.querySelector('input')?.value) || 0;
+    if (amount > 0) {
+      items.push({ category: 'Products', amount, date, note: `Makeup: ${name}` });
+    }
+  });
+
+  if (items.length === 0) {
+    showToast('Please enter at least one product/makeup amount greater than 0', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('pe-submit-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<div class="dot-anim"><span></span><span></span><span></span></div> Saving...';
+  }
+
+  let successCount = 0;
+  for (let item of items) {
+    const result = await addExpense(item);
+    if (result) successCount++;
+  }
+
+  if (successCount > 0) {
+    closeFormOverlay();
+    showToast(`Successfully saved ${successCount} expenses!`);
+    state.chatMessages.push({
+      role: 'ai',
+      text: `✅ Saved <strong>${successCount}</strong> product/makeup expenses via manual form! 🎉<br><span style="font-size:11px;color:#888">${items.map(i => `${i.note}: ₹${i.amount.toLocaleString()}`).join(' · ')}</span>`
+    });
+    if (typeof window.render === 'function') window.render();
+    
+    const chatEl = document.getElementById('chat-messages');
+    if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+  } else {
+    showToast('Failed to save expenses', 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ti ti-check"></i> Save Expenses';
+    }
+  }
+}
+
 // Bind to window to allow HTML inline click handlers to execute
 window.openBulkExpenseForm = openBulkExpenseForm;
 window.addBulkExpenseRow = addBulkExpenseRow;
@@ -352,3 +596,9 @@ window.showAddExpenseModal = showAddExpenseModal;
 window.handleDeleteExpense = handleDeleteExpense;
 window.analyzeExpenses = analyzeExpenses;
 window.expenseIcon = expenseIcon;
+window.openProductExpenseForm = openProductExpenseForm;
+window.productExpenseChipToggle = productExpenseChipToggle;
+window.addOtherProductExpenseAmount = addOtherProductExpenseAmount;
+window.removeProductExpenseRow = removeProductExpenseRow;
+window.updateProductExpenseTotal = updateProductExpenseTotal;
+window.submitProductExpenseForm = submitProductExpenseForm;

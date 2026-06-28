@@ -67,16 +67,26 @@ export async function addCustomer(customer) {
   if (customer.amount !== undefined) customer.amount = Math.round(Number(customer.amount) || 0);
   if (customer.total_spend !== undefined) customer.total_spend = Math.round(Number(customer.total_spend) || 0);
   let {data, error} = await client.from('customers').insert([customer]).select();
-  if (error && error.code === 'PGRST204' && 'rating' in customer) {
-    console.warn('Database schema cache error PGRST204: rating column missing. Retrying without rating...');
+  if (error && error.code === 'PGRST204') {
     const retryCustomer = { ...customer };
-    delete retryCustomer.rating;
-    const retryResult = await client.from('customers').insert([retryCustomer]).select();
-    if (!retryResult.error) {
-      showToast('Customer saved! (Warning: Run SQL setup to enable ratings)', 'info');
-      return retryResult.data?.[0];
+    let retrying = false;
+    if ('rating' in retryCustomer) {
+      delete retryCustomer.rating;
+      retrying = true;
     }
-    error = retryResult.error;
+    if ('payment_method' in retryCustomer) {
+      delete retryCustomer.payment_method;
+      retrying = true;
+    }
+    if (retrying) {
+      console.warn('Database schema cache error PGRST204: rating/payment_method missing. Retrying insert...');
+      const retryResult = await client.from('customers').insert([retryCustomer]).select();
+      if (!retryResult.error) {
+        showToast('Customer saved! (Warning: Run SQL setup to enable rating/payment_method)', 'info');
+        return retryResult.data?.[0];
+      }
+      error = retryResult.error;
+    }
   }
   if(error) { console.error('Add customer error:', error); showToast('Failed to add customer','error'); return null; }
   showToast('Customer added successfully!');
@@ -114,6 +124,19 @@ export async function addEvent(event) {
   return data?.[0];
 }
 
+export async function updateEvent(id, event) {
+  const client = initDb();
+  if (!client) return null;
+  if (event.total !== undefined) event.total = Math.round(Number(event.total) || 0);
+  if (event.advance !== undefined) event.advance = Math.round(Number(event.advance) || 0);
+  if (event.pending !== undefined) event.pending = Math.round(Number(event.pending) || 0);
+  
+  const {data, error} = await client.from('events').update(event).eq('id', id).select();
+  if(error) { console.error('Update event error:', error); showToast('Failed to update event','error'); return null; }
+  showToast('Event updated successfully!');
+  return data?.[0];
+}
+
 export async function addExpense(expense) {
   const client = initDb();
   if (!client) return null;
@@ -124,39 +147,7 @@ export async function addExpense(expense) {
   return data?.[0];
 }
 
-export async function fetchReelsIdeas() {
-  const client = initDb();
-  if (!client) return [];
-  const {data, error} = await client.from('reels_ideas').select('*').order('created_at', {ascending:false});
-  if(error) { console.error('Fetch reels ideas error:', error); showToast('Failed to load reels ideas','error'); return []; }
-  return data || [];
-}
 
-export async function addReelsIdea(ideaText) {
-  const client = initDb();
-  if (!client) return null;
-  const {data, error} = await client.from('reels_ideas').insert([{ idea: ideaText, status: 'Planned' }]).select();
-  if(error) { console.error('Add reels idea error:', error); showToast('Failed to add reels idea','error'); return null; }
-  showToast('Reels idea saved!');
-  return data?.[0];
-}
-
-export async function updateReelsIdea(id, updates) {
-  const client = initDb();
-  if (!client) return null;
-  const {data, error} = await client.from('reels_ideas').update(updates).eq('id', id).select();
-  if(error) { console.error('Update reels idea error:', error); showToast('Failed to update reels idea','error'); return null; }
-  return data?.[0];
-}
-
-export async function deleteReelsIdea(id) {
-  const client = initDb();
-  if (!client) return false;
-  const {error} = await client.from('reels_ideas').delete().eq('id', id);
-  if(error) { console.error('Delete reels idea error:', error); showToast('Failed to delete reels idea','error'); return false; }
-  showToast('Reels idea deleted');
-  return true;
-}
 
 export async function addBillScan(scan) {
   const client = initDb();

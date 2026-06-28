@@ -1,6 +1,6 @@
 // billl/js/pages/events.js
 import { state } from '../state.js';
-import { fetchEvents, addEvent, deleteEvent } from '../db.js';
+import { fetchEvents, addEvent, deleteEvent, updateEvent } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay } from '../ui.js';
 import { validateAndCleanPhone, getSelectedChips } from '../utils.js';
 import { callGroqAPI } from '../api.js';
@@ -221,7 +221,21 @@ export function toggleEventSearchField() {
 
 export function renderEventList(events) {
   if (!events.length) return '<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-calendar-event" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No event bookings found</div>';
-  return events.map(e => `
+  return events.map(e => {
+    let addonsHtml = '';
+    if (e.additional_makeup) {
+      try {
+        const arr = typeof e.additional_makeup === 'string' ? JSON.parse(e.additional_makeup) : e.additional_makeup;
+        if (Array.isArray(arr) && arr.length > 0) {
+          addonsHtml = `
+            <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">
+              ${arr.map(a => `<span style="font-size:10px; font-weight:500; color:#4f46e5; background:#edf2f7; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center; border: 0.5px solid #cbd5e0; gap: 4px;"><i class="ti ti-circle-plus" style="font-size:11px; color:#4f46e5;"></i>${a.name}: ₹${a.amount.toLocaleString()}</span>`).join('')}
+            </div>
+          `;
+        }
+      } catch(err) {}
+    }
+    return `
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
@@ -233,20 +247,30 @@ export function renderEventList(events) {
             ${e.phone||'No phone'}
             ${e.referred_by ? ` · <span style="color:#b45309;font-weight:500;" title="Referred by: ${e.referred_by}">📢 Referred by: ${e.referred_by}</span>` : ''}
           </div>
+          <div style="font-size:11px;color:#999;margin-top:2px;">
+            <i class="ti ti-clock" style="font-size:11px;vertical-align:middle;margin-right:2px;"></i>Booked on: ${e.created_at ? new Date(e.created_at).toLocaleDateString('en-IN') : 'N/A'}
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="badge ${e.status==='Completed'?'badge-green':e.status==='Booked'?'badge-blue':'badge-amber'}">${e.status}</span>
-          <div onclick="window.handleDeleteEvent('${e.id}')" style="cursor:pointer;color:#ccc;padding:4px" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#ccc'">
+          <div onclick="window.promptEventWhatsAppBillFromId('${e.id}')" style="cursor:pointer;color:#ccc;padding:4px" onmouseover="this.style.color='#25d366'" onmouseout="this.style.color='#ccc'" title="Send Invoice via WhatsApp">
+            <i class="ti ti-brand-whatsapp" style="font-size:16px"></i>
+          </div>
+          <div onclick="window.openEventCustomerForm('${e.id}')" style="cursor:pointer;color:#ccc;padding:4px" onmouseover="this.style.color='#f5c842'" onmouseout="this.style.color='#ccc'" title="Edit Event">
+            <i class="ti ti-edit" style="font-size:15px"></i>
+          </div>
+          <div onclick="window.handleDeleteEvent('${e.id}')" style="cursor:pointer;color:#ccc;padding:4px" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#ccc'" title="Delete Event">
             <i class="ti ti-trash" style="font-size:15px"></i>
           </div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;background:#f9f9f9;border-radius:10px;padding:12px;font-size:12px">
         <div><div style="color:#999;margin-bottom:2px">Event</div><div style="font-weight:500">${e.type}</div></div>
-        <div><div style="color:#999;margin-bottom:2px">Date</div><div style="font-weight:500">${e.date}</div></div>
+        <div><div style="color:#999;margin-bottom:2px">Event Date</div><div style="font-weight:500">${e.date}</div></div>
         <div><div style="color:#999;margin-bottom:2px">Total</div><div style="font-weight:500;color:#d97706">₹${(e.total||0).toLocaleString()}</div></div>
         <div><div style="color:#999;margin-bottom:2px">Pending</div><div style="font-weight:500;color:${(e.pending||0)>0?'#dc2626':'#15803d'}">₹${(e.pending||0).toLocaleString()}</div></div>
       </div>
+      ${addonsHtml}
       <div style="margin-top:10px">
         <div style="font-size:11px;color:#bbb;margin-bottom:4px">Payment Progress</div>
         <div style="background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden">
@@ -254,8 +278,8 @@ export function renderEventList(events) {
         </div>
         <div style="font-size:11px;color:#888;margin-top:3px">Advance ₹${(e.advance||0).toLocaleString()} / ₹${(e.total||0).toLocaleString()} (${e.total?Math.round(((e.advance||0)/e.total)*100):0}%)</div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 export function showAddEventModal() {
@@ -279,7 +303,7 @@ export function showAddEventModal() {
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
       <div class="form-group">
-        <label class="form-label">Date</label>
+        <label class="form-label">Event Date *</label>
         <input class="form-input" id="m-evt-date" type="date">
       </div>
       <div class="form-group">
@@ -306,16 +330,20 @@ export function showAddEventModal() {
       phoneVal = cleaned;
     }
 
+    const date = document.getElementById('m-evt-date').value;
+    if(!date) { showToast('Please select the event date', 'error'); return; }
+
     const total = parseInt(document.getElementById('m-evt-total').value) || 0;
     const advance = parseInt(document.getElementById('m-evt-advance').value) || 0;
     await addEvent({
       customer,
       phone: phoneVal,
       type: document.getElementById('m-evt-type').value,
-      date: document.getElementById('m-evt-date').value || new Date().toISOString().split('T')[0],
+      date: date,
       total, advance,
       pending: total - advance,
-      status: advance >= total ? 'Completed' : 'Booked'
+      status: advance >= total ? 'Completed' : 'Booked',
+      created_at: new Date().toISOString()
     });
     closeModal();
     if (typeof window.render === 'function') window.render();
@@ -427,15 +455,38 @@ Make it concise, insightful, and formatted beautifully.`
   }
 }
 
-export function openEventCustomerForm() {
+export function openEventCustomerForm(eventId = null) {
+  window._initializingForm = true;
   const today = new Date().toISOString().split('T')[0];
+  const isEdit = !!eventId;
+  const event = isEdit ? window._cachedEvents?.find(e => e.id === eventId) : null;
+  
   const container = document.getElementById('form-overlay-container');
   if (!container) return;
+
+  let baseFee = '';
+  if (isEdit && event) {
+    let addonTotal = 0;
+    if (event.additional_makeup) {
+      try {
+        const arr = typeof event.additional_makeup === 'string' ? JSON.parse(event.additional_makeup) : event.additional_makeup;
+        if (Array.isArray(arr)) {
+          arr.forEach(a => addonTotal += a.amount || 0);
+        }
+      } catch(e) {}
+    }
+    baseFee = event.total - addonTotal - (event.travel_allowance || 0);
+  }
+
+  const hasReferral = isEdit && event && !!event.referred_by;
+  const refDisplay = hasReferral ? 'block' : 'none';
+  const refChecked = hasReferral ? 'checked' : '';
+
   container.innerHTML = `
     <div class="form-overlay" onclick="window.closeFormOverlay()">
       <div class="form-panel" onclick="event.stopPropagation()">
         <div class="form-panel-header">
-          <h3><i class="ti ti-calendar-heart" style="color:#ec4899"></i> Event Booking Form</h3>
+          <h3><i class="ti ti-calendar-heart" style="color:#ec4899"></i> ${isEdit ? 'Edit Event Booking' : 'Event Booking Form'}</h3>
           <div style="display:flex; align-items:center; gap:8px;">
             <button class="btn btn-outline btn-icon" id="form-mic-btn" onclick="window.startVoiceRecording('event')" title="Fill form with voice" style="width:34px; height:34px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; border-color:#e5e5e5; transition: all 0.2s ease;">
               <i class="ti ti-microphone" style="font-size:16px; color:#ec4899;"></i>
@@ -443,7 +494,7 @@ export function openEventCustomerForm() {
             <div onclick="window.closeFormOverlay()" style="cursor:pointer;color:#999;font-size:22px;padding:4px;display:flex;align-items:center;"><i class="ti ti-x"></i></div>
           </div>
         </div>
-        <div class="form-panel-body">
+        <div class="form-panel-body" style="max-height:65vh; overflow-y:auto;">
           <div id="form-voice-container"></div>
           <div class="form-section-title" style="border-top:none;margin-top:0;padding-top:0">
             <i class="ti ti-user"></i> Customer Details
@@ -451,35 +502,38 @@ export function openEventCustomerForm() {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
               <label class="form-label">Customer Name *</label>
-              <input class="form-input" id="ef-name" placeholder="Enter name">
+              <input class="form-input" id="ef-name" value="${isEdit && event ? event.customer : ''}" placeholder="Enter name">
             </div>
             <div class="form-group">
-              <label class="form-label">Customer Number</label>
-              <input class="form-input" id="ef-phone" placeholder="10-digit number" maxlength="10">
+              <label class="form-label">Customer Number *</label>
+              <input class="form-input" id="ef-phone" value="${isEdit && event ? event.phone : ''}" placeholder="10-digit number" maxlength="10">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
               <label class="form-label">Location</label>
-              <input class="form-input" id="ef-location" placeholder="e.g. Chennai">
+              <input class="form-input" id="ef-location" value="${isEdit && event ? (event.location || '') : ''}" placeholder="e.g. Chennai">
             </div>
             <div class="form-group">
-              <label class="form-label">Date</label>
-              <input class="form-input" id="ef-date" type="date" value="${today}">
+              <label class="form-label">Event Date *</label>
+              <input class="form-input" id="ef-date" type="date" value="${isEdit && event ? event.date : today}">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1.2fr 1.5fr;gap:12px;margin-bottom:14px;align-items:center;">
             <div class="form-group" style="margin-bottom:0;display:flex;align-items:center;gap:6px;">
-              <input type="checkbox" id="ef-referred" onchange="document.getElementById('ef-referrer-div').style.display = this.checked ? 'block' : 'none'" style="width:16px;height:16px;cursor:pointer;">
+              <input type="checkbox" id="ef-referred" ${refChecked} onchange="document.getElementById('ef-referrer-div').style.display = this.checked ? 'block' : 'none'" style="width:16px;height:16px;cursor:pointer;">
               <label for="ef-referred" class="form-label" style="margin-bottom:0;cursor:pointer;font-weight:500;">Came from Referral?</label>
             </div>
-            <div class="form-group" id="ef-referrer-div" style="margin-bottom:0;display:none;">
-              <input class="form-input" id="ef-referrer" placeholder="Referrer Name">
+            <div class="form-group" id="ef-referrer-div" style="margin-bottom:0;display:${refDisplay};">
+              <select class="form-input form-select" id="ef-referrer">
+                <option value="Instagram" ${isEdit && event && event.referred_by === 'Instagram' ? 'selected' : ''}>Instagram</option>
+                <option value="Relatives" ${isEdit && event && event.referred_by === 'Relatives' ? 'selected' : ''}>Relatives</option>
+              </select>
             </div>
           </div>
-
+ 
           <div class="form-section-title">
-            <i class="ti ti-confetti"></i> Function Type
+            <i class="ti ti-confetti"></i> Function Type *
           </div>
           <div class="form-group">
             <div class="chip-group" id="ef-function-chips">
@@ -491,95 +545,539 @@ export function openEventCustomerForm() {
               <input class="form-input" id="ef-function-other" placeholder="Enter function type..." style="margin-top:8px">
             </div>
           </div>
-
+ 
           <div class="form-section-title">
-            <i class="ti ti-brush"></i> Makeup Type
+            <i class="ti ti-brush"></i> Makeup Type *
           </div>
           <div class="form-group">
             <div class="chip-group" id="ef-makeup-chips">
-              ${['Basic Makeup','HD Makeup','Advanced Makeup','Airbrush Makeup','Glass Skin Makeup','Water Proof Makeup','Others'].map(s =>
-                `<div class="chip" onclick="window.chipToggle('makeup', this, true)">${s}</div>`
+              ${[
+                ['Basic Makeup', 5000],
+                ['HD Makeup', 5000],
+                ['Advanced Makeup', 7000],
+                ['Airbrush Makeup', 15000],
+                ['Glass Skin Makeup', 12000],
+                ['Water Proof Makeup', 5000],
+                ['Others', 5000]
+              ].map(([s, amt]) =>
+                `<div class="chip" onclick="window.makeupTypeChipToggle(this, ${amt})">${s}</div>`
               ).join('')}
             </div>
             <div class="chip-other-input">
               <input class="form-input" id="ef-makeup-other" placeholder="Enter makeup type..." style="margin-top:8px">
             </div>
+            <div class="service-amount-list" id="ef-makeup-amounts" style="margin-top:8px"></div>
           </div>
-
+ 
+          <div class="form-section-title">
+            <i class="ti ti-user-check"></i> Groom Add-on
+            <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">Tap a chip to add Groom makeup detail</span>
+          </div>
+          <div class="form-group">
+            <div class="chip-group" id="ef-groom-chips">
+              ${['Face Makeup', 'Hair Set'].map(s =>
+                `<div class="chip" onclick="window.eventAddonChipToggle(this, 'groom', 2000)">${s}</div>`
+              ).join('')}
+            </div>
+            <div class="service-amount-list" id="ef-groom-amounts" style="margin-top:8px"></div>
+          </div>
+ 
+          <div class="form-section-title">
+            <i class="ti ti-users"></i> Bridesmaid Add-on
+            <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">Tap a chip to add Bridesmaid makeup detail</span>
+          </div>
+          <div class="form-group">
+            <div class="chip-group" id="ef-bridesmaid-chips">
+              ${['Simple Makeup', 'Hair Style', 'Saree Draping'].map(s =>
+                `<div class="chip" onclick="window.eventAddonChipToggle(this, 'bridesmaid', 1500)">${s}</div>`
+              ).join('')}
+            </div>
+            <div class="service-amount-list" id="ef-bridesmaid-amounts" style="margin-top:8px"></div>
+          </div>
+ 
+          <div class="form-section-title">
+            <i class="ti ti-dots-circle-horizontal"></i> Miscellaneous
+            <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">Tap a chip to add miscellaneous cost</span>
+          </div>
+          <div class="form-group">
+            <div class="chip-group" id="ef-misc-chips">
+              ${['Transport'].map(s =>
+                `<div class="chip" onclick="window.eventMiscChipToggle(this, '${s.toLowerCase()}', 200)">${s}</div>`
+              ).join('')}
+            </div>
+            <div class="service-amount-list" id="ef-misc-amounts" style="margin-top:8px"></div>
+          </div>
+ 
           <div class="form-section-title">
             <i class="ti ti-currency-rupee"></i> Payment Details
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="form-group">
-              <label class="form-label">Total Amount (₹) *</label>
-              <input class="form-input" id="ef-amount" type="number" placeholder="Enter total amount">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Advance Amount (₹)</label>
-              <input class="form-input" id="ef-advance" type="number" placeholder="Enter advance paid">
-            </div>
+          <div class="form-group">
+            <label class="form-label">Advance Amount (₹)</label>
+            <input class="form-input" id="ef-advance" type="number" value="${isEdit && event ? (event.advance || '') : ''}" placeholder="Enter advance paid" oninput="window.updateEventTotalDisplay()">
           </div>
+          <input type="hidden" id="ef-amount" value="${baseFee}">
+ 
+          <div id="ef-payment-breakdown" style="margin-top:14px; display:none;"></div>
+
+          <span id="ef-grand-total-amount" style="display:none"></span>
+          <span id="ef-pending-amount" style="display:none"></span>
         </div>
         <div class="form-panel-footer">
           <button class="btn btn-outline" onclick="window.closeFormOverlay()"><i class="ti ti-x"></i> Cancel</button>
-          <button class="btn btn-gold" onclick="window.submitEventCustomerForm()" id="ef-submit-btn"><i class="ti ti-check"></i> Save Event</button>
+          <div style="display:flex; gap:8px;">
+            ${isEdit ? `<button class="btn" onclick="window.promptEventWhatsAppBillFromId('${eventId}')" style="background:#25d366; color:#fff; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600;" title="Send Invoice via WhatsApp"><i class="ti ti-brand-whatsapp" style="font-size:16px"></i> Send Invoice</button>` : ''}
+            <button class="btn btn-gold" onclick="window.submitEventCustomerForm(${isEdit ? `'${eventId}'` : ''})" id="ef-submit-btn"><i class="ti ti-check"></i> ${isEdit ? 'Update Booking' : 'Save Event'}</button>
+          </div>
         </div>
       </div>
     </div>`;
-}
 
-export async function submitEventCustomerForm() {
+  setTimeout(() => {
+    if (isEdit && event) {
+      if (event.type) {
+        const funcChips = document.querySelectorAll('#ef-function-chips .chip');
+        const match = Array.from(funcChips).find(c => c.textContent.trim().toLowerCase() === event.type.toLowerCase());
+        if (match) {
+          match.classList.add('selected');
+        } else {
+          const otherChip = Array.from(funcChips).find(c => c.textContent.trim() === 'Others');
+          if (otherChip) {
+            otherChip.classList.add('selected');
+            const otherDiv = document.getElementById('ef-function-other')?.closest('.chip-other-input');
+            if (otherDiv) otherDiv.classList.add('show');
+            const otherInput = document.getElementById('ef-function-other');
+            if (otherInput) otherInput.value = event.type;
+          }
+        }
+      }
+      if (event.makeup_type) {
+        const makeupChips = document.querySelectorAll('#ef-makeup-chips .chip');
+        const match = Array.from(makeupChips).find(c => c.textContent.trim().toLowerCase() === event.makeup_type.toLowerCase());
+        if (match) {
+          window.makeupTypeChipToggle(match, 5000);
+        } else {
+          const otherChip = Array.from(makeupChips).find(c => c.textContent.trim() === 'Others');
+          if (otherChip) {
+            otherChip.classList.add('selected');
+            const otherDiv = document.getElementById('ef-makeup-other')?.closest('.chip-other-input');
+            if (otherDiv) otherDiv.classList.add('show');
+            const otherInput = document.getElementById('ef-makeup-other');
+            if (otherInput) otherInput.value = event.makeup_type;
+          }
+        }
+      }
+      if (event.additional_makeup) {
+        try {
+          const arr = typeof event.additional_makeup === 'string' ? JSON.parse(event.additional_makeup) : event.additional_makeup;
+          if (Array.isArray(arr)) {
+            arr.forEach(addon => {
+              const isGroom = addon.name.startsWith('Groom:');
+              const category = isGroom ? 'groom' : 'bridesmaid';
+              const cleanName = addon.name.replace(/^(Groom:|Bridesmaid:)\s*/, '');
+              const chipContainerId = isGroom ? 'ef-groom-chips' : 'ef-bridesmaid-chips';
+              const chips = document.querySelectorAll(`#${chipContainerId} .chip`);
+              const match = Array.from(chips).find(c => c.textContent.trim().toLowerCase() === cleanName.toLowerCase());
+              if (match) {
+                window.eventAddonChipToggle(match, category, addon.amount);
+              }
+            });
+          }
+        } catch(e) {}
+      }
+      // Pre-fill transport chip if travel_allowance exists
+      if (event.travel_allowance > 0) {
+        const transportChips = document.querySelectorAll('#ef-misc-chips .chip');
+        const transportMatch = Array.from(transportChips).find(c => c.textContent.trim().toLowerCase() === 'transport');
+        if (transportMatch) {
+          window.eventMiscChipToggle(transportMatch, 'transport', event.travel_allowance);
+        }
+      }
+    }
+    window._initializingForm = false;
+    if (typeof window.updateEventTotalDisplay === 'function') window.updateEventTotalDisplay();
+  }, 100);
+}
+ 
+export async function submitEventCustomerForm(eventId = null) {
+  const isEdit = !!eventId;
   const name = document.getElementById('ef-name').value.trim();
   if (!name) { showToast('Please enter customer name', 'error'); return; }
-
+ 
   const phoneInput = document.getElementById('ef-phone').value.trim();
-  let phoneVal = '';
-  if (phoneInput) {
-    const cleaned = validateAndCleanPhone(phoneInput);
-    if (cleaned === null) { showToast('Please enter a valid 10-digit phone number', 'error'); return; }
-    phoneVal = cleaned;
-  }
-
+  if (!phoneInput) { showToast('Please enter customer phone number', 'error'); return; }
+  const phoneVal = validateAndCleanPhone(phoneInput);
+  if (phoneVal === null) { showToast('Please enter a valid 10-digit phone number', 'error'); return; }
+ 
+  const date = document.getElementById('ef-date').value;
+  if (!date) { showToast('Please select a date', 'error'); return; }
+ 
   const functionType = getSelectedChips('ef-function-chips');
+  if (!functionType) { showToast('Please select a function type', 'error'); return; }
+ 
   const makeupType = getSelectedChips('ef-makeup-chips');
+  if (!makeupType) { showToast('Please select a makeup type', 'error'); return; }
+ 
   const total = parseInt(document.getElementById('ef-amount').value) || 0;
-  if (!total) { showToast('Please enter the total amount', 'error'); return; }
+  if (!total) { showToast('Please enter the base event amount', 'error'); return; }
   const advance = parseInt(document.getElementById('ef-advance').value) || 0;
-
+ 
   const location = document.getElementById('ef-location').value.trim();
-  const date = document.getElementById('ef-date').value || new Date().toISOString().split('T')[0];
-
+ 
   const isReferred = document.getElementById('ef-referred')?.checked;
   const referredBy = isReferred ? document.getElementById('ef-referrer')?.value.trim() : '';
-
-  const btn = document.getElementById('ef-submit-btn');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="dot-anim"><span></span><span></span><span></span></div> Saving...'; }
-
-  const result = await addEvent({
-    customer: name,
-    phone: phoneVal,
-    type: functionType || 'Event',
-    date,
-    total: total,
-    advance: advance,
-    pending: total - advance,
-    status: advance >= total ? 'Completed' : 'Booked',
-    location: location,
-    makeup_type: makeupType,
-    additional_makeup: '[]',
-    travel_allowance: 0,
-    rating: 5,
-    referred_by: referredBy || null
+ 
+  // Parse event add-on amounts
+  const addonRows = document.querySelectorAll('#ef-makeup-amounts .service-amount-row, #ef-groom-amounts .service-amount-row, #ef-bridesmaid-amounts .service-amount-row');
+  const addons = [];
+  let addonTotal = 0;
+  addonRows.forEach(r => {
+    if (r.dataset.category !== 'makeup') {
+      const nameInput = r.querySelector('.sa-name-input');
+      let nameLabel = nameInput ? nameInput.value.trim() : r.dataset.label;
+      const prefix = r.dataset.category === 'groom' ? 'Groom: ' : 'Bridesmaid: ';
+      if (nameLabel && !nameLabel.startsWith('Groom:') && !nameLabel.startsWith('Bridesmaid:')) {
+        nameLabel = prefix + nameLabel;
+      }
+      const amt = parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+      if (nameLabel) {
+        addons.push({ name: nameLabel, amount: amt });
+        addonTotal += amt;
+      }
+    }
   });
 
+  // Parse misc amounts (transport etc)
+  const miscRows = document.querySelectorAll('#ef-misc-amounts .service-amount-row');
+  let travelAllowance = 0;
+  miscRows.forEach(r => {
+    travelAllowance += parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+  });
+  const grandTotal = total + addonTotal + travelAllowance;
+  const btn = document.getElementById('ef-submit-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="dot-anim"><span></span><span></span><span></span></div> Saving...'; }
+ 
+  const result = isEdit
+    ? await updateEvent(eventId, {
+        customer: name,
+        phone: phoneVal,
+        type: functionType || 'Event',
+        date,
+        total: grandTotal,
+        advance: advance,
+        pending: grandTotal - advance,
+        status: advance >= grandTotal ? 'Completed' : 'Booked',
+        location: location,
+        makeup_type: makeupType,
+        additional_makeup: JSON.stringify(addons),
+        travel_allowance: travelAllowance,
+        referred_by: referredBy || null
+      })
+    : await addEvent({
+        customer: name,
+        phone: phoneVal,
+        type: functionType || 'Event',
+        date,
+        total: grandTotal,
+        advance: advance,
+        pending: grandTotal - advance,
+        status: advance >= grandTotal ? 'Completed' : 'Booked',
+        location: location,
+        makeup_type: makeupType,
+        additional_makeup: JSON.stringify(addons),
+        travel_allowance: travelAllowance,
+        rating: 5,
+        referred_by: referredBy || null,
+        created_at: new Date().toISOString()
+      });
+ 
   if (result) {
     closeFormOverlay();
-    let summary = `Function: ${functionType || 'N/A'} · Makeup: ${makeupType || 'N/A'} · Total: ₹${total.toLocaleString()} · Advance: ₹${advance.toLocaleString()}`;
-    state.chatMessages.push({role:'ai', text: `✅ <strong>${name}</strong> event saved! 🎉<br><span style="font-size:11px;color:#888">${summary}</span>`});
+    let summary = `Function: ${functionType || 'N/A'} · Makeup: ${makeupType || 'N/A'} · Total: ₹${grandTotal.toLocaleString()} · Advance: ₹${advance.toLocaleString()}`;
+    if (travelAllowance > 0) {
+      summary += ` · Transport: ₹${travelAllowance.toLocaleString()}`;
+    }
+    if (addons.length > 0) {
+      summary += `<br><span style="font-size:11px;color:#7c3aed;"><strong>Add-ons:</strong> ${addons.map(a => `${a.name} (₹${a.amount.toLocaleString()})`).join(', ')}</span>`;
+    }
+    state.chatMessages.push({
+      role: 'ai',
+      text: `✅ <strong>${name}</strong> event ${isEdit ? 'updated' : 'saved'}! 🎉<br><span style="font-size:11px;color:#888">${summary}</span>`
+    });
     if (typeof window.render === 'function') window.render();
+    
+    // Automatically open WhatsApp invoice sender modal
+    setTimeout(() => {
+      promptEventWhatsAppBill(result);
+    }, 150);
   } else {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Save Event'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = isEdit ? '<i class="ti-check"></i> Update Booking' : '<i class="ti ti-check"></i> Save Event'; }
   }
+}
+
+export function eventAddonChipToggle(chipEl, category, defaultAmount) {
+  const name = chipEl.textContent.trim();
+  chipEl.classList.toggle('selected');
+  
+  const containerId = category === 'groom' ? 'ef-groom-amounts' : 'ef-bridesmaid-amounts';
+  const amountList = document.getElementById(containerId);
+  if (!amountList) return;
+
+  const rowId = 'ef-addon-row-' + category + '-' + name.replace(/\s+/g, '-').toLowerCase();
+
+  if (chipEl.classList.contains('selected')) {
+    if (!document.getElementById(rowId)) {
+      const row = document.createElement('div');
+      row.className = 'service-amount-row';
+      row.id = rowId;
+      row.dataset.name = name;
+      row.dataset.category = category;
+      row.dataset.label = (category === 'groom' ? 'Groom' : 'Bridesmaid') + ': ' + name;
+      
+      row.innerHTML = `
+        <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
+        <span style="font-size:12px;color:#888">₹</span>
+        <input type="number" class="ef-addon-amount-input" value="${defaultAmount}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+        <div class="sa-remove" onclick="window.removeEventAddonRow('${rowId}', '${category}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+      amountList.appendChild(row);
+    }
+  } else {
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+  }
+  updateEventTotalDisplay();
+}
+
+export function removeEventAddonRow(rowId, category, name) {
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
+  
+  const chipContainerId = category === 'groom' ? 'ef-groom-chips' : 'ef-bridesmaid-chips';
+  const chips = document.querySelectorAll(`#${chipContainerId} .chip`);
+  chips.forEach(c => { if (c.textContent.trim() === name) c.classList.remove('selected'); });
+  
+  updateEventTotalDisplay();
+}
+
+export function updateEventTotalDisplay() {
+  const baseAmount = parseInt(document.getElementById('ef-amount')?.value) || 0;
+  
+  // Sync to makeup row input if it exists
+  const makeupRowInput = document.querySelector('#ef-makeup-amounts .service-amount-row[data-category="makeup"] .ef-makeup-amount-input');
+  if (makeupRowInput && parseInt(makeupRowInput.value) !== baseAmount) {
+    makeupRowInput.value = baseAmount;
+  }
+
+  const addonRows = document.querySelectorAll('#ef-makeup-amounts .service-amount-row, #ef-groom-amounts .service-amount-row, #ef-bridesmaid-amounts .service-amount-row');
+  
+  let addonTotal = 0;
+  addonRows.forEach(r => {
+    if (r.dataset.category !== 'makeup') {
+      addonTotal += parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+    }
+  });
+
+  // Sum misc amounts (transport etc)
+  const miscRows = document.querySelectorAll('#ef-misc-amounts .service-amount-row');
+  let miscTotal = 0;
+  miscRows.forEach(r => {
+    miscTotal += parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+  });
+
+  const grandTotal = baseAmount + addonTotal + miscTotal;
+  const advance = parseInt(document.getElementById('ef-advance')?.value) || 0;
+  const pending = grandTotal - advance;
+
+  const totalEl = document.getElementById('ef-grand-total-amount');
+  if (totalEl) totalEl.textContent = '₹' + grandTotal.toLocaleString();
+  
+  const pendingEl = document.getElementById('ef-pending-amount');
+  if (pendingEl) {
+    pendingEl.textContent = '₹' + pending.toLocaleString();
+    pendingEl.style.color = pending > 0 ? '#dc2626' : '#15803d';
+  }
+  
+  const bar = document.getElementById('ef-grand-total-bar');
+  if (bar) bar.style.display = 'flex';
+
+  // Render live payment breakdown summary
+  const breakdownEl = document.getElementById('ef-payment-breakdown');
+  if (breakdownEl) {
+    if (baseAmount > 0 || addonTotal > 0 || miscTotal > 0) {
+      const selectedMakeupChip = document.querySelector('#ef-makeup-chips .chip.selected');
+      const selectedMakeupName = selectedMakeupChip ? selectedMakeupChip.textContent.trim() : '';
+      
+      let breakdownHtml = `
+        <div style="background:#fffdf5; border:1px solid #fde68a; border-radius:10px; padding:14px; font-size:12px; color:#555; font-family:'DM Sans', sans-serif;">
+          <div style="font-weight:600; color:#b45309; margin-bottom:8px; border-bottom:1px solid #fde68a; padding-bottom:6px; font-size:13px; display:flex; align-items:center; gap:6px;">
+            <i class="ti ti-receipt" style="font-size:15px"></i> Billing Invoice Summary
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+      `;
+      
+      // 1. Base makeup
+      if (selectedMakeupName && selectedMakeupName !== 'Others' && baseAmount > 0) {
+        breakdownHtml += `
+          <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <span>✨ Bride ${selectedMakeupName}</span>
+            <span style="font-weight:600; color:#1a1a1a;">₹${baseAmount.toLocaleString()}</span>
+          </div>
+        `;
+      } else if (baseAmount > 0) {
+        breakdownHtml += `
+          <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <span>✨ Base Event Fee</span>
+            <span style="font-weight:600; color:#1a1a1a;">₹${baseAmount.toLocaleString()}</span>
+          </div>
+        `;
+      }
+
+      // 2. Add-ons
+      const addedAddons = [];
+      addonRows.forEach(r => {
+        if (r.dataset.category !== 'makeup') {
+          const nameInput = r.querySelector('.sa-name-input');
+          const nameLabel = nameInput ? nameInput.value.trim() : r.dataset.label;
+          const amt = parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+          if (nameLabel && amt > 0) {
+            addedAddons.push({ name: nameLabel, amount: amt });
+          }
+        }
+      });
+
+      if (addedAddons.length > 0) {
+        breakdownHtml += `
+          <div style="font-weight:600; color:#888; font-size:10px; text-transform:uppercase; margin-top:4px; letter-spacing:0.04em;">Add-ons</div>
+        `;
+        addedAddons.forEach(a => {
+          breakdownHtml += `
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%; padding-left:6px;">
+              <span>• ${a.name}</span>
+              <span style="font-weight:600; color:#1a1a1a;">₹${a.amount.toLocaleString()}</span>
+            </div>
+          `;
+        });
+      }
+
+      // 3. Miscellaneous (Transport etc)
+      const addedMisc = [];
+      miscRows.forEach(r => {
+        const nameInput = r.querySelector('.sa-name-input');
+        const nameLabel = nameInput ? nameInput.value.trim() : r.dataset.label;
+        const amt = parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+        if (nameLabel && amt > 0) {
+          addedMisc.push({ name: nameLabel, amount: amt });
+        }
+      });
+
+      if (addedMisc.length > 0) {
+        breakdownHtml += `
+          <div style="font-weight:600; color:#888; font-size:10px; text-transform:uppercase; margin-top:4px; letter-spacing:0.04em;">Miscellaneous</div>
+        `;
+        addedMisc.forEach(a => {
+          breakdownHtml += `
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%; padding-left:6px;">
+              <span>🚗 ${a.name}</span>
+              <span style="font-weight:600; color:#1a1a1a;">₹${a.amount.toLocaleString()}</span>
+            </div>
+          `;
+        });
+      }
+
+      // 4. Totals and pending
+      breakdownHtml += `
+            <div style="border-top:1px solid #fde68a; margin-top:8px; padding-top:8px; display:flex; flex-direction:column; gap:4px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; width:100%; font-weight:600; color:#d97706; font-size:13px;">
+                <span>Total Amount</span>
+                <span>₹${grandTotal.toLocaleString()}</span>
+              </div>
+      `;
+
+      if (advance > 0) {
+        breakdownHtml += `
+              <div style="display:flex; justify-content:space-between; align-items:center; width:100%; color:#15803d; font-weight:500;">
+                <span>Advance Paid</span>
+                <span>- ₹${advance.toLocaleString()}</span>
+              </div>
+        `;
+      }
+
+      breakdownHtml += `
+              <div style="display:flex; justify-content:space-between; align-items:center; width:100%; font-weight:600; color:${pending > 0 ? '#dc2626' : '#15803d'};">
+                <span>Pending Amount</span>
+                <span>₹${pending.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      breakdownEl.innerHTML = breakdownHtml;
+      breakdownEl.style.display = 'block';
+    } else {
+      breakdownEl.innerHTML = '';
+      breakdownEl.style.display = 'none';
+    }
+  }
+}
+
+export function makeupTypeChipToggle(chipEl, defaultAmount) {
+  const name = chipEl.textContent.trim();
+  
+  // Call standard chipToggle to handle selection visuals and Others input toggle
+  window.chipToggle('makeup', chipEl, true);
+  
+  const amountList = document.getElementById('ef-makeup-amounts');
+  if (!amountList) return;
+
+  // Remove any existing makeup row
+  const existingRows = amountList.querySelectorAll('.service-amount-row[data-category="makeup"]');
+  existingRows.forEach(r => r.remove());
+
+  if (chipEl.classList.contains('selected') && name !== 'Others') {
+    const baseInput = document.getElementById('ef-amount');
+    let currentVal = parseInt(baseInput?.value) || 0;
+    if (!window._initializingForm || currentVal === 0) {
+      currentVal = defaultAmount;
+      if (baseInput) baseInput.value = defaultAmount;
+    }
+
+    const rowId = 'ef-addon-row-makeup-' + name.replace(/\s+/g, '-').toLowerCase();
+    const row = document.createElement('div');
+    row.className = 'service-amount-row';
+    row.id = rowId;
+    row.dataset.name = name;
+    row.dataset.category = 'makeup';
+    row.dataset.label = name;
+    
+    row.innerHTML = `
+      <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
+      <span style="font-size:12px;color:#888">₹</span>
+      <input type="number" class="ef-makeup-amount-input" value="${currentVal}" oninput="window.syncBaseAmountFromRow(this)" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+      <div class="sa-remove" onclick="window.removeMakeupRow('${rowId}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+    amountList.appendChild(row);
+  }
+  updateEventTotalDisplay();
+}
+
+export function syncBaseAmountFromRow(inputEl) {
+  const baseInput = document.getElementById('ef-amount');
+  if (baseInput) {
+    baseInput.value = inputEl.value;
+  }
+  updateEventTotalDisplay();
+}
+
+export function removeMakeupRow(rowId, name) {
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
+  
+  const chips = document.querySelectorAll('#ef-makeup-chips .chip');
+  chips.forEach(c => { if (c.textContent.trim() === name) c.classList.remove('selected'); });
+  
+  const baseInput = document.getElementById('ef-amount');
+  if (baseInput) baseInput.value = '';
+  
+  updateEventTotalDisplay();
 }
 
 // Bind to window to allow HTML inline click handlers to execute
@@ -596,3 +1094,150 @@ window.toggleEventSearchField = toggleEventSearchField;
 window.applyEventFilters = applyEventFilters;
 window.renderEventMetrics = renderEventMetrics;
 window.renderEventList = renderEventList;
+window.eventAddonChipToggle = eventAddonChipToggle;
+window.removeEventAddonRow = removeEventAddonRow;
+window.updateEventTotalDisplay = updateEventTotalDisplay;
+window.makeupTypeChipToggle = makeupTypeChipToggle;
+window.syncBaseAmountFromRow = syncBaseAmountFromRow;
+window.removeMakeupRow = removeMakeupRow;
+window.promptEventWhatsAppBill = promptEventWhatsAppBill;
+window.promptEventWhatsAppBillFromId = promptEventWhatsAppBillFromId;
+window.eventMiscChipToggle = eventMiscChipToggle;
+window.removeMiscRow = removeMiscRow;
+
+export function eventMiscChipToggle(chipEl, type, defaultAmount) {
+  const name = chipEl.textContent.trim();
+  chipEl.classList.toggle('selected');
+
+  const rowId = 'ef-misc-row-' + type;
+  const amountList = document.getElementById('ef-misc-amounts');
+  if (!amountList) return;
+
+  if (chipEl.classList.contains('selected')) {
+    if (!document.getElementById(rowId)) {
+      const row = document.createElement('div');
+      row.className = 'service-amount-row';
+      row.id = rowId;
+      row.dataset.name = name;
+      row.dataset.category = 'misc';
+      row.dataset.label = name;
+
+      row.innerHTML = `
+        <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
+        <span style="font-size:12px;color:#888">₹</span>
+        <input type="number" class="ef-addon-amount-input" value="${defaultAmount}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+        <div class="sa-remove" onclick="window.removeMiscRow('${rowId}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+      amountList.appendChild(row);
+    }
+  } else {
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+  }
+  updateEventTotalDisplay();
+}
+
+export function removeMiscRow(rowId, name) {
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
+
+  const chips = document.querySelectorAll('#ef-misc-chips .chip');
+  chips.forEach(c => { if (c.textContent.trim() === name) c.classList.remove('selected'); });
+
+  updateEventTotalDisplay();
+}
+
+export function promptEventWhatsAppBill(event) {
+  const customerName = event.customer;
+  const phone = event.phone;
+  const cleanedPhone = validateAndCleanPhone(phone);
+  if (!cleanedPhone) {
+    showToast('Invalid phone number for sending bill.', 'error');
+    return;
+  }
+
+  let addons = [];
+  try {
+    addons = typeof event.additional_makeup === 'string' ? JSON.parse(event.additional_makeup) : event.additional_makeup;
+  } catch(e) {}
+  if (!Array.isArray(addons)) addons = [];
+
+  let addonTotal = 0;
+  addons.forEach(a => addonTotal += a.amount || 0);
+  const baseMakeupFee = event.total - addonTotal - (event.travel_allowance || 0);
+
+  let itemsText = ``;
+  if (event.makeup_type && event.makeup_type !== 'Others') {
+    itemsText += `• ${event.makeup_type}: ₹${baseMakeupFee.toLocaleString()}\n`;
+  }
+  
+  addons.forEach(a => {
+    itemsText += `• ${a.name}: ₹${a.amount.toLocaleString()}\n`;
+  });
+
+  if (event.travel_allowance > 0) {
+    itemsText += `• Transportation: ₹${event.travel_allowance.toLocaleString()}\n`;
+  }
+
+  const defaultMessage = `✨ KALAI MAKEOVER — EVENT BOOKING INVOICE ✨
+
+Hello ${customerName},
+
+Thanks for booking Kalai Makeover! We will give our best service on your special occasion. 🎉
+
+Event details:
+• Function: ${event.type}
+• Event Date: ${event.date ? new Date(event.date).toLocaleDateString('en-IN') : 'N/A'}
+
+Cost breakdown:
+${itemsText}
+----------------------------------
+💰 Total Amount: ₹${(event.total || 0).toLocaleString()}
+💳 Advance Paid: ₹${(event.advance || 0).toLocaleString()}
+⚠️ Pending Balance: ₹${(event.pending || 0).toLocaleString()}
+
+We look forward to making your day extra special!
+
+Thank you,
+Kalai Makeover
+📞 8870236006`;
+
+  showModal('Send Booking Invoice via WhatsApp', `
+    <div style="font-size:13px;color:#555;margin-bottom:14px">
+      Review and customize the invoice message for <strong>${customerName}</strong> (${phone}):
+    </div>
+    <div class="form-group">
+      <label class="form-label">WhatsApp Message Preview</label>
+      <textarea class="form-input" id="wa-event-message" style="height:250px;font-family:monospace;white-space:pre-wrap;resize:vertical;line-height:1.4;">${defaultMessage}</textarea>
+    </div>
+  `, () => {
+    const editedMessage = document.getElementById('wa-event-message').value.trim();
+    if (!editedMessage) {
+      showToast('Message text cannot be empty.', 'error');
+      return;
+    }
+    const fullPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone;
+    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(editedMessage)}`;
+    window.open(url, '_blank');
+    closeModal();
+    showToast('WhatsApp opened in a new tab!');
+  });
+
+  setTimeout(() => {
+    const saveBtn = document.getElementById('modal-save-btn');
+    if (saveBtn) {
+      saveBtn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Send Invoice';
+      saveBtn.style.background = '#25d366';
+      saveBtn.style.borderColor = '#25d366';
+      saveBtn.style.color = '#fff';
+    }
+  }, 50);
+}
+
+export function promptEventWhatsAppBillFromId(eventId) {
+  const event = (window._cachedEvents || []).find(e => e.id === eventId);
+  if (!event) {
+    showToast('Event not found.', 'error');
+    return;
+  }
+  promptEventWhatsAppBill(event);
+}

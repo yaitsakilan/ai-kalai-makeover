@@ -157,7 +157,7 @@ const server = http.createServer((req, res) => {
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
         const headers = { 'Content-Type': contentType };
-        if (ext === '.html') {
+        if (ext === '.html' || ext === '.js' || ext === '.css') {
             headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
             headers['Pragma'] = 'no-cache';
             headers['Expires'] = '0';

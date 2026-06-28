@@ -87,6 +87,17 @@ export function chipToggle(groupName, chipEl, isSingle) {
       if (otherInput) otherInput.classList.remove('show');
     }
   }
+
+  // Handle Event Booking Form default base amount on makeup selection
+  if (groupName === 'makeup' && chipEl.classList.contains('selected')) {
+    const baseInput = document.getElementById('ef-amount');
+    if (baseInput && (!baseInput.value || parseInt(baseInput.value) === 0)) {
+      baseInput.value = 5000;
+      if (typeof window.updateEventTotalDisplay === 'function') {
+        window.updateEventTotalDisplay();
+      }
+    }
+  }
 }
 
 // Bind to window to allow HTML inline handlers to function

@@ -920,10 +920,10 @@ export function openClassesForm() {
     <div class="form-overlay" onclick="window.closeFormOverlay()">
       <div class="form-panel" onclick="event.stopPropagation()">
         <div class="form-panel-header">
-          <h3><i class="ti ti-school" style="color:#0d9488"></i> Class Enrollment Form</h3>
+          <h3><i class="ti ti-school" style="color:#d97706"></i> Class Enrollment Form</h3>
           <div style="display:flex; align-items:center; gap:8px;">
             <button class="btn btn-outline btn-icon" id="form-mic-btn" onclick="window.startVoiceRecording('class')" title="Fill form with voice" style="width:34px; height:34px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; border-color:#e5e5e5; transition: all 0.2s ease;">
-              <i class="ti ti-microphone" style="font-size:16px; color:#0d9488;"></i>
+              <i class="ti ti-microphone" style="font-size:16px; color:#d97706;"></i>
             </button>
             <div onclick="window.closeFormOverlay()" style="cursor:pointer;color:#999;font-size:22px;padding:4px;display:flex;align-items:center;"><i class="ti ti-x"></i></div>
           </div>
@@ -957,6 +957,18 @@ export function openClassesForm() {
               <input class="form-input" id="cf-amount" type="number" placeholder="Enter class fee amount">
             </div>
           </div>
+          
+          <div class="form-section-title">
+            <i class="ti ti-book-open" style="color:#d97706"></i> Select Classes Taken *
+          </div>
+          <div class="form-group">
+            <div class="chip-group" id="cf-class-chips">
+              <div class="chip selected" onclick="window.chipToggle('classes', this, false)">Saree Prepleating</div>
+              <div class="chip" onclick="window.chipToggle('classes', this, false)">Beauty Course</div>
+              <div class="chip" onclick="window.chipToggle('classes', this, false)">Bridal Makeup</div>
+            </div>
+          </div>
+
           <div style="display:grid;grid-template-columns:1.2fr 1.5fr;gap:12px;margin-bottom:14px;align-items:center;">
             <div class="form-group" style="margin-bottom:0;display:flex;align-items:center;gap:6px;">
               <input type="checkbox" id="cf-referred" onchange="document.getElementById('cf-referrer-div').style.display = this.checked ? 'block' : 'none'" style="width:16px;height:16px;cursor:pointer;">
@@ -972,7 +984,7 @@ export function openClassesForm() {
         </div>
         <div class="form-panel-footer">
           <button class="btn btn-outline" onclick="window.closeFormOverlay()"><i class="ti ti-x"></i> Cancel</button>
-          <button class="btn btn-gold" onclick="window.submitClassesForm()" id="cf-submit-btn" style="background:#0d9488; color:white; border-color:#0d9488;"><i class="ti ti-check"></i> Save Student</button>
+          <button class="btn btn-gold" onclick="window.submitClassesForm()" id="cf-submit-btn"><i class="ti ti-check"></i> Save Student</button>
         </div>
       </div>
     </div>`;
@@ -990,6 +1002,16 @@ export async function submitClassesForm() {
   const amount = parseInt(document.getElementById('cf-amount').value) || 0;
   if (amount <= 0) { showToast('Please enter the class fee amount', 'error'); return; }
 
+  const selectedClasses = [];
+  document.querySelectorAll('#cf-class-chips .chip.selected').forEach(c => {
+    selectedClasses.push(c.textContent.trim());
+  });
+
+  if (selectedClasses.length === 0) {
+    showToast('Please select at least one class', 'error');
+    return;
+  }
+
   const location = document.getElementById('cf-location').value.trim();
   const date = document.getElementById('cf-date').value || new Date().toISOString().split('T')[0];
 
@@ -1003,7 +1025,7 @@ export async function submitClassesForm() {
     name,
     phone: phoneVal,
     location,
-    services: ['Classes'],
+    services: selectedClasses.map(c => `Class: ${c}`),
     amount: amount,
     payment_status: 'paid',
     payment_method: 'Cash',
@@ -1016,11 +1038,11 @@ export async function submitClassesForm() {
 
   if (result) {
     closeFormOverlay();
-    state.chatMessages.push({ role: 'ai', text: `✅ Student <strong>${name}</strong> enrolled in Classes! 🎉<br><span style="font-size:11px;color:#888">Fee: ₹${amount.toLocaleString()} · Location: ${location || 'N/A'}</span>` });
+    state.chatMessages.push({ role: 'ai', text: `✅ Student <strong>${name}</strong> enrolled in Classes! 🎉<br><span style="font-size:11px;color:#888">Classes: ${selectedClasses.join(', ')} · Fee: ₹${amount.toLocaleString()} · Location: ${location || 'N/A'}</span>` });
     if (typeof window.render === 'function') window.render();
 
     setTimeout(() => {
-      promptWhatsAppBill(name, phoneVal, ['Classes'], amount, date, 'paid');
+      promptWhatsAppBill(name, phoneVal, selectedClasses.map(c => `Class: ${c}`), amount, date, 'paid');
     }, 400);
   } else {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Save Student'; }

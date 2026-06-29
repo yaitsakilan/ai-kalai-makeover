@@ -362,9 +362,15 @@ export function openProductExpenseForm() {
         <div class="form-panel-body" style="max-height:65vh; overflow-y:auto;">
           <div id="form-voice-container"></div>
           
-          <div class="form-group">
-            <label class="form-label">Expense Date</label>
-            <input class="form-input" id="pe-date" type="date" value="${today}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Expense Date</label>
+              <input class="form-input" id="pe-date" type="date" value="${today}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Shop Name</label>
+              <input class="form-input" id="pe-shop" type="text" placeholder="e.g. Cosmo Store">
+            </div>
           </div>
 
           <div class="form-section-title" style="color:#6d28d9">
@@ -373,7 +379,7 @@ export function openProductExpenseForm() {
           </div>
           <div class="form-group">
             <div class="chip-group" id="pe-product-chips">
-              ${['Thread', 'Facial Kit Cream', 'Hair Color Cream', 'Hair Color Powder', 'Spa Cream', 'Pedicure Cream', 'Wax Cream', 'Smoothening Cream', 'Others'].map(s =>
+              ${['Hair Color Gell', 'Hair Color Power', 'Hand Glouse', 'Spa Cream', 'Razer', 'Tissues', 'Facial Kit', 'Wiper', 'Rose Water', 'Smoothing Cream', 'Others'].map(s =>
                 `<div class="chip" onclick="window.productExpenseChipToggle(this, 'product')">${s}</div>`
               ).join('')}
             </div>
@@ -392,7 +398,7 @@ export function openProductExpenseForm() {
           </div>
           <div class="form-group">
             <div class="chip-group" id="pe-makeup-chips">
-              ${['Extension', 'Lashes', 'Hair Spray', 'Hair Pin', 'Safety Pin', 'Serum', 'Others'].map(s =>
+              ${['Wet Wiper', 'Flashes', 'Hair Extension', 'Holding Spray', 'Shine Spray', 'Hair Pin', 'Safty Pin', 'Fixing Spray', 'Moves', 'Flowers', 'Kajal', 'Others'].map(s =>
                 `<div class="chip" onclick="window.productExpenseChipToggle(this, 'makeup')">${s}</div>`
               ).join('')}
             </div>
@@ -530,6 +536,7 @@ export async function submitProductExpenseForm() {
   const makeupRows = document.querySelectorAll('#pe-makeup-amounts .service-amount-row');
   
   const date = document.getElementById('pe-date').value || new Date().toISOString().split('T')[0];
+  const shopName = document.getElementById('pe-shop')?.value.trim() || '';
   const items = [];
 
   productRows.forEach(r => {
@@ -537,7 +544,8 @@ export async function submitProductExpenseForm() {
     const name = nameInput ? nameInput.value.trim() : r.dataset.name;
     const amount = parseInt(r.querySelector('input')?.value) || 0;
     if (amount > 0) {
-      items.push({ category: 'Products', amount, date, note: `Products: ${name}` });
+      const note = shopName ? `Products: ${name} (${shopName})` : `Products: ${name}`;
+      items.push({ category: 'Products', amount, date, note });
     }
   });
 
@@ -546,7 +554,8 @@ export async function submitProductExpenseForm() {
     const name = nameInput ? nameInput.value.trim() : r.dataset.name;
     const amount = parseInt(r.querySelector('input')?.value) || 0;
     if (amount > 0) {
-      items.push({ category: 'Products', amount, date, note: `Makeup: ${name}` });
+      const note = shopName ? `Makeup: ${name} (${shopName})` : `Makeup: ${name}`;
+      items.push({ category: 'Products', amount, date, note });
     }
   });
 

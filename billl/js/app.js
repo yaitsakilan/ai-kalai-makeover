@@ -6,9 +6,9 @@ import { renderAIChat, scrollChatBottom } from './pages/aichat.js';
 import { renderCustomers } from './pages/customers.js';
 import { renderEvents } from './pages/events.js';
 import { renderExpenses } from './pages/expenses.js';
-
 import { renderAnalytics, initAnalyticsCharts } from './pages/analytics.js';
 import { renderOCR } from './pages/ocr.js';
+import { renderEmployeePage, renderRoleSelector, applyRoleLayout, enterRole, openSwitchModal } from './pages/employee.js';
 
 export function toggleSidebar() {
   const app = document.getElementById('app');
@@ -35,6 +35,7 @@ export function toggleSidebar() {
 }
 
 export function toggleMobileSidebar() {
+  if (state.userRole === 'employee') return; // sidebar hidden in employee mode
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('sidebar-overlay').classList.toggle('open');
   const btn = document.getElementById('mobile-menu-btn').querySelector('i');
@@ -42,6 +43,15 @@ export function toggleMobileSidebar() {
 }
 
 export function showPage(page) {
+  // Block owner-only pages in employee mode
+  const employeeAllowed = ['employee'];
+  if (state.userRole === 'employee' && !employeeAllowed.includes(page)) {
+    if (typeof window.showToast === 'function') {
+      window.showToast('Access restricted to owner only', 'error');
+    }
+    return;
+  }
+
   state.currentPage = page;
   if (page === 'customers') {
     window._selectedMonth = 'all';
@@ -74,6 +84,13 @@ export function loadingHtml() {
 
 export async function render() {
   const main = document.getElementById('main-content');
+
+  // Employee mode: always show employee page
+  if (state.userRole === 'employee') {
+    main.innerHTML = renderEmployeePage();
+    return;
+  }
+
   const client = initDb();
   if(!client) {
     main.innerHTML = '<div class="loading-page"><div style="color:#dc2626;font-size:16px;font-weight:600">⚠️ Database not connected</div><div style="color:#888;font-size:13px;margin-top:8px">The Database library failed to load. Check your internet connection and reload.</div></div>';
@@ -111,7 +128,6 @@ export async function render() {
         main.innerHTML = loadingHtml();
         main.innerHTML = await renderOCR();
         break;
-
     }
   } catch(err) {
     console.error('Render error:', err);
@@ -125,6 +141,11 @@ window.toggleMobileSidebar = toggleMobileSidebar;
 window.showPage = showPage;
 window.render = render;
 
+// Sidebar "Switch to Employee" button
+window.openSwitchRoleModal = function() {
+  openSwitchModal('employee');
+};
+
 // Bootstrap application on load
 document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem('sidebar-collapsed') === 'true') {
@@ -133,5 +154,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const icon = document.getElementById('sidebar-toggle-icon');
     if (icon) icon.className = 'ti ti-chevron-right';
   }
+
+  // Always show role selector on every page load — PIN required each time
+  state.userRole = null;
+  document.body.insertAdjacentHTML('beforeend', renderRoleSelector());
+
   render();
 });

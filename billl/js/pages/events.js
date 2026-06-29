@@ -552,12 +552,11 @@ export function openEventCustomerForm(eventId = null) {
           <div class="form-group">
             <div class="chip-group" id="ef-makeup-chips">
               ${[
-                ['Basic Makeup', 5000],
+                ['Basic Makeup', 3000],
                 ['HD Makeup', 5000],
                 ['Advanced Makeup', 7000],
                 ['Airbrush Makeup', 15000],
                 ['Glass Skin Makeup', 12000],
-                ['Water Proof Makeup', 5000],
                 ['Others', 5000]
               ].map(([s, amt]) =>
                 `<div class="chip" onclick="window.makeupTypeChipToggle(this, ${amt})">${s}</div>`

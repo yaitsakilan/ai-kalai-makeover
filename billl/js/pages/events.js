@@ -1,7 +1,7 @@
 // billl/js/pages/events.js
 import { state } from '../state.js';
 import { fetchEvents, addEvent, deleteEvent, updateEvent } from '../db.js';
-import { showToast, showModal, closeModal, closeFormOverlay } from '../ui.js';
+import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone, getSelectedChips } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 
@@ -223,18 +223,40 @@ export function renderEventList(events) {
   if (!events.length) return '<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-calendar-event" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No event bookings found</div>';
   return events.map(e => {
     let addonsHtml = '';
+    let funcDatesHtml = '';
+    
     if (e.additional_makeup) {
       try {
         const arr = typeof e.additional_makeup === 'string' ? JSON.parse(e.additional_makeup) : e.additional_makeup;
-        if (Array.isArray(arr) && arr.length > 0) {
-          addonsHtml = `
-            <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">
-              ${arr.map(a => `<span style="font-size:10px; font-weight:500; color:#4f46e5; background:#edf2f7; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center; border: 0.5px solid #cbd5e0; gap: 4px;"><i class="ti ti-circle-plus" style="font-size:11px; color:#4f46e5;"></i>${a.name}: ₹${a.amount.toLocaleString()}</span>`).join('')}
-            </div>
-          `;
+        if (Array.isArray(arr)) {
+          // Render addons excluding metadata
+          const cleanArr = arr.filter(a => a.name && !a.name.startsWith('Meta:') && a.amount > 0);
+          if (cleanArr.length > 0) {
+            addonsHtml = `
+              <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">
+                ${cleanArr.map(a => `<span style="font-size:10px; font-weight:500; color:#4f46e5; background:#edf2f7; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center; border: 0.5px solid #cbd5e0; gap: 4px;"><i class="ti ti-circle-plus" style="font-size:11px; color:#4f46e5;"></i>${a.name}: ₹${a.amount.toLocaleString()}</span>`).join('')}
+              </div>
+            `;
+          }
+
+          // Parse function dates if there are multiple
+          const meta = arr.find(a => a.name === 'Meta:FunctionDates');
+          if (meta && meta.dates && Object.keys(meta.dates).length > 1) {
+            funcDatesHtml = `
+              <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px; border-top: 0.5px dashed #e2e8f0; padding-top: 5px;">
+                ${Object.entries(meta.dates).map(([func, dateVal]) => `
+                  <div style="font-size:10px; color:#555; display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                    <span style="font-weight:600; color:#4f46e5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85px;" title="${func}">${func}:</span>
+                    <span style="background:#e0e7ff; color:#4338ca; padding:1px 5px; border-radius:4px; font-size:9.5px; font-weight:600; white-space:nowrap;">${new Date(dateVal).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }
         }
       } catch(err) {}
     }
+    
     return `
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
@@ -266,7 +288,11 @@ export function renderEventList(events) {
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;background:#f9f9f9;border-radius:10px;padding:12px;font-size:12px">
         <div><div style="color:#999;margin-bottom:2px">Event</div><div style="font-weight:500">${e.type}</div></div>
-        <div><div style="color:#999;margin-bottom:2px">Event Date</div><div style="font-weight:500">${e.date}</div></div>
+        <div>
+          <div style="color:#999;margin-bottom:2px">Event Date</div>
+          <div style="font-weight:500; ${funcDatesHtml ? 'color:#4f46e5; font-weight:600;' : ''}">${e.date}</div>
+          ${funcDatesHtml}
+        </div>
         <div><div style="color:#999;margin-bottom:2px">Total</div><div style="font-weight:500;color:#d97706">₹${(e.total||0).toLocaleString()}</div></div>
         <div><div style="color:#999;margin-bottom:2px">Pending</div><div style="font-weight:500;color:${(e.pending||0)>0?'#dc2626':'#15803d'}">₹${(e.pending||0).toLocaleString()}</div></div>
       </div>
@@ -351,7 +377,8 @@ export function showAddEventModal() {
 }
 
 export async function handleDeleteEvent(id) {
-  if(!confirm('Delete this event?')) return;
+  const confirmed = await showConfirmDelete('Delete Event', 'Are you sure you want to delete this event booking? This action cannot be undone.');
+  if (!confirmed) return;
   await deleteEvent(id);
   if (typeof window.render === 'function') window.render();
 }
@@ -514,7 +541,7 @@ export function openEventCustomerForm(eventId = null) {
               <label class="form-label">Location</label>
               <input class="form-input" id="ef-location" value="${isEdit && event ? (event.location || '') : ''}" placeholder="e.g. Chennai">
             </div>
-            <div class="form-group">
+            <div class="form-group" id="ef-main-date-group">
               <label class="form-label">Event Date *</label>
               <input class="form-input" id="ef-date" type="date" value="${isEdit && event ? event.date : today}">
             </div>
@@ -538,12 +565,13 @@ export function openEventCustomerForm(eventId = null) {
           <div class="form-group">
             <div class="chip-group" id="ef-function-chips">
               ${['Puberty Function','Baby Shower','Engagement','Reception','Muhurtham','Party Makeup','Others'].map(s =>
-                `<div class="chip" onclick="window.chipToggle('function', this, true)">${s}</div>`
+                `<div class="chip" onclick="window.eventFunctionChipToggle(this)">${s}</div>`
               ).join('')}
             </div>
             <div class="chip-other-input">
-              <input class="form-input" id="ef-function-other" placeholder="Enter function type..." style="margin-top:8px">
+              <input class="form-input" id="ef-function-other" placeholder="Enter function type..." style="margin-top:8px" oninput="window.updateEventFunctionDates()">
             </div>
+            <div id="ef-function-dates-container" style="margin-top:12px; display:none;"></div>
           </div>
  
           <div class="form-section-title">
@@ -633,43 +661,100 @@ export function openEventCustomerForm(eventId = null) {
 
   setTimeout(() => {
     if (isEdit && event) {
+      // Extract metadata if exists
+      let functionDates = {};
+      let makeupFees = {};
+      if (event.additional_makeup) {
+        try {
+          const arr = typeof event.additional_makeup === 'string' ? JSON.parse(event.additional_makeup) : event.additional_makeup;
+          if (Array.isArray(arr)) {
+            const dateMeta = arr.find(a => a.name === 'Meta:FunctionDates');
+            if (dateMeta && dateMeta.dates) {
+              functionDates = dateMeta.dates;
+            }
+            const feeMeta = arr.find(a => a.name === 'Meta:MakeupFees');
+            if (feeMeta && feeMeta.fees) {
+              makeupFees = feeMeta.fees;
+            }
+          }
+        } catch(e) {}
+      }
+
+      // Pre-fill function chips
       if (event.type) {
+        const selectedTypes = event.type.split(',').map(t => t.trim());
         const funcChips = document.querySelectorAll('#ef-function-chips .chip');
-        const match = Array.from(funcChips).find(c => c.textContent.trim().toLowerCase() === event.type.toLowerCase());
-        if (match) {
-          match.classList.add('selected');
-        } else {
-          const otherChip = Array.from(funcChips).find(c => c.textContent.trim() === 'Others');
-          if (otherChip) {
-            otherChip.classList.add('selected');
-            const otherDiv = document.getElementById('ef-function-other')?.closest('.chip-other-input');
-            if (otherDiv) otherDiv.classList.add('show');
-            const otherInput = document.getElementById('ef-function-other');
-            if (otherInput) otherInput.value = event.type;
+        const otherChip = Array.from(funcChips).find(c => c.textContent.trim() === 'Others');
+        const otherFuncs = [];
+
+        selectedTypes.forEach(type => {
+          const match = Array.from(funcChips).find(c => c.textContent.trim().toLowerCase() === type.toLowerCase());
+          if (match) {
+            match.classList.add('selected');
+          } else {
+            otherFuncs.push(type);
           }
+        });
+
+        if (otherFuncs.length > 0 && otherChip) {
+          otherChip.classList.add('selected');
+          const otherDiv = document.getElementById('ef-function-other')?.closest('.chip-other-input');
+          if (otherDiv) otherDiv.classList.add('show');
+          const otherInput = document.getElementById('ef-function-other');
+          if (otherInput) otherInput.value = otherFuncs.join(', ');
         }
+
+        // Trigger dynamic function dates render
+        window._editFunctionDates = functionDates;
+        window.updateEventFunctionDates();
+        delete window._editFunctionDates;
       }
+
+      // Pre-fill makeup chips
       if (event.makeup_type) {
+        const selectedMakeups = event.makeup_type.split(',').map(m => m.trim());
         const makeupChips = document.querySelectorAll('#ef-makeup-chips .chip');
-        const match = Array.from(makeupChips).find(c => c.textContent.trim().toLowerCase() === event.makeup_type.toLowerCase());
-        if (match) {
-          window.makeupTypeChipToggle(match, 5000);
-        } else {
-          const otherChip = Array.from(makeupChips).find(c => c.textContent.trim() === 'Others');
-          if (otherChip) {
-            otherChip.classList.add('selected');
-            const otherDiv = document.getElementById('ef-makeup-other')?.closest('.chip-other-input');
-            if (otherDiv) otherDiv.classList.add('show');
-            const otherInput = document.getElementById('ef-makeup-other');
-            if (otherInput) otherInput.value = event.makeup_type;
+        const otherChip = Array.from(makeupChips).find(c => c.textContent.trim() === 'Others');
+        const otherMakeups = [];
+
+        window._editMakeupFees = makeupFees;
+
+        selectedMakeups.forEach(mName => {
+          const match = Array.from(makeupChips).find(c => c.textContent.trim().toLowerCase() === mName.toLowerCase());
+          if (match) {
+            const amtMap = {
+              'Basic Makeup': 3000,
+              'HD Makeup': 5000,
+              'Advanced Makeup': 7000,
+              'Airbrush Makeup': 15000,
+              'Glass Skin Makeup': 12000
+            };
+            const defaultAmt = amtMap[match.textContent.trim()] || 5000;
+            window.makeupTypeChipToggle(match, defaultAmt);
+          } else {
+            otherMakeups.push(mName);
           }
+        });
+
+        if (otherMakeups.length > 0 && otherChip) {
+          otherChip.classList.add('selected');
+          const otherDiv = document.getElementById('ef-makeup-other')?.closest('.chip-other-input');
+          if (otherDiv) otherDiv.classList.add('show');
+          const otherInput = document.getElementById('ef-makeup-other');
+          if (otherInput) otherInput.value = otherMakeups.join(', ');
+          window.makeupTypeChipToggle(otherChip, 5000);
         }
+
+        delete window._editMakeupFees;
       }
+
       if (event.additional_makeup) {
         try {
           const arr = typeof event.additional_makeup === 'string' ? JSON.parse(event.additional_makeup) : event.additional_makeup;
           if (Array.isArray(arr)) {
             arr.forEach(addon => {
+              if (addon.name && addon.name.startsWith('Meta:')) return; // Skip metadata
+              
               const isGroom = addon.name.startsWith('Groom:');
               const category = isGroom ? 'groom' : 'bridesmaid';
               const cleanName = addon.name.replace(/^(Groom:|Bridesmaid:)\s*/, '');
@@ -683,6 +768,7 @@ export function openEventCustomerForm(eventId = null) {
           }
         } catch(e) {}
       }
+
       // Pre-fill transport chip if travel_allowance exists
       if (event.travel_allowance > 0) {
         const transportChips = document.querySelectorAll('#ef-misc-chips .chip');
@@ -707,9 +793,6 @@ export async function submitEventCustomerForm(eventId = null) {
   const phoneVal = validateAndCleanPhone(phoneInput);
   if (phoneVal === null) { showToast('Please enter a valid 10-digit phone number', 'error'); return; }
  
-  const date = document.getElementById('ef-date').value;
-  if (!date) { showToast('Please select a date', 'error'); return; }
- 
   const functionType = getSelectedChips('ef-function-chips');
   if (!functionType) { showToast('Please select a function type', 'error'); return; }
  
@@ -717,31 +800,74 @@ export async function submitEventCustomerForm(eventId = null) {
   if (!makeupType) { showToast('Please select a makeup type', 'error'); return; }
  
   const total = parseInt(document.getElementById('ef-amount').value) || 0;
-  if (!total) { showToast('Please enter the base event amount', 'error'); return; }
+  if (!total) { showToast('Please select at least one makeup package with a valid amount', 'error'); return; }
   const advance = parseInt(document.getElementById('ef-advance').value) || 0;
  
   const location = document.getElementById('ef-location').value.trim();
- 
   const isReferred = document.getElementById('ef-referred')?.checked;
   const referredBy = isReferred ? document.getElementById('ef-referrer')?.value.trim() : '';
+
+  // Parse function dates
+  const selectedFuncChips = document.querySelectorAll('#ef-function-chips .chip.selected');
+  const funcDates = {};
+  let primaryDate = '';
+
+  if (selectedFuncChips.length > 1) {
+    let missingDate = false;
+    document.querySelectorAll('.ef-func-date-row').forEach(row => {
+      const funcName = row.dataset.function;
+      const dateVal = row.querySelector('input[type="date"]').value;
+      if (!dateVal) {
+        missingDate = true;
+      } else {
+        funcDates[funcName] = dateVal;
+      }
+    });
+
+    if (missingDate) {
+      showToast('Please specify a date for all selected functions', 'error');
+      return;
+    }
+
+    const sortedDates = Object.values(funcDates).sort();
+    primaryDate = sortedDates[0];
+  } else {
+    primaryDate = document.getElementById('ef-date').value;
+    if (!primaryDate) {
+      showToast('Please select the event date', 'error');
+      return;
+    }
+    const singleFunc = getSelectedChips('ef-function-chips');
+    funcDates[singleFunc] = primaryDate;
+  }
  
-  // Parse event add-on amounts
-  const addonRows = document.querySelectorAll('#ef-makeup-amounts .service-amount-row, #ef-groom-amounts .service-amount-row, #ef-bridesmaid-amounts .service-amount-row');
+  // Parse makeup fees
+  const makeupFees = {};
+  const makeupRows = document.querySelectorAll('#ef-makeup-amounts .service-amount-row[data-category="makeup"]');
+  makeupRows.forEach(r => {
+    const nameInput = r.querySelector('.sa-name-input');
+    const nameLabel = nameInput ? nameInput.value.trim() : r.dataset.label;
+    const amt = parseInt(r.querySelector('.ef-makeup-amount-input')?.value) || 0;
+    if (nameLabel) {
+      makeupFees[nameLabel] = amt;
+    }
+  });
+
+  // Parse event add-on amounts (Groom, Bridesmaid)
   const addons = [];
   let addonTotal = 0;
+  const addonRows = document.querySelectorAll('#ef-groom-amounts .service-amount-row, #ef-bridesmaid-amounts .service-amount-row');
   addonRows.forEach(r => {
-    if (r.dataset.category !== 'makeup') {
-      const nameInput = r.querySelector('.sa-name-input');
-      let nameLabel = nameInput ? nameInput.value.trim() : r.dataset.label;
-      const prefix = r.dataset.category === 'groom' ? 'Groom: ' : 'Bridesmaid: ';
-      if (nameLabel && !nameLabel.startsWith('Groom:') && !nameLabel.startsWith('Bridesmaid:')) {
-        nameLabel = prefix + nameLabel;
-      }
-      const amt = parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
-      if (nameLabel) {
-        addons.push({ name: nameLabel, amount: amt });
-        addonTotal += amt;
-      }
+    const nameInput = r.querySelector('.sa-name-input');
+    let nameLabel = nameInput ? nameInput.value.trim() : r.dataset.label;
+    const prefix = r.dataset.category === 'groom' ? 'Groom: ' : 'Bridesmaid: ';
+    if (nameLabel && !nameLabel.startsWith('Groom:') && !nameLabel.startsWith('Bridesmaid:')) {
+      nameLabel = prefix + nameLabel;
+    }
+    const amt = parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+    if (nameLabel) {
+      addons.push({ name: nameLabel, amount: amt });
+      addonTotal += amt;
     }
   });
 
@@ -751,7 +877,13 @@ export async function submitEventCustomerForm(eventId = null) {
   miscRows.forEach(r => {
     travelAllowance += parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
   });
+
   const grandTotal = total + addonTotal + travelAllowance;
+
+  // Add meta entries for multiple functions and makeups to addons
+  addons.push({ name: 'Meta:FunctionDates', dates: funcDates, amount: 0 });
+  addons.push({ name: 'Meta:MakeupFees', fees: makeupFees, amount: 0 });
+
   const btn = document.getElementById('ef-submit-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="dot-anim"><span></span><span></span><span></span></div> Saving...'; }
  
@@ -760,7 +892,7 @@ export async function submitEventCustomerForm(eventId = null) {
         customer: name,
         phone: phoneVal,
         type: functionType || 'Event',
-        date,
+        date: primaryDate,
         total: grandTotal,
         advance: advance,
         pending: grandTotal - advance,
@@ -775,7 +907,7 @@ export async function submitEventCustomerForm(eventId = null) {
         customer: name,
         phone: phoneVal,
         type: functionType || 'Event',
-        date,
+        date: primaryDate,
         total: grandTotal,
         advance: advance,
         pending: grandTotal - advance,
@@ -795,8 +927,9 @@ export async function submitEventCustomerForm(eventId = null) {
     if (travelAllowance > 0) {
       summary += ` · Transport: ₹${travelAllowance.toLocaleString()}`;
     }
-    if (addons.length > 0) {
-      summary += `<br><span style="font-size:11px;color:#7c3aed;"><strong>Add-ons:</strong> ${addons.map(a => `${a.name} (₹${a.amount.toLocaleString()})`).join(', ')}</span>`;
+    const displayAddons = addons.filter(a => !a.name.startsWith('Meta:'));
+    if (displayAddons.length > 0) {
+      summary += `<br><span style="font-size:11px;color:#7c3aed;"><strong>Add-ons:</strong> ${displayAddons.map(a => `${a.name} (₹${a.amount.toLocaleString()})`).join(', ')}</span>`;
     }
     state.chatMessages.push({
       role: 'ai',
@@ -858,21 +991,22 @@ export function removeEventAddonRow(rowId, category, name) {
 }
 
 export function updateEventTotalDisplay() {
-  const baseAmount = parseInt(document.getElementById('ef-amount')?.value) || 0;
-  
-  // Sync to makeup row input if it exists
-  const makeupRowInput = document.querySelector('#ef-makeup-amounts .service-amount-row[data-category="makeup"] .ef-makeup-amount-input');
-  if (makeupRowInput && parseInt(makeupRowInput.value) !== baseAmount) {
-    makeupRowInput.value = baseAmount;
+  let baseAmount = 0;
+  const makeupRows = document.querySelectorAll('#ef-makeup-amounts .service-amount-row[data-category="makeup"]');
+  makeupRows.forEach(r => {
+    baseAmount += parseInt(r.querySelector('.ef-makeup-amount-input')?.value) || 0;
+  });
+
+  const baseInput = document.getElementById('ef-amount');
+  if (baseInput) {
+    baseInput.value = baseAmount;
   }
 
-  const addonRows = document.querySelectorAll('#ef-makeup-amounts .service-amount-row, #ef-groom-amounts .service-amount-row, #ef-bridesmaid-amounts .service-amount-row');
+  const addonRows = document.querySelectorAll('#ef-groom-amounts .service-amount-row, #ef-bridesmaid-amounts .service-amount-row');
   
   let addonTotal = 0;
   addonRows.forEach(r => {
-    if (r.dataset.category !== 'makeup') {
-      addonTotal += parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
-    }
+    addonTotal += parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
   });
 
   // Sum misc amounts (transport etc)
@@ -902,9 +1036,6 @@ export function updateEventTotalDisplay() {
   const breakdownEl = document.getElementById('ef-payment-breakdown');
   if (breakdownEl) {
     if (baseAmount > 0 || addonTotal > 0 || miscTotal > 0) {
-      const selectedMakeupChip = document.querySelector('#ef-makeup-chips .chip.selected');
-      const selectedMakeupName = selectedMakeupChip ? selectedMakeupChip.textContent.trim() : '';
-      
       let breakdownHtml = `
         <div style="background:#fffdf5; border:1px solid #fde68a; border-radius:10px; padding:14px; font-size:12px; color:#555; font-family:'DM Sans', sans-serif;">
           <div style="font-weight:600; color:#b45309; margin-bottom:8px; border-bottom:1px solid #fde68a; padding-bottom:6px; font-size:13px; display:flex; align-items:center; gap:6px;">
@@ -914,20 +1045,25 @@ export function updateEventTotalDisplay() {
       `;
       
       // 1. Base makeup
-      if (selectedMakeupName && selectedMakeupName !== 'Others' && baseAmount > 0) {
-        breakdownHtml += `
-          <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-            <span>✨ Bride ${selectedMakeupName}</span>
-            <span style="font-weight:600; color:#1a1a1a;">₹${baseAmount.toLocaleString()}</span>
-          </div>
-        `;
-      } else if (baseAmount > 0) {
-        breakdownHtml += `
-          <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-            <span>✨ Base Event Fee</span>
-            <span style="font-weight:600; color:#1a1a1a;">₹${baseAmount.toLocaleString()}</span>
-          </div>
-        `;
+      const addedMakeups = [];
+      makeupRows.forEach(r => {
+        const nameInput = r.querySelector('.sa-name-input');
+        const nameLabel = nameInput ? nameInput.value.trim() : r.dataset.label;
+        const amt = parseInt(r.querySelector('.ef-makeup-amount-input')?.value) || 0;
+        if (nameLabel && amt > 0) {
+          addedMakeups.push({ name: nameLabel, amount: amt });
+        }
+      });
+
+      if (addedMakeups.length > 0) {
+        addedMakeups.forEach(m => {
+          breakdownHtml += `
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+              <span>✨ Bride ${m.name}</span>
+              <span style="font-weight:600; color:#1a1a1a;">₹${m.amount.toLocaleString()}</span>
+            </div>
+          `;
+        });
       }
 
       // 2. Add-ons
@@ -1021,47 +1157,62 @@ export function updateEventTotalDisplay() {
 
 export function makeupTypeChipToggle(chipEl, defaultAmount) {
   const name = chipEl.textContent.trim();
-  
-  // Call standard chipToggle to handle selection visuals and Others input toggle
-  window.chipToggle('makeup', chipEl, true);
+  chipEl.classList.toggle('selected');
   
   const amountList = document.getElementById('ef-makeup-amounts');
   if (!amountList) return;
 
-  // Remove any existing makeup row
-  const existingRows = amountList.querySelectorAll('.service-amount-row[data-category="makeup"]');
-  existingRows.forEach(r => r.remove());
+  const rowId = 'ef-addon-row-makeup-' + name.replace(/\s+/g, '-').toLowerCase();
 
-  if (chipEl.classList.contains('selected') && name !== 'Others') {
-    const baseInput = document.getElementById('ef-amount');
-    let currentVal = parseInt(baseInput?.value) || 0;
-    if (!window._initializingForm || currentVal === 0) {
-      currentVal = defaultAmount;
-      if (baseInput) baseInput.value = defaultAmount;
+  if (name === 'Others') {
+    const otherInput = chipEl.closest('.form-group').querySelector('.chip-other-input');
+    if (chipEl.classList.contains('selected')) {
+      if (otherInput) otherInput.classList.add('show');
+      if (!document.getElementById(rowId)) {
+        const row = document.createElement('div');
+        row.className = 'service-amount-row';
+        row.id = rowId;
+        row.dataset.name = 'Others';
+        row.dataset.category = 'makeup';
+        row.dataset.label = 'Others';
+        
+        const savedFee = window._editMakeupFees?.['Others'] || defaultAmount;
+
+        row.innerHTML = `
+          <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" id="ef-makeup-other-label" value="Other Makeup" oninput="window.updateEventTotalDisplay()"></div>
+          <span style="font-size:12px;color:#888">₹</span>
+          <input type="number" class="ef-makeup-amount-input" value="${savedFee}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+          <div class="sa-remove" onclick="window.removeMakeupRow('${rowId}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+        amountList.appendChild(row);
+      }
+    } else {
+      if (otherInput) otherInput.classList.remove('show');
+      const row = document.getElementById(rowId);
+      if (row) row.remove();
     }
+  } else {
+    if (chipEl.classList.contains('selected')) {
+      if (!document.getElementById(rowId)) {
+        const row = document.createElement('div');
+        row.className = 'service-amount-row';
+        row.id = rowId;
+        row.dataset.name = name;
+        row.dataset.category = 'makeup';
+        row.dataset.label = name;
+        
+        const savedFee = window._editMakeupFees?.[name] || defaultAmount;
 
-    const rowId = 'ef-addon-row-makeup-' + name.replace(/\s+/g, '-').toLowerCase();
-    const row = document.createElement('div');
-    row.className = 'service-amount-row';
-    row.id = rowId;
-    row.dataset.name = name;
-    row.dataset.category = 'makeup';
-    row.dataset.label = name;
-    
-    row.innerHTML = `
-      <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
-      <span style="font-size:12px;color:#888">₹</span>
-      <input type="number" class="ef-makeup-amount-input" value="${currentVal}" oninput="window.syncBaseAmountFromRow(this)" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
-      <div class="sa-remove" onclick="window.removeMakeupRow('${rowId}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
-    amountList.appendChild(row);
-  }
-  updateEventTotalDisplay();
-}
-
-export function syncBaseAmountFromRow(inputEl) {
-  const baseInput = document.getElementById('ef-amount');
-  if (baseInput) {
-    baseInput.value = inputEl.value;
+        row.innerHTML = `
+          <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
+          <span style="font-size:12px;color:#888">₹</span>
+          <input type="number" class="ef-makeup-amount-input" value="${savedFee}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+          <div class="sa-remove" onclick="window.removeMakeupRow('${rowId}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+        amountList.appendChild(row);
+      }
+    } else {
+      const row = document.getElementById(rowId);
+      if (row) row.remove();
+    }
   }
   updateEventTotalDisplay();
 }
@@ -1073,8 +1224,10 @@ export function removeMakeupRow(rowId, name) {
   const chips = document.querySelectorAll('#ef-makeup-chips .chip');
   chips.forEach(c => { if (c.textContent.trim() === name) c.classList.remove('selected'); });
   
-  const baseInput = document.getElementById('ef-amount');
-  if (baseInput) baseInput.value = '';
+  if (name === 'Others') {
+    const otherInput = document.querySelector('#ef-makeup-chips').closest('.form-group').querySelector('.chip-other-input');
+    if (otherInput) otherInput.classList.remove('show');
+  }
   
   updateEventTotalDisplay();
 }
@@ -1086,6 +1239,8 @@ window.filterEvents = renderEvents; // Backwards compatible filter mapping if us
 window.analyzeEvents = analyzeEvents;
 window.showAddEventModal = showAddEventModal;
 window.handleDeleteEvent = handleDeleteEvent;
+window.eventFunctionChipToggle = eventFunctionChipToggle;
+window.updateEventFunctionDates = updateEventFunctionDates;
 window.filterEventCustomers = filterEventCustomers;
 window.filterEventByMonth = filterEventByMonth;
 window.toggleEventMonthFilter = toggleEventMonthFilter;
@@ -1097,7 +1252,6 @@ window.eventAddonChipToggle = eventAddonChipToggle;
 window.removeEventAddonRow = removeEventAddonRow;
 window.updateEventTotalDisplay = updateEventTotalDisplay;
 window.makeupTypeChipToggle = makeupTypeChipToggle;
-window.syncBaseAmountFromRow = syncBaseAmountFromRow;
 window.removeMakeupRow = removeMakeupRow;
 window.promptEventWhatsAppBill = promptEventWhatsAppBill;
 window.promptEventWhatsAppBillFromId = promptEventWhatsAppBillFromId;
@@ -1240,3 +1394,98 @@ export function promptEventWhatsAppBillFromId(eventId) {
   }
   promptEventWhatsAppBill(event);
 }
+
+export function eventFunctionChipToggle(chipEl) {
+  const name = chipEl.textContent.trim();
+  chipEl.classList.toggle('selected');
+
+  if (name === 'Others') {
+    const otherInput = chipEl.closest('.form-group').querySelector('.chip-other-input');
+    if (chipEl.classList.contains('selected')) {
+      if (otherInput) otherInput.classList.add('show');
+    } else {
+      if (otherInput) otherInput.classList.remove('show');
+    }
+  }
+
+  updateEventFunctionDates();
+}
+
+export function updateEventFunctionDates() {
+  const container = document.getElementById('ef-function-dates-container');
+  const mainDateGroup = document.getElementById('ef-main-date-group');
+  if (!container) return;
+
+  // 1. Read currently entered dates from the container to preserve them
+  const currentDates = {};
+  container.querySelectorAll('.ef-func-date-row').forEach(row => {
+    const funcName = row.dataset.function;
+    const dateVal = row.querySelector('input[type="date"]').value;
+    if (funcName && dateVal) {
+      currentDates[funcName] = dateVal;
+    }
+  });
+
+  // 2. Get list of selected functions
+  const selectedFuncs = [];
+  document.querySelectorAll('#ef-function-chips .chip.selected').forEach(c => {
+    const text = c.textContent.trim();
+    if (text === 'Others') {
+      const otherVal = document.getElementById('ef-function-other')?.value.trim();
+      if (otherVal) selectedFuncs.push(otherVal);
+    } else {
+      selectedFuncs.push(text);
+    }
+  });
+
+  // 3. Determine if we have multiple functions
+  if (selectedFuncs.length > 1) {
+    // Hide main date group
+    if (mainDateGroup) mainDateGroup.style.display = 'none';
+
+    // Build sub-date fields
+    const today = new Date().toISOString().split('T')[0];
+    let html = `
+      <div style="font-size: 11px; font-weight: 600; color: #b45309; background: #fffdf5; padding: 10px 14px; border: 1px solid #fde68a; border-radius: 10px; margin-bottom: 8px; display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-calendar-event" style="font-size:14px"></i> Specify separate dates for each function:
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+    `;
+
+    // Retrieve any pre-filled or preserved dates
+    const preservedDates = window._editFunctionDates || currentDates;
+
+    selectedFuncs.forEach(func => {
+      const mainDateVal = document.getElementById('ef-date')?.value;
+      const dateValue = preservedDates[func] || mainDateVal || today;
+      html += `
+        <div class="form-group ef-func-date-row" data-function="${func}" style="margin-bottom: 8px;">
+          <label class="form-label" style="font-weight: 500; font-size:12px;">${func} Date *</label>
+          <input class="form-input" type="date" value="${dateValue}">
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+    container.innerHTML = html;
+    container.style.display = 'block';
+  } else {
+    // Show main date group
+    if (mainDateGroup) mainDateGroup.style.display = 'block';
+    
+    // Hide container
+    container.innerHTML = '';
+    container.style.display = 'none';
+    
+    // Update main date label if exactly one function is selected
+    const label = mainDateGroup.querySelector('.form-label');
+    if (label) {
+      if (selectedFuncs.length === 1) {
+        label.textContent = `${selectedFuncs[0]} Date *`;
+      } else {
+        label.textContent = 'Event Date *';
+      }
+    }
+  }
+}
+

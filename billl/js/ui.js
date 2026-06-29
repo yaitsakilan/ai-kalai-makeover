@@ -105,3 +105,49 @@ window.closeModal = closeModal;
 window.handleModalSave = handleModalSave;
 window.closeFormOverlay = closeFormOverlay;
 window.chipToggle = chipToggle;
+
+export function showConfirmDelete(title, message) {
+  return new Promise((resolve) => {
+    const container = document.getElementById('modal-container');
+    if (!container) {
+      resolve(false);
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="confirm-modal-overlay" id="confirm-overlay">
+        <div class="confirm-modal" onclick="event.stopPropagation()">
+          <div class="pulse-danger-icon" style="margin: 0 auto 20px; width: 60px; height: 60px; border-radius: 50%; background: #fee2e2; display: flex; align-items: center; justify-content: center; color: #dc2626; box-shadow: 0 10px 25px rgba(220, 38, 38, 0.15);">
+            <i class="ti ti-alert-triangle" style="font-size: 28px;"></i>
+          </div>
+          <h3 style="font-family:'Playfair Display',serif; font-size: 19px; color: #1a1a1a; margin-bottom: 10px; font-weight: 600;">${title}</h3>
+          <p style="font-size: 13px; color: #666; line-height: 1.5; margin-bottom: 24px; padding: 0 8px;">${message}</p>
+          <div style="display: flex; gap: 10px; justify-content: center;">
+            <button class="btn btn-outline" id="confirm-cancel-btn" style="flex: 1; justify-content: center;">Cancel</button>
+            <button class="btn btn-danger" id="confirm-ok-btn" style="flex: 1; justify-content: center; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; font-weight: 600; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.18);">Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const overlay = document.getElementById('confirm-overlay');
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    const okBtn = document.getElementById('confirm-ok-btn');
+
+    function cleanUpAndResolve(result) {
+      if (container) container.innerHTML = '';
+      resolve(result);
+    }
+
+    cancelBtn.addEventListener('click', () => cleanUpAndResolve(false));
+    okBtn.addEventListener('click', () => cleanUpAndResolve(true));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        cleanUpAndResolve(false);
+      }
+    });
+  });
+}
+
+window.showConfirmDelete = showConfirmDelete;
+

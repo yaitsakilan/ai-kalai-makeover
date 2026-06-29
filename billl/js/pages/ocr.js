@@ -1,7 +1,7 @@
 // billl/js/pages/ocr.js
 import { fetchBillScans, addBillScan, addExpense, deleteBillScan } from '../db.js';
 import { callGroqAPI } from '../api.js';
-import { showToast } from '../ui.js';
+import { showToast, showConfirmDelete } from '../ui.js';
 
 export function normalizeOcrDate(rawDate) {
   if (!rawDate) return '';
@@ -312,7 +312,8 @@ export function clearOcrData() {
 }
 
 export async function handleDeleteBillScan(id) {
-  if(!confirm('Delete this bill scan?')) return;
+  const confirmed = await showConfirmDelete('Delete Scan', 'Are you sure you want to delete this bill scan? This action cannot be undone.');
+  if (!confirmed) return;
   await deleteBillScan(id);
   if (typeof window.render === 'function') window.render();
 }

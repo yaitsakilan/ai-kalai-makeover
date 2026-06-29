@@ -1,7 +1,7 @@
 // billl/js/pages/customers.js
 import { state } from '../state.js';
 import { fetchCustomers, addCustomer, deleteCustomer } from '../db.js';
-import { showToast, showModal, closeModal, closeFormOverlay } from '../ui.js';
+import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 
@@ -327,7 +327,8 @@ export function showAddCustomerModal() {
 }
 
 export async function handleDeleteCustomer(id) {
-  if (!confirm('Delete this customer?')) return;
+  const confirmed = await showConfirmDelete('Delete Customer', 'Are you sure you want to delete this customer? This action cannot be undone.');
+  if (!confirmed) return;
   await deleteCustomer(id);
   if (typeof window.render === 'function') window.render();
 }
@@ -543,9 +544,20 @@ export function getServiceRowHtml(serviceName, rowId, amount = 0, method = 'Cash
       <input type="number" placeholder="Amount" class="sa-amount-input" value="${amount || ''}" oninput="window.updateServiceTotal()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
     `;
     
+  const isSaree = serviceName.toLowerCase().includes('saree');
+  const qtyHtml = isSaree
+    ? `
+      <div style="display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; background: #fffdf5; border: 1px solid #fde68a; padding: 2px 6px; border-radius: 8px;">
+        <span style="font-size: 11px; font-weight: 500; color: #b45309;">Qty:</span>
+        <input type="number" min="1" value="1" class="sa-qty-input" oninput="window.updateSareePrepleatingAmount(this)" style="width: 40px; padding: 2px; font-size: 12px; height: 26px; border: 1px solid #fcd34d; border-radius: 4px; text-align: center; font-family: inherit; font-weight: 600; color: #b45309; outline: none; background: #fff;">
+      </div>
+    `
+    : '';
+
   const removeAttr = chipName ? `'${rowId}', '${chipName}'` : `'${rowId}', null`;
   return `
     <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${serviceName}"></div>
+    ${qtyHtml}
     <div class="sa-amount-container" style="display:inline-flex; align-items:center; gap:4px;">
       ${amountHtml}
     </div>
@@ -556,6 +568,29 @@ export function getServiceRowHtml(serviceName, rowId, amount = 0, method = 'Cash
     </select>
     <div class="sa-remove" onclick="window.removeServiceRow(${removeAttr})" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>
   `;
+}
+
+export function updateSareePrepleatingAmount(qtyInput) {
+  const row = qtyInput.closest('.service-amount-row');
+  if (!row) return;
+  const qty = parseInt(qtyInput.value) || 1;
+  const baseRate = 250; // Saree Prepleating standard rate
+  const totalAmount = qty * baseRate;
+
+  const amtInput = row.querySelector('.sa-amount-input');
+  if (amtInput) {
+    amtInput.value = totalAmount;
+  }
+  
+  const cashInput = row.querySelector('.sa-cash-input');
+  const gpayInput = row.querySelector('.sa-gpay-input');
+  if (cashInput && gpayInput) {
+    const half = Math.round(totalAmount / 2);
+    cashInput.value = half;
+    gpayInput.value = half;
+  }
+
+  updateServiceTotal();
 }
 
 export function handleServiceMethodChange(selectEl) {
@@ -601,11 +636,26 @@ export function serviceChipToggle(chipEl) {
   if (chipEl.classList.contains('selected')) {
     const rowId = 'sa-row-' + serviceName.replace(/\s+/g, '-').toLowerCase();
     if (!document.getElementById(rowId)) {
+      const defaultAmounts = {
+        'Threading': 40,
+        'Saree Prepleating': 250,
+        'Facial': 500,
+        'Bleach': 250,
+        'Detan': 250,
+        'Hair Spa': 700,
+        'Layer Haircut': 600,
+        'Black Hair Color': 600,
+        'Pedicure': 700,
+        'Smoothening': 2000,
+        'Wax': 300
+      };
+      const amount = defaultAmounts[serviceName] || 0;
+
       const row = document.createElement('div');
       row.className = 'service-amount-row';
       row.id = rowId;
       row.dataset.service = serviceName;
-      row.innerHTML = getServiceRowHtml(serviceName, rowId, 0, 'Cash', serviceName);
+      row.innerHTML = getServiceRowHtml(serviceName, rowId, amount, 'Cash', serviceName);
       amountList.appendChild(row);
     }
   } else {
@@ -1000,3 +1050,4 @@ window.openClassesForm = openClassesForm;
 window.submitClassesForm = submitClassesForm;
 window.getServiceRowHtml = getServiceRowHtml;
 window.handleServiceMethodChange = handleServiceMethodChange;
+window.updateSareePrepleatingAmount = updateSareePrepleatingAmount;

@@ -1,7 +1,7 @@
 // billl/js/pages/expenses.js
 import { state } from '../state.js';
 import { fetchExpenses, addExpense, deleteExpense } from '../db.js';
-import { showToast, showModal, closeModal, closeFormOverlay } from '../ui.js';
+import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { callGroqAPI } from '../api.js';
 
 export async function renderExpenses() {
@@ -251,7 +251,8 @@ export async function submitBulkExpenseForm() {
 }
 
 export async function handleDeleteExpense(id) {
-  if(!confirm('Delete this expense?')) return;
+  const confirmed = await showConfirmDelete('Delete Expense', 'Are you sure you want to delete this expense transaction? This action cannot be undone.');
+  if (!confirmed) return;
   await deleteExpense(id);
   if (typeof window.render === 'function') window.render();
 }

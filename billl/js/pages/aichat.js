@@ -366,7 +366,7 @@ Extract the fields and return ONLY a JSON object:
   "location": string (default null),
   "date": "YYYY-MM-DD" format (default null),
   "functionType": string (one of: "Puberty Function", "Baby Shower", "Engagement", "Reception", "Muhurtham", "Party Makeup", "Others") (default null),
-  "makeupType": string (one of: "Basic Makeup", "HD Makeup", "Advanced Makeup", "Airbrush Makeup", "Glass Skin Makeup", "Water Proof Makeup", "Others") (default null),
+  "makeupType": string (one of: "Basic Makeup", "HD Makeup", "Advanced Makeup", "Airbrush Makeup", "Glass Skin Makeup", "Others") (default null),
   "amount": number (total main booking fee, default null),
   "advance": number (advance paid, default 0),
   "referred_by": string (default null)
@@ -741,7 +741,7 @@ Extract and return ONLY a JSON object with these fields (use null for missing):
 
 Guidelines:
 1. For customer_visit type, target fields to collect: customer, service, amount, payment_status, payment_method, location, phone, rating. If missing, list in missing_fields.
-2. For event_booking type, target fields to collect: customer, phone, date, location, event_type (one of: "Puberty Function", "Baby Shower", "Engagement", "Reception", "Muhurtham", "Party Makeup", "Others"), makeup_type (one of: "Basic Makeup", "HD Makeup", "Advanced Makeup", "Airbrush Makeup", "Glass Skin Makeup", "Water Proof Makeup", "Others"), amount (total booking amount), and advance_amount.
+2. For event_booking type, target fields to collect: customer, phone, date, location, event_type (one of: "Puberty Function", "Baby Shower", "Engagement", "Reception", "Muhurtham", "Party Makeup", "Others"), makeup_type (one of: "Basic Makeup", "HD Makeup", "Advanced Makeup", "Airbrush Makeup", "Glass Skin Makeup", "Others"), amount (total booking amount), and advance_amount.
 3. For single expense type, target fields: expense_category (Rent, Salary, Products, Electricity, Water, Travel, Miscellaneous), amount, and expense_note (the specific item or description, e.g. "hair dryer", "shampoo", "Rent for June"). Classify inputs about operational costs, salaries, bills, rent, or buying supplies as "expense".
 4. For multiple_expenses type, if the user lists multiple items/expenses with their respective amounts (e.g. a list of products purchased or a list of separate operational costs, e.g., "Chutti 159, Gloves 174, Apron 186 on May 31"), classify as "multiple_expenses" and populate the "expenses" array with each item extracted. Map categories for each item appropriately (usually Products for supplies, Utilities for bills, Rent, Travel, etc.).
 5. For greeting type, if the user greets you or says hello (e.g. "hi", "hello", "நமஸ்தே", "thank you"), reply back warmly addressing the owner "Kalai" directly (e.g. "Vanakkam Kalai! How can I assist you with your salon management today?" or "Hello Kalai! Ready to update some salon entries?"). Provide a helpful, friendly message in Tamil or English (matching her style). Store this message in "conversational_reply".

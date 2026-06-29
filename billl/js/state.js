@@ -25,5 +25,6 @@ export const state = {
   animId: null,
   recordingStartTime: 0,
   recordingInterval: null,
-  bulkRowCounter: 0
+  bulkRowCounter: 0,
+  userRole: null   // set after PIN verification: 'owner' | 'employee'
 };

@@ -137,5 +137,115 @@ INSERT INTO bill_scans (store, items, total, scan_date) VALUES
   ('Cosmo Store', '[{"name":"Wax","amount":800},{"name":"Threading thread","amount":400}]'::jsonb, 1200, 'Jan 8');
 
 -- ============================================================
+-- 5. CLASS ENROLLMENTS TABLE & 6. CLASS PAYMENTS TABLE
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS class_enrollments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  phone TEXT,
+  location TEXT,
+  classes TEXT[] DEFAULT '{}',
+  total_fee INTEGER DEFAULT 0,
+  total_paid INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'Active',
+  start_date DATE DEFAULT CURRENT_DATE,
+  referred_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS class_payments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  enrollment_id UUID REFERENCES class_enrollments(id) ON DELETE CASCADE,
+  amount INTEGER DEFAULT 0,
+  payment_method TEXT DEFAULT 'Cash',
+  date DATE DEFAULT CURRENT_DATE,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE class_enrollments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE class_payments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read class_enrollments" ON class_enrollments FOR SELECT USING (true);
+CREATE POLICY "Allow public insert class_enrollments" ON class_enrollments FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update class_enrollments" ON class_enrollments FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete class_enrollments" ON class_enrollments FOR DELETE USING (true);
+
+CREATE POLICY "Allow public read class_payments" ON class_payments FOR SELECT USING (true);
+CREATE POLICY "Allow public insert class_payments" ON class_payments FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update class_payments" ON class_payments FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete class_payments" ON class_payments FOR DELETE USING (true);
+
+-- ============================================================
+-- 7. JEWELS TABLE & 8. JEWEL RENTALS TABLE
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS jewels (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT,
+  purchase_price INTEGER DEFAULT 0,
+  purchase_date DATE DEFAULT CURRENT_DATE,
+  description TEXT,
+  image_url TEXT,                     -- URL or base64 data URL of the jewel image
+  total_rental_income INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'Available',   -- 'Available', 'Rented', 'Retired'
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- For existing database migration:
+-- ALTER TABLE jewels ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+CREATE TABLE IF NOT EXISTS jewel_rentals (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  jewel_id UUID REFERENCES jewels(id) ON DELETE CASCADE,
+  customer_name TEXT NOT NULL,
+  customer_phone TEXT,
+  rental_date DATE DEFAULT CURRENT_DATE,
+  return_date DATE,
+  rental_fee INTEGER DEFAULT 0,
+  deposit INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'Active',      -- 'Active', 'Returned'
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE jewels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE jewel_rentals ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read jewels" ON jewels FOR SELECT USING (true);
+CREATE POLICY "Allow public insert jewels" ON jewels FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update jewels" ON jewels FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete jewels" ON jewels FOR DELETE USING (true);
+
+CREATE POLICY "Allow public read jewel_rentals" ON jewel_rentals FOR SELECT USING (true);
+CREATE POLICY "Allow public insert jewel_rentals" ON jewel_rentals FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update jewel_rentals" ON jewel_rentals FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete jewel_rentals" ON jewel_rentals FOR DELETE USING (true);
+
+-- ============================================================
+-- 9. MONTHLY BALANCES TABLE & EXPENSES MODIFICATIONS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS monthly_balances (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  month TEXT NOT NULL UNIQUE,          -- Format 'YYYY-MM'
+  cash_balance INTEGER DEFAULT 0,
+  gpay_balance INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- For existing database migration:
+-- ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'Cash';
+
+ALTER TABLE monthly_balances ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read monthly_balances" ON monthly_balances FOR SELECT USING (true);
+CREATE POLICY "Allow public insert monthly_balances" ON monthly_balances FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update monthly_balances" ON monthly_balances FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete monthly_balances" ON monthly_balances FOR DELETE USING (true);
+
+-- ============================================================
 -- DONE! Your database is ready. ✅
 -- ============================================================

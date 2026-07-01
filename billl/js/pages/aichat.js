@@ -117,13 +117,23 @@ export async function startVoiceRecording(type) {
       showFormVoiceRecordingStatus(type);
     }
     
-    state.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    let options = {};
+    if (typeof MediaRecorder.isTypeSupported === 'function') {
+      if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options = { mimeType: 'audio/webm' };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        options = { mimeType: 'audio/mp4' };
+      } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+        options = { mimeType: 'audio/ogg' };
+      }
+    }
+    state.mediaRecorder = new MediaRecorder(stream, options);
     state.mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) state.audioChunks.push(e.data);
     };
     
     state.mediaRecorder.onstop = async () => {
-      const audioBlob = new Blob(state.audioChunks, { type: 'audio/webm' });
+      const audioBlob = new Blob(state.audioChunks, { type: state.mediaRecorder.mimeType || 'audio/webm' });
       await handleVoiceData(audioBlob, type);
       stream.getTracks().forEach(t => t.stop());
     };

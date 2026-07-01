@@ -9,6 +9,8 @@ import { renderExpenses } from './pages/expenses.js';
 import { renderAnalytics, initAnalyticsCharts } from './pages/analytics.js';
 import { renderOCR } from './pages/ocr.js';
 import { renderEmployeePage, renderRoleSelector, applyRoleLayout, enterRole, openSwitchModal } from './pages/employee.js';
+import { renderStudents } from './pages/students.js';
+import { renderJewels } from './pages/jewels.js';
 
 export function toggleSidebar() {
   const app = document.getElementById('app');
@@ -64,6 +66,14 @@ export function showPage(page) {
     window._eventSearchQuery = '';
     window._eventMonthFilterExpanded = false;
     window._eventSearchFieldExpanded = false;
+  }
+  if (page === 'students') {
+    window._studentSearchQuery = '';
+    window._studentStatusFilter = 'all';
+  }
+  if (page === 'jewels') {
+    window._jewelSearchQuery = '';
+    window._jewelStatusFilter = 'all';
   }
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const navEl = document.getElementById('nav-' + page);
@@ -127,6 +137,14 @@ export async function render() {
       case 'ocr':
         main.innerHTML = loadingHtml();
         main.innerHTML = await renderOCR();
+        break;
+      case 'students':
+        main.innerHTML = loadingHtml();
+        main.innerHTML = await renderStudents();
+        break;
+      case 'jewels':
+        main.innerHTML = loadingHtml();
+        main.innerHTML = await renderJewels();
         break;
     }
   } catch(err) {

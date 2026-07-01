@@ -122,13 +122,23 @@ async function startVoiceRecording() {
     isRecording = true;
     audioChunks = [];
     
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    let options = {};
+    if (typeof MediaRecorder.isTypeSupported === 'function') {
+      if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options = { mimeType: 'audio/webm' };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        options = { mimeType: 'audio/mp4' };
+      } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+        options = { mimeType: 'audio/ogg' };
+      }
+    }
+    mediaRecorder = new MediaRecorder(stream, options);
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) audioChunks.push(e.data);
     };
     
     mediaRecorder.onstop = async () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
       stream.getTracks().forEach(t => t.stop());
       await processAudioData(audioBlob);
     };

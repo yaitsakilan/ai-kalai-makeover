@@ -1,6 +1,6 @@
 // billl/js/pages/customers.js
 import { state } from '../state.js';
-import { fetchCustomers, addCustomer, deleteCustomer } from '../db.js';
+import { fetchCustomers, addCustomer, deleteCustomer, addClassEnrollment, addClassPayment } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone } from '../utils.js';
 import { callGroqAPI } from '../api.js';
@@ -947,25 +947,15 @@ export function openClassesForm() {
               <input class="form-input" id="cf-location" placeholder="e.g. Chennai">
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="form-group">
-              <label class="form-label">Date</label>
-              <input class="form-input" id="cf-date" type="date" value="${today}">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Class Fee (₹) *</label>
-              <input class="form-input" id="cf-amount" type="number" placeholder="Enter class fee amount">
-            </div>
-          </div>
           
           <div class="form-section-title">
             <i class="ti ti-book-open" style="color:#d97706"></i> Select Classes Taken *
           </div>
           <div class="form-group">
             <div class="chip-group" id="cf-class-chips">
-              <div class="chip selected" onclick="window.chipToggle('classes', this, false)">Saree Prepleating</div>
-              <div class="chip" onclick="window.chipToggle('classes', this, false)">Beauty Course</div>
-              <div class="chip" onclick="window.chipToggle('classes', this, false)">Bridal Makeup</div>
+              <div class="chip selected" onclick="window.classesChipToggle(this)">Saree Prepleating</div>
+              <div class="chip" onclick="window.classesChipToggle(this)">Beauty Course</div>
+              <div class="chip" onclick="window.classesChipToggle(this)">Bridal Makeup</div>
             </div>
           </div>
 
@@ -981,6 +971,44 @@ export function openClassesForm() {
               </select>
             </div>
           </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Total Course Fee (₹) *</label>
+              <input class="form-input" id="cf-total-fee" type="number" value="40000" placeholder="e.g. 40000">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Initial Payment Paid (₹) *</label>
+              <input class="form-input" id="cf-initial-payment" type="number" value="10000" placeholder="e.g. 10000">
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Enrollment Date</label>
+              <input class="form-input" id="cf-date" type="date" value="${today}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Payment Method</label>
+              <select class="form-input form-select" id="cf-payment-method" onchange="window.handleClassesPaymentMethodChange(this)">
+                <option value="Cash">Cash</option>
+                <option value="GPay">GPay</option>
+                <option value="Both">Both</option>
+              </select>
+              <div id="cf-both-amounts-container" style="display:none; margin-top:10px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label" style="font-size:11px">Cash Portion (₹) *</label>
+                    <input class="form-input" id="cf-both-cash" type="number" placeholder="Cash amount" oninput="window.updateClassesBothTotal()">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label" style="font-size:11px">GPay Portion (₹) *</label>
+                    <input class="form-input" id="cf-both-gpay" type="number" placeholder="GPay amount" oninput="window.updateClassesBothTotal()">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="form-panel-footer">
           <button class="btn btn-outline" onclick="window.closeFormOverlay()"><i class="ti ti-x"></i> Cancel</button>
@@ -988,7 +1016,60 @@ export function openClassesForm() {
         </div>
       </div>
     </div>`;
+
+  // Run immediately to set initial default values based on defaults (Saree Prepleating starts selected)
+  setTimeout(() => {
+    const chip = document.querySelector('#cf-class-chips .chip.selected');
+    if (chip && typeof window.classesChipToggle === 'function') {
+      window.classesChipToggle(chip);
+    }
+  }, 50);
 }
+
+window.classesChipToggle = function(chipEl) {
+  const wasSelected = chipEl.classList.contains('selected');
+  
+  // Deselect all chips in this group
+  const group = chipEl.closest('.chip-group');
+  if (group) {
+    group.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  }
+  
+  // Toggle the clicked one
+  if (!wasSelected) {
+    chipEl.classList.add('selected');
+  }
+
+  const selected = Array.from(document.querySelectorAll('#cf-class-chips .chip.selected')).map(c => c.textContent.trim());
+  const feeInput = document.getElementById('cf-total-fee');
+  const payInput = document.getElementById('cf-initial-payment');
+  
+  if (!feeInput || !payInput) return;
+
+  if (selected.length === 1 && selected[0] === 'Saree Prepleating') {
+    feeInput.value = 800;
+    payInput.value = 800;
+  } else if (selected.length > 0) {
+    // Default to 40000 course fee and 10000 initial payment for Beauty Course / Bridal Makeup
+    feeInput.value = 40000;
+    payInput.value = 10000;
+  } else {
+    // Reset if nothing is selected
+    feeInput.value = '';
+    payInput.value = '';
+  }
+
+  // If payment method is "Both", update the Cash and GPay portion inputs
+  const payMethodSelect = document.getElementById('cf-payment-method');
+  if (payMethodSelect && payMethodSelect.value === 'Both') {
+    const currentVal = parseInt(payInput.value) || 0;
+    const half = Math.round(currentVal / 2);
+    const cashEl = document.getElementById('cf-both-cash');
+    const gpayEl = document.getElementById('cf-both-gpay');
+    if (cashEl) cashEl.value = half;
+    if (gpayEl) gpayEl.value = currentVal - half;
+  }
+};
 
 export async function submitClassesForm() {
   const name = document.getElementById('cf-name').value.trim();
@@ -999,8 +1080,12 @@ export async function submitClassesForm() {
   const phoneVal = validateAndCleanPhone(phoneInput);
   if (phoneVal === null) { showToast('Please enter a valid 10-digit phone number', 'error'); return; }
 
-  const amount = parseInt(document.getElementById('cf-amount').value) || 0;
-  if (amount <= 0) { showToast('Please enter the class fee amount', 'error'); return; }
+  const totalFee = parseInt(document.getElementById('cf-total-fee').value) || 0;
+  if (totalFee <= 0) { showToast('Please enter the total course fee amount', 'error'); return; }
+
+  const initialPayment = parseInt(document.getElementById('cf-initial-payment').value) || 0;
+  if (initialPayment < 0) { showToast('Initial payment cannot be negative', 'error'); return; }
+  if (initialPayment > totalFee) { showToast('Initial payment cannot be more than the total course fee', 'error'); return; }
 
   const selectedClasses = [];
   document.querySelectorAll('#cf-class-chips .chip.selected').forEach(c => {
@@ -1014,6 +1099,22 @@ export async function submitClassesForm() {
 
   const location = document.getElementById('cf-location').value.trim();
   const date = document.getElementById('cf-date').value || new Date().toISOString().split('T')[0];
+  const paymentMethod = document.getElementById('cf-payment-method').value;
+  
+  let paymentNote = 'Initial Enrollment Payment';
+  if (paymentMethod === 'Both') {
+    const cashPortion = parseInt(document.getElementById('cf-both-cash').value) || 0;
+    const gpayPortion = parseInt(document.getElementById('cf-both-gpay').value) || 0;
+    if (cashPortion <= 0 || gpayPortion <= 0) {
+      showToast('Please enter both Cash and GPay portion amounts', 'error');
+      return;
+    }
+    if (cashPortion + gpayPortion !== initialPayment) {
+      showToast(`Sum of Cash (₹${cashPortion}) & GPay (₹${gpayPortion}) must equal Initial Payment (₹${initialPayment})`, 'error');
+      return;
+    }
+    paymentNote = `Initial Enrollment Payment (Cash: ₹${cashPortion}, GPay: ₹${gpayPortion})`;
+  }
 
   const isReferred = document.getElementById('cf-referred')?.checked;
   const referredBy = isReferred ? document.getElementById('cf-referrer')?.value.trim() : '';
@@ -1021,31 +1122,74 @@ export async function submitClassesForm() {
   const btn = document.getElementById('cf-submit-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="dot-anim"><span></span><span></span><span></span></div> Saving...'; }
 
-  const result = await addCustomer({
+  // Save to class_enrollments
+  const result = await addClassEnrollment({
     name,
     phone: phoneVal,
     location,
-    services: selectedClasses.map(c => `Class: ${c}`),
-    amount: amount,
-    payment_status: 'paid',
-    payment_method: 'Cash',
-    last_visit: date,
-    total_spend: amount,
-    visits: 1,
-    rating: 5,
+    classes: selectedClasses,
+    total_fee: totalFee,
+    total_paid: initialPayment,
+    status: 'Active',
+    start_date: date,
     referred_by: referredBy || null
   });
 
   if (result) {
+    // Save initial payment if it is greater than 0
+    if (initialPayment > 0) {
+      await addClassPayment({
+        enrollment_id: result.id,
+        amount: initialPayment,
+        payment_method: paymentMethod,
+        date: date,
+        note: paymentNote
+      });
+    }
+
     closeFormOverlay();
-    state.chatMessages.push({ role: 'ai', text: `✅ Student <strong>${name}</strong> enrolled in Classes! 🎉<br><span style="font-size:11px;color:#888">Classes: ${selectedClasses.join(', ')} · Fee: ₹${amount.toLocaleString()} · Location: ${location || 'N/A'}</span>` });
+    state.chatMessages.push({ 
+      role: 'ai', 
+      text: `✅ Student <strong>${name}</strong> enrolled in Classes! 🎉<br><span style="font-size:11px;color:#888">Classes: ${selectedClasses.join(', ')} · Total Fee: ₹${totalFee.toLocaleString()} · Paid: ₹${initialPayment.toLocaleString()} · Location: ${location || 'N/A'}</span>` 
+    });
     if (typeof window.render === 'function') window.render();
 
     setTimeout(() => {
-      promptWhatsAppBill(name, phoneVal, selectedClasses.map(c => `Class: ${c}`), amount, date, 'paid');
+      promptWhatsAppBill(name, phoneVal, selectedClasses.map(c => `Class: ${c}`), initialPayment, date, 'paid');
     }, 400);
   } else {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Save Student'; }
+  }
+}
+
+export function handleClassesPaymentMethodChange(selectEl) {
+  const container = document.getElementById('cf-both-amounts-container');
+  const initialPaymentInput = document.getElementById('cf-initial-payment');
+  if (!container || !initialPaymentInput) return;
+
+  if (selectEl.value === 'Both') {
+    container.style.display = 'block';
+    initialPaymentInput.readOnly = true;
+    
+    // Split the current initial payment into cash and gpay inputs
+    const currentVal = parseInt(initialPaymentInput.value) || 0;
+    const half = Math.round(currentVal / 2);
+    const cashEl = document.getElementById('cf-both-cash');
+    const gpayEl = document.getElementById('cf-both-gpay');
+    if (cashEl) cashEl.value = half;
+    if (gpayEl) gpayEl.value = currentVal - half;
+  } else {
+    container.style.display = 'none';
+    initialPaymentInput.readOnly = false;
+  }
+}
+
+export function updateClassesBothTotal() {
+  const cash = parseInt(document.getElementById('cf-both-cash').value) || 0;
+  const gpay = parseInt(document.getElementById('cf-both-gpay').value) || 0;
+  const initialPaymentInput = document.getElementById('cf-initial-payment');
+  if (initialPaymentInput) {
+    initialPaymentInput.value = cash + gpay;
   }
 }
 
@@ -1073,3 +1217,5 @@ window.submitClassesForm = submitClassesForm;
 window.getServiceRowHtml = getServiceRowHtml;
 window.handleServiceMethodChange = handleServiceMethodChange;
 window.updateSareePrepleatingAmount = updateSareePrepleatingAmount;
+window.handleClassesPaymentMethodChange = handleClassesPaymentMethodChange;
+window.updateClassesBothTotal = updateClassesBothTotal;

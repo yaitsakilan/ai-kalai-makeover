@@ -958,6 +958,18 @@ input[type=number] {
 .ea-class {
   background: linear-gradient(135deg, #14b8a6, #0d9488);
 }
+.ea-jewel {
+  background: linear-gradient(135deg, #a855f7, #7e22ce);
+}
+.ea-expense-single {
+  background: linear-gradient(135deg, #f43f5e, #be123c);
+}
+.ea-expense-bulk {
+  background: linear-gradient(135deg, #ea580c, #c2410c);
+}
+.ea-event {
+  background: linear-gradient(135deg, #6366f1, #4338ca);
+}
 
 .ea-icon {
   width: 52px;

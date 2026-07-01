@@ -37,6 +37,30 @@
       <div class="nav-item" onclick="showPage('expenses')" id="nav-expenses">
         <i class="ti ti-receipt"></i> Expenses
       </div>
+      <div class="nav-item" onclick="showPage('students')" id="nav-students">
+        <i class="ti ti-school"></i> Students
+      </div>
+      <div class="nav-item" onclick="showPage('jewels')" id="nav-jewels">
+        <i class="ti ti-diamond"></i> Jewels
+      </div>
+
+      <!-- Forms Sub-Section -->
+      <div style="padding: 10px 18px 2px; font-size: 10px; color: rgba(255,255,255,0.25); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;">Forms</div>
+      <div class="nav-item" onclick="window.openShopCustomerForm()" id="nav-shop-customer-form" style="padding-left: 24px; font-size: 12px; opacity: 0.85;">
+        <i class="ti ti-scissors" style="font-size: 14px; width: 16px;"></i> Shop Customer
+      </div>
+      <div class="nav-item" onclick="window.openClassesForm()" id="nav-classes-form" style="padding-left: 24px; font-size: 12px; opacity: 0.85;">
+        <i class="ti ti-school" style="font-size: 14px; width: 16px;"></i> Class Enrollment
+      </div>
+      <div class="nav-item" onclick="window.openEventCustomerForm()" id="nav-event-form" style="padding-left: 24px; font-size: 12px; opacity: 0.85;">
+        <i class="ti ti-calendar-heart" style="font-size: 14px; width: 16px;"></i> Event Booking
+      </div>
+      <div class="nav-item" onclick="window.openProductExpenseForm()" id="nav-product-expense-form" style="padding-left: 24px; font-size: 12px; opacity: 0.85;">
+        <i class="ti ti-package" style="font-size: 14px; width: 16px;"></i> Product Expense
+      </div>
+      <div class="nav-item" onclick="window.openBulkExpenseForm()" id="nav-bulk-expense-form" style="padding-left: 24px; font-size: 12px; opacity: 0.85;">
+        <i class="ti ti-receipt-2" style="font-size: 14px; width: 16px;"></i> Bulk Expense
+      </div>
 
       <div class="nav-section">Insights</div>
       <div class="nav-item" onclick="showPage('analytics')" id="nav-analytics">

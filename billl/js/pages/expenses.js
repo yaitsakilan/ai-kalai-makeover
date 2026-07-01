@@ -1,6 +1,6 @@
 // billl/js/pages/expenses.js
 import { state } from '../state.js';
-import { fetchExpenses, addExpense, deleteExpense } from '../db.js';
+import { fetchExpenses, addExpense, deleteExpense, fetchMonthlyBalances, saveMonthlyBalance } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { callGroqAPI } from '../api.js';
 
@@ -10,10 +10,56 @@ export async function renderExpenses() {
   const cats = {};
   expenses.forEach(e=>{ cats[e.category]=(cats[e.category]||0)+(e.amount||0); });
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+  const currentMonthStr = `${currentYear}-${currentMonth}`; // "YYYY-MM"
+
+  // Filter expenses for this month
+  const currentMonthExpenses = expenses.filter(e => (e.date || '').startsWith(currentMonthStr));
+  const cashSpent = currentMonthExpenses.filter(e => e.payment_method === 'Cash' || !e.payment_method).reduce((sum, e) => sum + (e.amount || 0), 0);
+  const gpaySpent = currentMonthExpenses.filter(e => e.payment_method === 'GPay').reduce((sum, e) => sum + (e.amount || 0), 0);
+
+  // Fetch starting balances
+  const balances = await fetchMonthlyBalances();
+  const currentBalance = balances.find(b => b.month === currentMonthStr) || { cash_balance: 0, gpay_balance: 0 };
+  const cashStarting = currentBalance.cash_balance || 0;
+  const gpayStarting = currentBalance.gpay_balance || 0;
+
+  const cashRemaining = cashStarting - cashSpent;
+  const gpayRemaining = gpayStarting - gpaySpent;
+  const totalStarting = cashStarting + gpayStarting;
+  const totalRemaining = cashRemaining + gpayRemaining;
+
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const currentMonthName = `${monthNames[now.getMonth()]} ${currentYear}`;
+  const hasBalances = currentBalance.cash_balance !== undefined || currentBalance.gpay_balance !== undefined;
+  const showBanner = !hasBalances || (cashStarting === 0 && gpayStarting === 0);
+
+  const bannerHtml = showBanner ? `
+    <div class="preview-box" style="margin-bottom:16px; border-color:#f59e0b; background:#fffbeb; padding: 14px 18px; border-radius: 12px;" id="starting-balance-banner">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <strong style="color:#b45309; font-size:13px; display:flex; align-items:center; gap:6px;"><i class="ti ti-alert-triangle" style="font-size:16px"></i> Start-of-Month Balances Not Set</strong>
+          <div style="font-size:11.5px; color:#666; margin-top:2px;">Please set your starting Cash in Hand and GPay balances for <strong>${currentMonthName}</strong> to track remaining funds.</div>
+        </div>
+        <button class="btn btn-gold" onclick="window.showStartingBalanceModal('${currentMonthStr}', ${cashStarting}, ${gpayStarting})" style="padding: 6px 14px; font-size:12px; height:32px;">
+          <i class="ti ti-wallet"></i> Set Balances
+        </button>
+      </div>
+    </div>
+  ` : '';
+
   return `
   <div class="top-bar">
-    <h2>Expense Management</h2>
-    <div style="display:flex; gap:10px;">
+    <div>
+      <h2>Expense Management</h2>
+      <p style="font-size:12px;color:#999;margin-top:2px">Track salon overheads, products, utility bills, and remaining Cash / GPay balances</p>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap: wrap;">
+      <button class="btn btn-outline" onclick="window.showStartingBalanceModal('${currentMonthStr}', ${cashStarting}, ${gpayStarting})">
+        <i class="ti ti-wallet" style="color:#d97706"></i> Set Starting Balance
+      </button>
       <button class="btn btn-outline" onclick="window.analyzeExpenses()">
         <i class="ti ti-chart-bar" style="color:#d97706"></i> AI Analysis
       </button>
@@ -21,9 +67,33 @@ export async function renderExpenses() {
       <button class="btn btn-gold" onclick="window.showAddExpenseModal()"><i class="ti ti-plus"></i> Add Expense</button>
     </div>
   </div>
+
+  ${bannerHtml}
+
+  <div class="metric-grid" style="margin-bottom: 20px;">
+    <div class="metric-card mc-orange">
+      <div class="metric-label">Cash in Hand Balance</div>
+      <div class="metric-value" style="color: ${cashRemaining >= 0 ? '#1a1a1a' : '#dc2626'}">₹${cashRemaining.toLocaleString()}</div>
+      <div class="metric-sub">Starting: ₹${cashStarting.toLocaleString()} · Spent: ₹${cashSpent.toLocaleString()}</div>
+      <div class="metric-icon"><i class="ti ti-wallet"></i></div>
+    </div>
+    <div class="metric-card mc-purple">
+      <div class="metric-label">GPay Balance</div>
+      <div class="metric-value" style="color: ${gpayRemaining >= 0 ? '#1a1a1a' : '#dc2626'}">₹${gpayRemaining.toLocaleString()}</div>
+      <div class="metric-sub">Starting: ₹${gpayStarting.toLocaleString()} · Spent: ₹${gpaySpent.toLocaleString()}</div>
+      <div class="metric-icon"><i class="ti ti-credit-card"></i></div>
+    </div>
+    <div class="metric-card mc-teal">
+      <div class="metric-label">Total Remaining Budget</div>
+      <div class="metric-value" style="color: ${totalRemaining >= 0 ? '#15803d' : '#dc2626'}">₹${totalRemaining.toLocaleString()}</div>
+      <div class="metric-sub">Total Budget: ₹${totalStarting.toLocaleString()}</div>
+      <div class="metric-icon"><i class="ti ti-cash"></i></div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:16px;padding:20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:0">All Expenses</div>
+      <div class="section-title" style="margin-bottom:0">All Expenses (All Time)</div>
       <div style="font-size:22px;font-weight:700;color:#dc2626">₹${total.toLocaleString()}</div>
     </div>
     ${Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
@@ -50,7 +120,7 @@ export async function renderExpenses() {
       <div class="expense-row">
         <div style="flex:1">
           <div style="font-size:13px;font-weight:500">${e.note||e.category}</div>
-          <div style="font-size:11px;color:#bbb">${e.category} · ${e.date}</div>
+          <div style="font-size:11px;color:#bbb">${e.category} · ${e.date} · <span style="color:#b45309;font-weight:500;background:#fffbeb;padding:2px 6px;border-radius:4px;font-size:10px">${e.payment_method || 'Cash'}</span></div>
         </div>
         <div style="font-size:14px;font-weight:600;color:#dc2626;margin-right:12px">-₹${(e.amount||0).toLocaleString()}</div>
         <div onclick="window.handleDeleteExpense('${e.id}')" style="cursor:pointer;color:#ccc;padding:4px" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#ccc'">
@@ -63,12 +133,21 @@ export async function renderExpenses() {
 
 export function showAddExpenseModal() {
   showModal('Add Expense', `
-    <div class="form-group">
-      <label class="form-label">Category *</label>
-      <select class="form-input form-select" id="m-exp-category">
-        <option>Rent</option><option>Salary</option><option>Products</option><option>Electricity</option>
-        <option>Water</option><option>Travel</option><option>Miscellaneous</option>
-      </select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">Category *</label>
+        <select class="form-input form-select" id="m-exp-category">
+          <option>Rent</option><option>Salary</option><option>Products</option><option>Electricity</option>
+          <option>Water</option><option>Travel</option><option>Miscellaneous</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Payment Method *</label>
+        <select class="form-input form-select" id="m-exp-payment-method">
+          <option value="Cash">Cash</option>
+          <option value="GPay">GPay</option>
+        </select>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group">
@@ -91,6 +170,7 @@ export function showAddExpenseModal() {
       category: document.getElementById('m-exp-category').value,
       amount,
       date: document.getElementById('m-exp-date').value || new Date().toISOString().split('T')[0],
+      payment_method: document.getElementById('m-exp-payment-method').value,
       note: document.getElementById('m-exp-note').value.trim() || document.getElementById('m-exp-category').value
     });
     closeModal();
@@ -146,7 +226,7 @@ export function addBulkExpenseRow() {
   const rowDiv = document.createElement('div');
   rowDiv.className = 'bulk-expense-row';
   rowDiv.id = rowId;
-  rowDiv.style = "display:grid; grid-template-columns:1.5fr 1.2fr 1.2fr 2fr auto; gap:8px; align-items:center; padding:10px; background:#fcfcfc; border:0.5px solid #ebebeb; border-radius:10px; position:relative;";
+  rowDiv.style = "display:grid; grid-template-columns:1.2fr 1.2fr 1fr 1.1fr 1.5fr auto; gap:8px; align-items:center; padding:10px; background:#fcfcfc; border:0.5px solid #ebebeb; border-radius:10px; position:relative;";
   
   rowDiv.innerHTML = `
     <div>
@@ -161,13 +241,19 @@ export function addBulkExpenseRow() {
       </select>
     </div>
     <div>
+      <select class="form-input form-select" style="padding:6px 8px; font-size:12px; height:32px;" name="payment_method">
+        <option value="Cash">Cash</option>
+        <option value="GPay">GPay</option>
+      </select>
+    </div>
+    <div>
       <input class="form-input" type="number" placeholder="Amount (₹)" style="padding:6px 8px; font-size:12px; height:32px; text-align:right;" name="amount" oninput="window.updateBulkExpenseTotal()">
     </div>
     <div>
       <input class="form-input" type="date" value="${today}" style="padding:6px 8px; font-size:12px; height:32px;" name="date">
     </div>
     <div>
-      <input class="form-input" placeholder="Note (e.g. shampoo, June Rent)" style="padding:6px 8px; font-size:12px; height:32px;" name="note">
+      <input class="form-input" placeholder="Note (e.g. shampoo)" style="padding:6px 8px; font-size:12px; height:32px;" name="note">
     </div>
     <div>
       <button class="btn btn-danger btn-icon" style="width:32px; height:32px; padding:0; border-radius:8px; display:flex; align-items:center; justify-content:center;" onclick="window.removeBulkExpenseRow('${rowId}')" title="Delete row">
@@ -206,12 +292,13 @@ export async function submitBulkExpenseForm() {
   
   rows.forEach(r => {
     const category = r.querySelector('select[name="category"]').value;
+    const payment_method = r.querySelector('select[name="payment_method"]').value;
     const amount = parseInt(r.querySelector('input[name="amount"]').value) || 0;
     const date = r.querySelector('input[name="date"]').value || new Date().toISOString().split('T')[0];
     const note = r.querySelector('input[name="note"]').value.trim();
     
     if (amount > 0) {
-      items.push({ category, amount, date, note: note || category });
+      items.push({ category, amount, date, payment_method, note: note || category });
     }
   });
   
@@ -612,3 +699,42 @@ window.addOtherProductExpenseAmount = addOtherProductExpenseAmount;
 window.removeProductExpenseRow = removeProductExpenseRow;
 window.updateProductExpenseTotal = updateProductExpenseTotal;
 window.submitProductExpenseForm = submitProductExpenseForm;
+
+export function showStartingBalanceModal(monthStr, currentCash = 0, currentGPay = 0) {
+  const monthParts = monthStr.split('-');
+  const dateObj = new Date(parseInt(monthParts[0]), parseInt(monthParts[1]) - 1);
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const displayMonth = `${monthNames[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+
+  showModal(`Set Starting Balance — ${displayMonth}`, `
+    <div style="font-size:12.5px; color:#555; margin-bottom:14px;">
+      Enter the starting Cash in Hand and GPay balance for the month of <strong>${displayMonth}</strong>.
+    </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Cash in Hand Starting (₹) *</label>
+        <input class="form-input" id="m-start-cash" type="number" value="${currentCash || ''}" placeholder="e.g. 5000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">GPay Balance Starting (₹) *</label>
+        <input class="form-input" id="m-start-gpay" type="number" value="${currentGPay || ''}" placeholder="e.g. 25000">
+      </div>
+    </div>
+  `, async () => {
+    const cash = parseInt(document.getElementById('m-start-cash').value) || 0;
+    const gpay = parseInt(document.getElementById('m-start-gpay').value) || 0;
+
+    const result = await saveMonthlyBalance({
+      month: monthStr,
+      cash_balance: cash,
+      gpay_balance: gpay
+    });
+
+    if (result) {
+      closeModal();
+      if (typeof window.render === 'function') window.render();
+    }
+  });
+}
+
+window.showStartingBalanceModal = showStartingBalanceModal;

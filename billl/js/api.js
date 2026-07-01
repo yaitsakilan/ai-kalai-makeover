@@ -36,7 +36,8 @@ export async function callGroqAPI(path, payload) {
 export async function transcribeAudio(audioBlob) {
   const apiKey = getApiKey();
   const formData = new FormData();
-  formData.append('file', audioBlob, 'speech.webm');
+  const extension = audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
+  formData.append('file', audioBlob, `speech.${extension}`);
   formData.append('model', 'whisper-large-v3');
   formData.append('prompt', 'Transcribe billing entries for Kalai Makeover beauty salon in Tamil, English, or mixed Tamil-English code-switching.');
   

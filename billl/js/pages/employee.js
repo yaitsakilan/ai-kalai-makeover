@@ -342,8 +342,8 @@ export function renderEmployeePage() {
       <div class="employee-welcome-icon">
         <i class="ti ti-users"></i>
       </div>
-      <h1 class="employee-welcome-title">Add Customer</h1>
-      <p class="employee-welcome-sub">Record a customer visit or class enrollment below</p>
+      <h1 class="employee-welcome-title">Employee Actions</h1>
+      <p class="employee-welcome-sub">Record customer visits, enrollments, purchases, expenses or event bookings below</p>
     </div>
 
     <div class="employee-action-grid">
@@ -361,6 +361,42 @@ export function renderEmployeePage() {
         <div class="ea-content">
           <div class="ea-title">Class Enrollment</div>
           <div class="ea-sub">Student name, fee &amp; date</div>
+        </div>
+        <i class="ti ti-chevron-right ea-arrow"></i>
+      </button>
+
+      <button class="employee-action-btn ea-jewel" onclick="window.openAddJewelModal()" id="emp-add-jewel-btn">
+        <div class="ea-icon"><i class="ti ti-diamond"></i></div>
+        <div class="ea-content">
+          <div class="ea-title">Add Jewel Purchase</div>
+          <div class="ea-sub">Jewel type, price, photo &amp; details</div>
+        </div>
+        <i class="ti ti-chevron-right ea-arrow"></i>
+      </button>
+
+      <button class="employee-action-btn ea-expense-single" onclick="window.showAddExpenseModal()" id="emp-add-expense-btn">
+        <div class="ea-icon"><i class="ti ti-receipt"></i></div>
+        <div class="ea-content">
+          <div class="ea-title">Add Expense</div>
+          <div class="ea-sub">Rent, salary, products, utilities &amp; method</div>
+        </div>
+        <i class="ti ti-chevron-right ea-arrow"></i>
+      </button>
+
+      <button class="employee-action-btn ea-expense-bulk" onclick="window.openBulkExpenseForm()" id="emp-add-bulk-expense-btn">
+        <div class="ea-icon"><i class="ti ti-receipt-2"></i></div>
+        <div class="ea-content">
+          <div class="ea-title">Bulk Expense Form</div>
+          <div class="ea-sub">Add multiple expense rows at once</div>
+        </div>
+        <i class="ti ti-chevron-right ea-arrow"></i>
+      </button>
+
+      <button class="employee-action-btn ea-event" onclick="window.openEventCustomerForm()" id="emp-add-event-btn">
+        <div class="ea-icon"><i class="ti ti-calendar-heart"></i></div>
+        <div class="ea-content">
+          <div class="ea-title">Book Event</div>
+          <div class="ea-sub">Bridal makeup, function dates &amp; advance</div>
         </div>
         <i class="ti ti-chevron-right ea-arrow"></i>
       </button>

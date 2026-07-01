@@ -297,12 +297,19 @@ export function renderEventList(events) {
         <div><div style="color:#999;margin-bottom:2px">Pending</div><div style="font-weight:500;color:${(e.pending||0)>0?'#dc2626':'#15803d'}">₹${(e.pending||0).toLocaleString()}</div></div>
       </div>
       ${addonsHtml}
-      <div style="margin-top:10px">
-        <div style="font-size:11px;color:#bbb;margin-bottom:4px">Payment Progress</div>
-        <div style="background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden">
-          <div style="height:6px;border-radius:4px;background:#f5c842;width:${e.total?Math.round(((e.advance||0)/e.total)*100):0}%"></div>
+      <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+        <div style="flex:1; margin-right:12px;">
+          <div style="font-size:11px;color:#bbb;margin-bottom:4px">Payment Progress</div>
+          <div style="background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden">
+            <div style="height:6px;border-radius:4px;background:#f5c842;width:${e.total?Math.round(((e.advance||0)/e.total)*100):0}%"></div>
+          </div>
+          <div style="font-size:11px;color:#888;margin-top:3px">Advance ₹${(e.advance||0).toLocaleString()} / ₹${(e.total||0).toLocaleString()} (${e.total?Math.round(((e.advance||0)/e.total)*100):0}%)</div>
         </div>
-        <div style="font-size:11px;color:#888;margin-top:3px">Advance ₹${(e.advance||0).toLocaleString()} / ₹${(e.total||0).toLocaleString()} (${e.total?Math.round(((e.advance||0)/e.total)*100):0}%)</div>
+        ${(e.pending || 0) > 0 ? `
+          <button class="btn btn-gold" onclick="window.openEventCollectPaymentModal('${e.id}')" style="padding: 6px 12px; font-size: 11px; height: 32px; white-space: nowrap; border-radius: 8px;">
+            <i class="ti ti-cash"></i> Collect Payment
+          </button>
+        ` : ''}
       </div>
     </div>`;
   }).join('');
@@ -1232,6 +1239,137 @@ export function removeMakeupRow(rowId, name) {
   updateEventTotalDisplay();
 }
 
+export async function openEventCollectPaymentModal(eventId) {
+  const event = (window._cachedEvents || []).find(e => e.id === eventId);
+  if (!event) return;
+
+  const pending = event.pending || 0;
+  const today = new Date().toISOString().split('T')[0];
+
+  showModal(`Collect Pending Payment`, `
+    <div style="font-size:13px; color:#555; margin-bottom:14px;">
+      Log payment for <strong>${event.customer}</strong> (${event.type}).
+      <br><span style="font-size:11px; color:#999;">Outstanding Balance: ₹${pending.toLocaleString('en-IN')}</span>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Amount (₹) *</label>
+      <input class="form-input" id="m-evt-pay-amount" type="number" value="${pending}" max="${pending}">
+    </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Payment Date</label>
+        <input class="form-input" id="m-evt-pay-date" type="date" value="${today}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Method</label>
+        <select class="form-input form-select" id="m-evt-pay-method" onchange="window.handleEventPaymentMethodChange(this)">
+          <option value="Cash">Cash</option>
+          <option value="GPay">GPay</option>
+          <option value="Both">Both</option>
+        </select>
+      </div>
+    </div>
+    <div id="m-evt-pay-both-container" style="display:none; margin-bottom:14px;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" style="font-size:11px">Cash Portion (₹) *</label>
+          <input class="form-input" id="m-evt-pay-both-cash" type="number" placeholder="Cash amount" oninput="window.updateEventPaymentBothTotal()">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" style="font-size:11px">GPay Portion (₹) *</label>
+          <input class="form-input" id="m-evt-pay-both-gpay" type="number" placeholder="GPay amount" oninput="window.updateEventPaymentBothTotal()">
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Note / Reference</label>
+      <input class="form-input" id="m-evt-pay-note" placeholder="e.g. Final payment, GPay transaction ID">
+    </div>
+  `, async () => {
+    const amtVal = parseInt(document.getElementById('m-evt-pay-amount').value) || 0;
+    if (amtVal <= 0) { showToast('Please enter a valid amount', 'error'); return; }
+    if (amtVal > pending) { showToast('Amount cannot exceed outstanding balance', 'error'); return; }
+
+    const dateVal = document.getElementById('m-evt-pay-date').value || today;
+    const methodVal = document.getElementById('m-evt-pay-method').value;
+    const notePrefix = document.getElementById('m-evt-pay-note').value.trim() || 'Payment';
+    let noteVal = notePrefix;
+
+    if (methodVal === 'Both') {
+      const cashPortion = parseInt(document.getElementById('m-evt-pay-both-cash').value) || 0;
+      const gpayPortion = parseInt(document.getElementById('m-evt-pay-both-gpay').value) || 0;
+      if (cashPortion <= 0 || gpayPortion <= 0) {
+        showToast('Please enter both Cash and GPay portion amounts', 'error');
+        return;
+      }
+      if (cashPortion + gpayPortion !== amtVal) {
+        showToast(`Sum of Cash (₹${cashPortion}) & GPay (₹${gpayPortion}) must equal payment amount (₹${amtVal})`, 'error');
+        return;
+      }
+      noteVal = `${notePrefix} (Cash: ₹${cashPortion}, GPay: ₹${gpayPortion})`;
+    }
+
+    const nextAdvance = (event.advance || 0) + amtVal;
+    const nextPending = Math.max(0, (event.total || 0) - nextAdvance);
+    const nextStatus = nextAdvance >= (event.total || 0) ? 'Completed' : 'Booked';
+
+    const success = await updateEvent(eventId, {
+      ...event,
+      advance: nextAdvance,
+      pending: nextPending,
+      status: nextStatus
+    });
+
+    if (success) {
+      closeModal();
+      showToast('Payment recorded successfully!');
+      if (typeof window.render === 'function') window.render();
+      
+      // Prompt for invoice WhatsApp message
+      if (event.phone) {
+        setTimeout(() => {
+          promptEventWhatsAppBill({
+            ...event,
+            advance: nextAdvance,
+            pending: nextPending,
+            status: nextStatus
+          });
+        }, 500);
+      }
+    }
+  });
+}
+
+export function handleEventPaymentMethodChange(selectEl) {
+  const container = document.getElementById('m-evt-pay-both-container');
+  const amountInput = document.getElementById('m-evt-pay-amount');
+  if (!container || !amountInput) return;
+
+  if (selectEl.value === 'Both') {
+    container.style.display = 'block';
+    amountInput.readOnly = true;
+
+    const currentVal = parseInt(amountInput.value) || 0;
+    const half = Math.round(currentVal / 2);
+    const cashEl = document.getElementById('m-evt-pay-both-cash');
+    const gpayEl = document.getElementById('m-evt-pay-both-gpay');
+    if (cashEl) cashEl.value = half;
+    if (gpayEl) gpayEl.value = currentVal - half;
+  } else {
+    container.style.display = 'none';
+    amountInput.readOnly = false;
+  }
+}
+
+export function updateEventPaymentBothTotal() {
+  const cash = parseInt(document.getElementById('m-evt-pay-both-cash').value) || 0;
+  const gpay = parseInt(document.getElementById('m-evt-pay-both-gpay').value) || 0;
+  const amountInput = document.getElementById('m-evt-pay-amount');
+  if (amountInput) {
+    amountInput.value = cash + gpay;
+  }
+}
+
 // Bind to window to allow HTML inline click handlers to execute
 window.openEventCustomerForm = openEventCustomerForm;
 window.submitEventCustomerForm = submitEventCustomerForm;
@@ -1253,6 +1391,9 @@ window.removeEventAddonRow = removeEventAddonRow;
 window.updateEventTotalDisplay = updateEventTotalDisplay;
 window.makeupTypeChipToggle = makeupTypeChipToggle;
 window.removeMakeupRow = removeMakeupRow;
+window.openEventCollectPaymentModal = openEventCollectPaymentModal;
+window.handleEventPaymentMethodChange = handleEventPaymentMethodChange;
+window.updateEventPaymentBothTotal = updateEventPaymentBothTotal;
 window.promptEventWhatsAppBill = promptEventWhatsAppBill;
 window.promptEventWhatsAppBillFromId = promptEventWhatsAppBillFromId;
 window.eventMiscChipToggle = eventMiscChipToggle;

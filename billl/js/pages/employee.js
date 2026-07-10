@@ -377,7 +377,7 @@ export function renderEmployeePage() {
       <button class="employee-action-btn ea-expense-single" onclick="window.showAddExpenseModal()" id="emp-add-expense-btn">
         <div class="ea-icon"><i class="ti ti-receipt"></i></div>
         <div class="ea-content">
-          <div class="ea-title">Add Expense</div>
+          <div class="ea-title">Add General Expense</div>
           <div class="ea-sub">Rent, salary, products, utilities &amp; method</div>
         </div>
         <i class="ti ti-chevron-right ea-arrow"></i>

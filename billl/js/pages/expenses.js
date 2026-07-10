@@ -5,14 +5,7 @@ import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete }
 import { callGroqAPI } from '../api.js';
 
 export async function renderExpenses() {
-  const allExpenses = await fetchExpenses();
-  const isProductPage = state.currentPage === 'product-expenses';
-
-  // Filter based on page type: Products vs General (everything else)
-  const expenses = isProductPage 
-    ? allExpenses.filter(e => e.category === 'Products')
-    : allExpenses.filter(e => e.category !== 'Products');
-
+  const expenses = await fetchExpenses();
   const total = expenses.reduce((s,e)=>s+(e.amount||0),0);
   const cats = {};
   expenses.forEach(e=>{ cats[e.category]=(cats[e.category]||0)+(e.amount||0); });
@@ -22,10 +15,10 @@ export async function renderExpenses() {
   const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
   const currentMonthStr = `${currentYear}-${currentMonth}`; // "YYYY-MM"
 
-  // For calculating cash/gpay remaining balance, ALWAYS use all expenses (entire shop)
-  const allCurrentMonthExpenses = allExpenses.filter(e => (e.date || '').startsWith(currentMonthStr));
-  const cashSpent = allCurrentMonthExpenses.filter(e => e.payment_method === 'Cash' || !e.payment_method).reduce((sum, e) => sum + (e.amount || 0), 0);
-  const gpaySpent = allCurrentMonthExpenses.filter(e => e.payment_method === 'GPay').reduce((sum, e) => sum + (e.amount || 0), 0);
+  // Filter expenses for this month
+  const currentMonthExpenses = expenses.filter(e => (e.date || '').startsWith(currentMonthStr));
+  const cashSpent = currentMonthExpenses.filter(e => e.payment_method === 'Cash' || !e.payment_method).reduce((sum, e) => sum + (e.amount || 0), 0);
+  const gpaySpent = currentMonthExpenses.filter(e => e.payment_method === 'GPay').reduce((sum, e) => sum + (e.amount || 0), 0);
 
   // Fetch starting balances
   const balances = await fetchMonthlyBalances();
@@ -57,27 +50,21 @@ export async function renderExpenses() {
     </div>
   ` : '';
 
-  const titleText = isProductPage ? 'Product Expenses' : 'General Expenses';
-  const subtitleText = isProductPage 
-    ? 'Track salon product purchases, makeup kits, accessories, and supplier spends'
-    : 'Track salon overheads, rent, staff salaries, bills, and utilities';
-
-  const actionButtonsHtml = isProductPage
-    ? `<button class="btn btn-gold" onclick="window.openProductExpenseForm()"><i class="ti ti-plus"></i> Add Product Expense</button>`
-    : `<button class="btn btn-outline" onclick="window.openBulkExpenseForm()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;border:none;"><i class="ti ti-receipt-2"></i> Bulk Expense</button>
-       <button class="btn btn-gold" onclick="window.showAddExpenseModal()"><i class="ti ti-plus"></i> Add General Expense</button>`;
-
   return `
   <div class="top-bar">
     <div>
-      <h2>${titleText}</h2>
-      <p style="font-size:12px;color:#999;margin-top:2px">${subtitleText}</p>
+      <h2>Expense Management</h2>
+      <p style="font-size:12px;color:#999;margin-top:2px">Track salon overheads, products, utility bills, and remaining Cash / GPay balances</p>
     </div>
     <div style="display:flex; gap:10px; flex-wrap: wrap;">
       <button class="btn btn-outline" onclick="window.showStartingBalanceModal('${currentMonthStr}', ${cashStarting}, ${gpayStarting})">
         <i class="ti ti-wallet" style="color:#d97706"></i> Set Starting Balance
       </button>
-      ${actionButtonsHtml}
+      <button class="btn btn-outline" onclick="window.analyzeExpenses()">
+        <i class="ti ti-chart-bar" style="color:#d97706"></i> AI Analysis
+      </button>
+      <button class="btn btn-outline" onclick="window.openBulkExpenseForm()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;border:none;"><i class="ti ti-receipt-2"></i> Bulk Expense</button>
+      <button class="btn btn-gold" onclick="window.showAddExpenseModal()"><i class="ti ti-plus"></i> Add Expense</button>
     </div>
   </div>
 
@@ -106,7 +93,7 @@ export async function renderExpenses() {
 
   <div class="card" style="margin-bottom:16px;padding:20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:0">${isProductPage ? 'All Product Expenses' : 'All General Expenses'} (All Time)</div>
+      <div class="section-title" style="margin-bottom:0">All Expenses (All Time)</div>
       <div style="font-size:22px;font-weight:700;color:#dc2626">₹${total.toLocaleString()}</div>
     </div>
     ${Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
@@ -145,7 +132,7 @@ export async function renderExpenses() {
 }
 
 export function showAddExpenseModal() {
-  showModal('Add General Expense', `
+  showModal('Add Expense', `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group">
         <label class="form-label">Category *</label>
@@ -173,20 +160,18 @@ export function showAddExpenseModal() {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Expense Name *</label>
-      <input class="form-input" id="m-exp-note" placeholder="e.g. July Rent, Electric Bill, Staff Salary...">
+      <label class="form-label">Note</label>
+      <input class="form-input" id="m-exp-note" placeholder="Description...">
     </div>
   `, async () => {
     const amount = parseInt(document.getElementById('m-exp-amount').value);
     if(!amount) { showToast('Please enter amount','error'); return; }
-    const name = document.getElementById('m-exp-note').value.trim();
-    if(!name) { showToast('Please enter expense name','error'); return; }
     await addExpense({
       category: document.getElementById('m-exp-category').value,
       amount,
       date: document.getElementById('m-exp-date').value || new Date().toISOString().split('T')[0],
       payment_method: document.getElementById('m-exp-payment-method').value,
-      note: name
+      note: document.getElementById('m-exp-note').value.trim() || document.getElementById('m-exp-category').value
     });
     closeModal();
     if (typeof window.render === 'function') window.render();

@@ -66,7 +66,6 @@ export function showPage(page) {
     window._eventSearchQuery = '';
     window._eventMonthFilterExpanded = false;
     window._eventSearchFieldExpanded = false;
-    window._eventStatusFilter = 'all';
   }
   if (page === 'students') {
     window._studentSearchQuery = '';
@@ -126,7 +125,6 @@ export async function render() {
         main.innerHTML = loadingHtml();
         main.innerHTML = await renderEvents();
         break;
-      case 'product-expenses':
       case 'expenses':
         main.innerHTML = loadingHtml();
         main.innerHTML = await renderExpenses();

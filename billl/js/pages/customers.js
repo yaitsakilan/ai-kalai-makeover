@@ -49,9 +49,6 @@ export async function renderCustomers() {
   <div class="top-bar">
     <h2>Customer Management</h2>
     <div style="display:flex; gap:10px;">
-      <button class="btn btn-outline" onclick="window.analyzeShopCustomers()">
-        <i class="ti ti-chart-bar" style="color:#d97706"></i> AI Analysis
-      </button>
       <button class="btn btn-outline btn-icon" onclick="window.toggleSearchField()" id="toggle-search-btn" style="${activeSearchBtnStyle}" title="Search Customers">
         <i class="ti ti-search" style="color:#d97706"></i>
       </button>

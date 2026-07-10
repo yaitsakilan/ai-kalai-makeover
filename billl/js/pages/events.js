@@ -13,6 +13,7 @@ export async function renderEvents() {
   if (window._eventSearchQuery === undefined) window._eventSearchQuery = '';
   if (window._eventMonthFilterExpanded === undefined) window._eventMonthFilterExpanded = false;
   if (window._eventSearchFieldExpanded === undefined) window._eventSearchFieldExpanded = false;
+  if (window._eventStatusFilter === undefined) window._eventStatusFilter = 'all';
 
   const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -38,6 +39,9 @@ export async function renderEvents() {
       return m === window._selectedEventMonth;
     });
   }
+  if (window._eventStatusFilter !== 'all') {
+    filtered = filtered.filter(e => e.status === window._eventStatusFilter);
+  }
 
   const activeBtnStyle = window._eventMonthFilterExpanded
     ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
@@ -51,9 +55,6 @@ export async function renderEvents() {
   <div class="top-bar">
     <h2>Event Bookings</h2>
     <div style="display:flex; gap:10px;">
-      <button class="btn btn-outline" onclick="window.analyzeEvents()">
-        <i class="ti ti-chart-bar" style="color:#d97706"></i> AI Analysis
-      </button>
       <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Events">
         <i class="ti ti-search" style="color:#d97706"></i>
       </button>
@@ -66,6 +67,14 @@ export async function renderEvents() {
 
   <div id="event-metrics-container">
     ${renderEventMetrics(filtered)}
+  </div>
+
+  <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+    <div class="card" style="padding: 6px 12px; display:flex; gap:8px;">
+      <span class="chip ${window._eventStatusFilter === 'all' ? 'selected' : ''}" onclick="window.filterEventsStatus('all')" style="padding: 4px 10px; font-size:11px;">All</span>
+      <span class="chip ${window._eventStatusFilter === 'Completed' ? 'selected' : ''}" onclick="window.filterEventsStatus('Completed')" style="padding: 4px 10px; font-size:11px;">Completed</span>
+      <span class="chip ${window._eventStatusFilter === 'Booked' ? 'selected' : ''}" onclick="window.filterEventsStatus('Booked')" style="padding: 4px 10px; font-size:11px;">Pending</span>
+    </div>
   </div>
 
   <div class="card" id="event-search-card" style="margin-bottom:16px; display: ${window._eventSearchFieldExpanded ? 'block' : 'none'};">
@@ -140,6 +149,10 @@ export function applyEventFilters() {
       const m = parseInt(parts[1], 10) - 1;
       return m === window._selectedEventMonth;
     });
+  }
+
+  if (window._eventStatusFilter !== undefined && window._eventStatusFilter !== 'all') {
+    events = events.filter(e => e.status === window._eventStatusFilter);
   }
 
   // Update List HTML
@@ -297,13 +310,36 @@ export function renderEventList(events) {
         <div><div style="color:#999;margin-bottom:2px">Pending</div><div style="font-weight:500;color:${(e.pending||0)>0?'#dc2626':'#15803d'}">₹${(e.pending||0).toLocaleString()}</div></div>
       </div>
       ${addonsHtml}
+      ${(() => {
+        // Staff wages badges
+        let staffWagesHtml = '';
+        if (e.staff_wages) {
+          try {
+            const wages = typeof e.staff_wages === 'string' ? JSON.parse(e.staff_wages) : e.staff_wages;
+            if (Array.isArray(wages) && wages.length > 0) {
+              staffWagesHtml = `
+                <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                  <span style="font-size:10px; font-weight:600; color:#dc2626; text-transform:uppercase; letter-spacing:0.05em;"><i class="ti ti-users" style="font-size:11px;"></i> Staff Wages (My Expense):</span>
+                  ${wages.map(w => `<span style="font-size:10px; font-weight:500; color:#dc2626; background:#fff5f5; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center; border: 0.5px solid #fca5a5; gap: 4px;"><i class="ti ti-user-dollar" style="font-size:11px;"></i>${w.name}: ₹${(w.amount||0).toLocaleString()}</span>`).join('')}
+                </div>
+              `;
+            }
+          } catch(err) {}
+        }
+        return staffWagesHtml;
+      })()}
       <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
         <div style="flex:1; margin-right:12px;">
           <div style="font-size:11px;color:#bbb;margin-bottom:4px">Payment Progress</div>
           <div style="background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden">
             <div style="height:6px;border-radius:4px;background:#f5c842;width:${e.total?Math.round(((e.advance||0)/e.total)*100):0}%"></div>
           </div>
-          <div style="font-size:11px;color:#888;margin-top:3px">Advance ₹${(e.advance||0).toLocaleString()} / ₹${(e.total||0).toLocaleString()} (${e.total?Math.round(((e.advance||0)/e.total)*100):0}%)</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+            <div style="font-size:11px;color:#888">Advance ₹${(e.advance||0).toLocaleString()} / ₹${(e.total||0).toLocaleString()} (${e.total?Math.round(((e.advance||0)/e.total)*100):0}%)</div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              ${(e.travel_allowance > 0) ? `<span style="font-size:10px; color:#d97706; cursor:pointer; display:flex; align-items:center; gap:3px;" onclick="window.quickEditTransport('${e.id}')" title="Edit transport cost"><i class="ti ti-car" style="font-size:11px;"></i>Transport: ₹${(e.travel_allowance||0).toLocaleString()} <i class="ti ti-pencil" style="font-size:10px;"></i></span>` : ''}
+            </div>
+          </div>
         </div>
         ${(e.pending || 0) > 0 ? `
           <button class="btn btn-gold" onclick="window.openEventCollectPaymentModal('${e.id}')" style="padding: 6px 12px; font-size: 11px; height: 32px; white-space: nowrap; border-radius: 8px;">
@@ -443,6 +479,7 @@ Guidelines:
   * Total Revenue: ₹${totalRevenue.toLocaleString('en-IN')}
   * Total Advance Collected: ₹${totalAdvance.toLocaleString('en-IN')}
   * Total Pending Amount: ₹${totalPending.toLocaleString('en-IN')}
+  * Total Staff Wages Paid (your expense): ₹${events.reduce((s, e) => { try { const w = typeof e.staff_wages === 'string' ? JSON.parse(e.staff_wages||'[]') : (e.staff_wages||[]); return s + (Array.isArray(w) ? w.reduce((a,b)=>a+(b.amount||0),0) : 0); } catch(err){ return s; } }, 0).toLocaleString('en-IN')}
   Do NOT calculate or estimate these metrics yourself; use the exact values above.
 
 The HTML should contain:
@@ -454,18 +491,28 @@ Make it concise, insightful, and formatted beautifully.`
         },
         {
           role: 'user',
-          content: `Here is the event booking data in JSON format: ${JSON.stringify(events.map(e => ({
-            customer: e.customer,
-            type: e.type,
-            date: e.date,
-            total: e.total,
-            advance: e.advance,
-            pending: e.pending,
-            status: e.status,
-            location: e.location,
-            makeup_type: e.makeup_type,
-            rating: e.rating
-          })))}`
+          content: `Here is the event booking data in JSON format: ${JSON.stringify(events.map(e => {
+            let staffWagesData = [];
+            try {
+              if (e.staff_wages) staffWagesData = typeof e.staff_wages === 'string' ? JSON.parse(e.staff_wages) : e.staff_wages;
+            } catch(err) {}
+            const totalStaffWages = staffWagesData.reduce((s, w) => s + (w.amount || 0), 0);
+            return {
+              customer: e.customer,
+              type: e.type,
+              date: e.date,
+              total: e.total,
+              advance: e.advance,
+              pending: e.pending,
+              status: e.status,
+              location: e.location,
+              makeup_type: e.makeup_type,
+              rating: e.rating,
+              transport_cost: e.travel_allowance || 0,
+              staff_wages_paid: totalStaffWages,
+              staff_details: staffWagesData
+            };
+          }))}`
         }
       ],
       temperature: 0.2
@@ -643,6 +690,17 @@ export function openEventCustomerForm(eventId = null) {
           </div>
  
           <div class="form-section-title">
+            <i class="ti ti-users" style="color:#dc2626"></i> <span style="color:#dc2626">Staff Wages</span>
+            <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">My expense — not charged to customer</span>
+          </div>
+          <div class="form-group" id="ef-staff-wages-container">
+            <div id="ef-staff-wages-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px;"></div>
+            <button type="button" class="btn btn-outline" onclick="window.addStaffWageRow()" style="font-size:11px; height:30px; padding:0 12px; border-style:dashed; color:#dc2626; border-color:#fca5a5; display:flex; align-items:center; gap:6px; width:fit-content;">
+              <i class="ti ti-plus" style="font-size:12px"></i> Add Staff Member
+            </button>
+          </div>
+ 
+          <div class="form-section-title">
             <i class="ti ti-currency-rupee"></i> Payment Details
           </div>
           <div class="form-group">
@@ -784,6 +842,16 @@ export function openEventCustomerForm(eventId = null) {
           window.eventMiscChipToggle(transportMatch, 'transport', event.travel_allowance);
         }
       }
+
+      // Pre-fill staff wages
+      if (event.staff_wages) {
+        try {
+          const wages = typeof event.staff_wages === 'string' ? JSON.parse(event.staff_wages) : event.staff_wages;
+          if (Array.isArray(wages) && wages.length > 0) {
+            wages.forEach(w => window.addStaffWageRow(w.name, w.amount));
+          }
+        } catch(e) {}
+      }
     }
     window._initializingForm = false;
     if (typeof window.updateEventTotalDisplay === 'function') window.updateEventTotalDisplay();
@@ -885,6 +953,16 @@ export async function submitEventCustomerForm(eventId = null) {
     travelAllowance += parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
   });
 
+  // Parse staff wages (my expense)
+  const staffWages = [];
+  document.querySelectorAll('#ef-staff-wages-list .ef-staff-wage-row').forEach(r => {
+    const nameVal = r.querySelector('.ef-staff-name-input')?.value.trim();
+    const amtVal = parseInt(r.querySelector('.ef-staff-amount-input')?.value) || 0;
+    if (nameVal && amtVal > 0) {
+      staffWages.push({ name: nameVal, amount: amtVal });
+    }
+  });
+
   const grandTotal = total + addonTotal + travelAllowance;
 
   // Add meta entries for multiple functions and makeups to addons
@@ -908,6 +986,7 @@ export async function submitEventCustomerForm(eventId = null) {
         makeup_type: makeupType,
         additional_makeup: JSON.stringify(addons),
         travel_allowance: travelAllowance,
+        staff_wages: staffWages.length > 0 ? JSON.stringify(staffWages) : null,
         referred_by: referredBy || null
       })
     : await addEvent({
@@ -923,6 +1002,7 @@ export async function submitEventCustomerForm(eventId = null) {
         makeup_type: makeupType,
         additional_makeup: JSON.stringify(addons),
         travel_allowance: travelAllowance,
+        staff_wages: staffWages.length > 0 ? JSON.stringify(staffWages) : null,
         rating: 5,
         referred_by: referredBy || null,
         created_at: new Date().toISOString()
@@ -1398,6 +1478,15 @@ window.promptEventWhatsAppBill = promptEventWhatsAppBill;
 window.promptEventWhatsAppBillFromId = promptEventWhatsAppBillFromId;
 window.eventMiscChipToggle = eventMiscChipToggle;
 window.removeMiscRow = removeMiscRow;
+window.addStaffWageRow = addStaffWageRow;
+window.removeStaffWageRow = removeStaffWageRow;
+window.quickEditTransport = quickEditTransport;
+window.filterEventsStatus = filterEventsStatus;
+
+export function filterEventsStatus(status) {
+  window._eventStatusFilter = status;
+  if (typeof window.render === 'function') window.render();
+}
 
 export function eventMiscChipToggle(chipEl, type, defaultAmount) {
   const name = chipEl.textContent.trim();
@@ -1438,6 +1527,78 @@ export function removeMiscRow(rowId, name) {
   chips.forEach(c => { if (c.textContent.trim() === name) c.classList.remove('selected'); });
 
   updateEventTotalDisplay();
+}
+
+// ─── Staff Wages ──────────────────────────────────────────────────────────────
+
+export function addStaffWageRow(defaultName = '', defaultAmount = 500) {
+  const list = document.getElementById('ef-staff-wages-list');
+  if (!list) return;
+
+  const rowId = 'ef-staff-wage-row-' + Date.now();
+  const row = document.createElement('div');
+  row.className = 'service-amount-row ef-staff-wage-row';
+  row.id = rowId;
+  row.style.cssText = 'background:#fff5f5; border: 1px solid #fca5a5; border-radius:8px; padding:8px 10px;';
+  row.innerHTML = `
+    <div class="sa-name" style="color:#dc2626">
+      <i class="ti ti-user" style="color:#dc2626"></i>
+      <input type="text" class="sa-name-input ef-staff-name-input" value="${defaultName}" placeholder="Staff name" style="color:#1a1a1a;">
+    </div>
+    <span style="font-size:12px;color:#dc2626">₹</span>
+    <input type="number" class="ef-staff-amount-input" value="${defaultAmount}" placeholder="Amount" style="width:80px; padding:4px 6px; font-size:12px; height:32px; border:1px solid #fca5a5; border-radius:6px;">
+    <div class="sa-remove" onclick="window.removeStaffWageRow('${rowId}')" title="Remove" style="color:#dc2626">
+      <i class="ti ti-x" style="font-size:14px"></i>
+    </div>
+  `;
+  list.appendChild(row);
+}
+
+export function removeStaffWageRow(rowId) {
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
+}
+
+// ─── Quick Edit Transport ─────────────────────────────────────────────────────
+
+export function quickEditTransport(eventId) {
+  const event = (window._cachedEvents || []).find(e => e.id === eventId);
+  if (!event) return;
+
+  const { showModal, closeModal } = window._uiHelpers || {};
+  import('../ui.js').then(({ showModal, closeModal }) => {
+    showModal('Edit Transport Cost', `
+      <div style="font-size:13px; color:#555; margin-bottom:14px;">
+        Update transport cost for <strong>${event.customer}</strong> (${event.type}).
+      </div>
+      <div class="form-group">
+        <label class="form-label">Transport Amount (₹)</label>
+        <input class="form-input" id="m-transport-amount" type="number" value="${event.travel_allowance || 0}" placeholder="e.g. 500">
+      </div>
+    `, async () => {
+      const newTransport = parseInt(document.getElementById('m-transport-amount').value) || 0;
+      const oldTransport = event.travel_allowance || 0;
+      const diff = newTransport - oldTransport;
+      const newTotal = (event.total || 0) + diff;
+      const newPending = Math.max(0, newTotal - (event.advance || 0));
+
+      const { updateEvent } = await import('../db.js');
+      const { showToast } = await import('../ui.js');
+      const success = await updateEvent(eventId, {
+        ...event,
+        travel_allowance: newTransport,
+        total: newTotal,
+        pending: newPending,
+        status: (event.advance || 0) >= newTotal ? 'Completed' : event.status
+      });
+
+      if (success) {
+        closeModal();
+        showToast('Transport cost updated!');
+        if (typeof window.render === 'function') window.render();
+      }
+    });
+  });
 }
 
 export function promptEventWhatsAppBill(event) {

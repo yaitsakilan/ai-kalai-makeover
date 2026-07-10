@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS events (
   makeup_type TEXT,
   additional_makeup JSONB DEFAULT '[]',
   travel_allowance INTEGER DEFAULT 0,
+  staff_wages JSONB DEFAULT '[]',      -- Array of {name, amount} - wages paid to staff (owner's expense)
   review TEXT,
   rating INTEGER DEFAULT 5,
   referred_by TEXT,
@@ -238,6 +239,7 @@ CREATE TABLE IF NOT EXISTS monthly_balances (
 
 -- For existing database migration:
 -- ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'Cash';
+-- ALTER TABLE events ADD COLUMN IF NOT EXISTS staff_wages JSONB DEFAULT '[]';
 
 ALTER TABLE monthly_balances ENABLE ROW LEVEL SECURITY;
 

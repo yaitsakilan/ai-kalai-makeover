@@ -9,7 +9,7 @@ import {
   deleteClassPayment 
 } from '../db.js';
 import { showToast, showModal, closeModal, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone } from '../utils.js';
+import { validateAndCleanPhone, formatEmpTag } from '../utils.js';
 
 export async function renderStudents() {
   const students = await fetchClassEnrollments();
@@ -119,11 +119,16 @@ function renderStudentsCards(students) {
     if (s.status === 'Completed') statusClass = 'badge-green';
     if (s.status === 'Dropped') statusClass = 'badge-red';
 
+    const { cleanText: cleanName, tagHtml: empBadge } = formatEmpTag(s.name);
+
     return `
     <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; position:relative; min-height: 220px; transition: transform 0.2s, box-shadow 0.2s;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
         <div>
-          <h3 style="font-size:15px; font-weight:600; color:#1a1a1a; margin-bottom:3px;">${s.name}</h3>
+          <h3 style="font-size:15px; font-weight:600; color:#1a1a1a; margin-bottom:3px; display:inline-flex; align-items:center;">
+            ${cleanName}
+            ${empBadge}
+          </h3>
           <div style="font-size:11px; color:#666; display:flex; align-items:center; gap:4px; margin-bottom:4px;">
             <i class="ti ti-phone" style="font-size:12px;"></i> ${s.phone || 'No phone'}
             ${s.location ? `· <i class="ti ti-map-pin" style="font-size:12px;"></i> ${s.location}` : ''}

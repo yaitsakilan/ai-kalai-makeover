@@ -11,6 +11,7 @@ import { renderOCR } from './pages/ocr.js';
 import { renderEmployeePage, renderRoleSelector, applyRoleLayout, enterRole, openSwitchModal } from './pages/employee.js';
 import { renderStudents } from './pages/students.js';
 import { renderJewels } from './pages/jewels.js';
+import { renderEmployees } from './pages/employees.js';
 
 export function toggleSidebar() {
   const app = document.getElementById('app');
@@ -98,7 +99,7 @@ export async function render() {
 
   // Employee mode: always show employee page
   if (state.userRole === 'employee') {
-    main.innerHTML = renderEmployeePage();
+    main.innerHTML = await renderEmployeePage();
     return;
   }
 
@@ -147,6 +148,10 @@ export async function render() {
       case 'jewels':
         main.innerHTML = loadingHtml();
         main.innerHTML = await renderJewels();
+        break;
+      case 'employees':
+        main.innerHTML = loadingHtml();
+        main.innerHTML = await renderEmployees();
         break;
     }
   } catch(err) {

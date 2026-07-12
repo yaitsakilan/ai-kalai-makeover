@@ -3,6 +3,7 @@ import { state } from '../state.js';
 import { fetchExpenses, addExpense, deleteExpense, fetchMonthlyBalances, saveMonthlyBalance } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { callGroqAPI } from '../api.js';
+import { formatEmpTag } from '../utils.js';
 
 export async function renderExpenses() {
   const allExpenses = await fetchExpenses();
@@ -41,7 +42,7 @@ export async function renderExpenses() {
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const currentMonthName = `${monthNames[now.getMonth()]} ${currentYear}`;
   const hasBalances = currentBalance.cash_balance !== undefined || currentBalance.gpay_balance !== undefined;
-  const showBanner = !hasBalances || (cashStarting === 0 && gpayStarting === 0);
+  const showBanner = !isProductPage && (!hasBalances || (cashStarting === 0 && gpayStarting === 0));
 
   const bannerHtml = showBanner ? `
     <div class="preview-box" style="margin-bottom:16px; border-color:#f59e0b; background:#fffbeb; padding: 14px 18px; border-radius: 12px;" id="starting-balance-banner">
@@ -74,15 +75,18 @@ export async function renderExpenses() {
       <p style="font-size:12px;color:#999;margin-top:2px">${subtitleText}</p>
     </div>
     <div style="display:flex; gap:10px; flex-wrap: wrap;">
+      ${!isProductPage ? `
       <button class="btn btn-outline" onclick="window.showStartingBalanceModal('${currentMonthStr}', ${cashStarting}, ${gpayStarting})">
         <i class="ti ti-wallet" style="color:#d97706"></i> Set Starting Balance
       </button>
+      ` : ''}
       ${actionButtonsHtml}
     </div>
   </div>
 
   ${bannerHtml}
 
+  ${!isProductPage ? `
   <div class="metric-grid" style="margin-bottom: 20px;">
     <div class="metric-card mc-orange">
       <div class="metric-label">Cash in Hand Balance</div>
@@ -103,6 +107,7 @@ export async function renderExpenses() {
       <div class="metric-icon"><i class="ti ti-cash"></i></div>
     </div>
   </div>
+  ` : ''}
 
   <div class="card" style="margin-bottom:16px;padding:20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -129,10 +134,12 @@ export async function renderExpenses() {
   </div>
   <div class="card">
     <div class="section-title">Transaction History</div>
-    ${expenses.map(e=>`
+    ${expenses.map(e=>{
+      const { cleanText: cleanNote, tagHtml: empBadge } = formatEmpTag(e.note || e.category);
+      return `
       <div class="expense-row">
         <div style="flex:1">
-          <div style="font-size:13px;font-weight:500">${e.note||e.category}</div>
+          <div style="font-size:13px;font-weight:500">${cleanNote} ${empBadge}</div>
           <div style="font-size:11px;color:#bbb">${e.category} · ${e.date} · <span style="color:#b45309;font-weight:500;background:#fffbeb;padding:2px 6px;border-radius:4px;font-size:10px">${e.payment_method || 'Cash'}</span></div>
         </div>
         <div style="font-size:14px;font-weight:600;color:#dc2626;margin-right:12px">-₹${(e.amount||0).toLocaleString()}</div>
@@ -140,7 +147,7 @@ export async function renderExpenses() {
           <i class="ti ti-trash" style="font-size:15px"></i>
         </div>
       </div>
-    `).join('')}
+    `; }).join('')}
   </div>`;
 }
 

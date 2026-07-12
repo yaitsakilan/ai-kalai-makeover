@@ -37,3 +37,17 @@ export function getSelectedChips(groupId) {
   }
   return selected.join(', ');
 }
+
+export function formatEmpTag(text) {
+  if (!text) return { cleanText: '', tagHtml: '' };
+  const match = text.match(/\[Emp(?::\s*([^\]]+))?\]/i);
+  const cleanText = text.replace(/\s*\[Emp(?::\s*([^\]]+))?\]/gi, '').trim();
+  let tagHtml = '';
+  if (match) {
+    const empName = match[1] ? match[1].trim() : '';
+    const titleText = empName ? `Added by Employee: ${empName}` : 'Added by Employee';
+    const labelText = empName ? `Emp: ${empName}` : 'Emp';
+    tagHtml = `<span class="badge-emp" style="display:inline-flex; align-items:center; gap:2px; font-size:9px; font-weight:600; background:#f3e8ff; color:#7e22ce; border: 0.5px solid #d8b4fe; padding:1.5px 5px; border-radius:4px; margin-left:6px; vertical-align:middle; line-height:1.2;" title="${titleText}"><i class="ti ti-user-check" style="font-size:10px"></i> ${labelText}</span>`;
+  }
+  return { cleanText, tagHtml };
+}

@@ -11,7 +11,7 @@ import {
   deleteJewelRental 
 } from '../db.js';
 import { showToast, showModal, closeModal, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone } from '../utils.js';
+import { validateAndCleanPhone, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 
 export async function renderJewels() {
@@ -132,13 +132,18 @@ function renderJewelCards(jewels) {
       </div>
     `;
 
+    const { cleanText: cleanName, tagHtml: empBadge } = formatEmpTag(j.name);
+
     return `
     <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; min-height: 350px; transition: transform 0.2s, box-shadow 0.2s;">
       <div>
         ${imageHtml}
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
           <div>
-            <h3 style="font-size:14px; font-weight:600; color:#1a1a1a; margin-bottom:2px;">${j.name}</h3>
+            <h3 style="font-size:14px; font-weight:600; color:#1a1a1a; margin-bottom:2px; display:inline-flex; align-items:center;">
+              ${cleanName}
+              ${empBadge}
+            </h3>
             <span style="font-size:10px; padding: 2px 6px; background:#f3f4f6; border-radius:12px; font-weight:500; color:#4b5563;">${j.type || 'Jewel'}</span>
             <div style="font-size:10.5px; color:#999; margin-top:6px;">Bought: ${j.purchase_date} · Cost: ₹${cost.toLocaleString('en-IN')}</div>
           </div>

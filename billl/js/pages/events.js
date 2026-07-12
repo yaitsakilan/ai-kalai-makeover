@@ -2,7 +2,7 @@
 import { state } from '../state.js';
 import { fetchEvents, addEvent, deleteEvent, updateEvent } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone, getSelectedChips } from '../utils.js';
+import { validateAndCleanPhone, getSelectedChips, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 
 export async function renderEvents() {
@@ -270,12 +270,15 @@ export function renderEventList(events) {
       } catch(err) {}
     }
     
+    const { cleanText: cleanCustomer, tagHtml: empBadge } = formatEmpTag(e.customer);
+
     return `
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
           <div style="font-size:15px;font-weight:600">
-            ${e.customer}
+            ${cleanCustomer}
+            ${empBadge}
             ${e.rating ? `<span style="color:#d97706;font-size:11px;margin-left:6px;letter-spacing:1px;" title="Owner rating: ${e.rating}/5">${'★'.repeat(e.rating)}${'☆'.repeat(5-e.rating)}</span>` : ''}
           </div>
           <div style="font-size:12px;color:#888">

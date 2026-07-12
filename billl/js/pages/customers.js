@@ -2,7 +2,7 @@
 import { state } from '../state.js';
 import { fetchCustomers, addCustomer, deleteCustomer, addClassEnrollment, addClassPayment } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone } from '../utils.js';
+import { validateAndCleanPhone, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 
 export async function renderCustomers() {
@@ -219,13 +219,17 @@ export function toggleSearchField() {
 export function renderCustomerList(customers) {
   if (!customers.length) return '<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No customers found</div>';
   const colors = ['av-gold', 'av-teal', 'av-rose', 'av-purple'];
-  return customers.map((c, i) => `
+  return customers.map((c, i) => {
+    const { cleanText: cleanName, tagHtml: empBadge } = formatEmpTag(c.name);
+    const initials = cleanName.split(' ').map(n => n[0]).join('').slice(0, 2);
+    return `
     <div class="card" style="margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:14px">
-        <div class="avatar ${colors[i % 4]}" style="width:44px;height:44px;font-size:15px">${(c.name || '').split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
+        <div class="avatar ${colors[i % 4]}" style="width:44px;height:44px;font-size:15px">${initials}</div>
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
-            <span style="font-size:14px;font-weight:600">${c.name}</span>
+            <span style="font-size:14px;font-weight:600">${cleanName}</span>
+            ${empBadge}
             ${(c.visits || 0) >= 5 ? '<span class="badge badge-blue">⭐ Regular</span>' : ''}
             ${c.rating ? `<span style="color:#d97706;font-size:11px;margin-left:6px;letter-spacing:1px;" title="Owner rating: ${c.rating}/5">${'★'.repeat(c.rating)}${'☆'.repeat(5 - c.rating)}</span>` : ''}
             ${c.referred_by ? `<span class="badge badge-amber" title="Referred by: ${c.referred_by}">📢 Ref: ${c.referred_by}</span>` : ''}
@@ -247,7 +251,7 @@ export function renderCustomerList(customers) {
         </div>
       </div>
     </div>
-  `).join('');
+  `; }).join('');
 }
 export function showAddCustomerModal() {
   showModal('Add New Customer', `

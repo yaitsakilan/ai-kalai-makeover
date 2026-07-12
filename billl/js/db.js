@@ -2,6 +2,19 @@
 import { showToast } from './ui.js';
 import { state } from './state.js';
 
+function getEmployeeSuffix() {
+  if (state && state.userRole === 'employee') {
+    if (window._selectedPortalEmployeeId && window._cachedEmployees) {
+      const emp = window._cachedEmployees.find(e => e.id === window._selectedPortalEmployeeId);
+      if (emp && emp.name) {
+        return ` [Emp: ${emp.name}]`;
+      }
+    }
+    return ' [Emp]';
+  }
+  return '';
+}
+
 const SUPABASE_URL = window.SUPABASE_URL || localStorage.getItem('SUPABASE_URL') || '';
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || localStorage.getItem('SUPABASE_ANON_KEY') || '';
 
@@ -65,8 +78,9 @@ export async function fetchBillScans() {
 export async function addCustomer(customer) {
   const client = initDb();
   if (!client) return null;
-  if (state && state.userRole === 'employee') {
-    if (customer.name) customer.name = customer.name.trim() + ' [Emp]';
+  const suffix = getEmployeeSuffix();
+  if (suffix && customer.name) {
+    customer.name = customer.name.trim() + suffix;
   }
   if (customer.amount !== undefined) customer.amount = Math.round(Number(customer.amount) || 0);
   if (customer.total_spend !== undefined) customer.total_spend = Math.round(Number(customer.total_spend) || 0);
@@ -100,8 +114,9 @@ export async function addCustomer(customer) {
 export async function addEvent(event) {
   const client = initDb();
   if (!client) return null;
-  if (state && state.userRole === 'employee') {
-    if (event.customer) event.customer = event.customer.trim() + ' [Emp]';
+  const suffix = getEmployeeSuffix();
+  if (suffix && event.customer) {
+    event.customer = event.customer.trim() + suffix;
   }
   if (event.total !== undefined) event.total = Math.round(Number(event.total) || 0);
   if (event.advance !== undefined) event.advance = Math.round(Number(event.advance) || 0);
@@ -147,8 +162,9 @@ export async function updateEvent(id, event) {
 export async function addExpense(expense) {
   const client = initDb();
   if (!client) return null;
-  if (state && state.userRole === 'employee') {
-    expense.note = expense.note && expense.note.trim() ? expense.note.trim() + ' [Emp]' : '[Emp]';
+  const suffix = getEmployeeSuffix();
+  if (suffix) {
+    expense.note = expense.note && expense.note.trim() ? expense.note.trim() + suffix : suffix.trim();
   }
   if (expense.amount !== undefined) expense.amount = Math.round(Number(expense.amount) || 0);
   
@@ -235,8 +251,9 @@ export async function fetchClassEnrollments() {
 export async function addClassEnrollment(enrollment) {
   const client = initDb();
   if (!client) return null;
-  if (state && state.userRole === 'employee') {
-    if (enrollment.name) enrollment.name = enrollment.name.trim() + ' [Emp]';
+  const suffix = getEmployeeSuffix();
+  if (suffix && enrollment.name) {
+    enrollment.name = enrollment.name.trim() + suffix;
   }
   if (enrollment.total_fee !== undefined) enrollment.total_fee = Math.round(Number(enrollment.total_fee) || 0);
   if (enrollment.total_paid !== undefined) enrollment.total_paid = Math.round(Number(enrollment.total_paid) || 0);
@@ -277,8 +294,9 @@ export async function fetchClassPayments(enrollmentId) {
 export async function addClassPayment(payment) {
   const client = initDb();
   if (!client) return null;
-  if (state && state.userRole === 'employee') {
-    payment.note = payment.note && payment.note.trim() ? payment.note.trim() + ' [Emp]' : '[Emp]';
+  const suffix = getEmployeeSuffix();
+  if (suffix) {
+    payment.note = payment.note && payment.note.trim() ? payment.note.trim() + suffix : suffix.trim();
   }
   if (payment.amount !== undefined) payment.amount = Math.round(Number(payment.amount) || 0);
   const {data, error} = await client.from('class_payments').insert([payment]).select();
@@ -308,8 +326,9 @@ export async function fetchJewels() {
 export async function addJewel(jewel) {
   const client = initDb();
   if (!client) return null;
-  if (state && state.userRole === 'employee') {
-    if (jewel.name) jewel.name = jewel.name.trim() + ' [Emp]';
+  const suffix = getEmployeeSuffix();
+  if (suffix && jewel.name) {
+    jewel.name = jewel.name.trim() + suffix;
   }
   if (jewel.purchase_price !== undefined) jewel.purchase_price = Math.round(Number(jewel.purchase_price) || 0);
   if (jewel.total_rental_income !== undefined) jewel.total_rental_income = Math.round(Number(jewel.total_rental_income) || 0);
@@ -362,8 +381,9 @@ export async function fetchJewelRentals(jewelId) {
 export async function addJewelRental(rental) {
   const client = initDb();
   if (!client) return null;
-  if (state && state.userRole === 'employee') {
-    if (rental.customer_name) rental.customer_name = rental.customer_name.trim() + ' [Emp]';
+  const suffix = getEmployeeSuffix();
+  if (suffix && rental.customer_name) {
+    rental.customer_name = rental.customer_name.trim() + suffix;
   }
   if (rental.rental_fee !== undefined) rental.rental_fee = Math.round(Number(rental.rental_fee) || 0);
   if (rental.deposit !== undefined) rental.deposit = Math.round(Number(rental.deposit) || 0);
@@ -437,4 +457,223 @@ function saveMonthlyBalanceLocally(balance) {
     console.error('Local storage save failed:', e);
     return null;
   }
+}
+
+// ==========================================
+//  EMPLOYEES MANAGEMENT DB OPERATIONS
+// ==========================================
+
+export async function fetchEmployees() {
+  const client = initDb();
+  if (!client) return fetchEmployeesLocally();
+
+  const { data, error } = await client.from('employees').select('*').order('name');
+  if (error) {
+    console.warn('Fetch employees DB error, falling back to local storage:', error);
+    return fetchEmployeesLocally();
+  }
+  return data || [];
+}
+
+function fetchEmployeesLocally() {
+  try {
+    const list = JSON.parse(localStorage.getItem('employees') || '[]');
+    const needsMigration = list.length > 0 && (!list[0].hasOwnProperty('email') || !list[0].hasOwnProperty('password') || !list[0].hasOwnProperty('emp_id'));
+    if (list.length === 0 || needsMigration) {
+      const mock = [
+        { 
+          id: 'mock-kumari', 
+          emp_id: 'kalai-emp-01',
+          name: 'Kumari', 
+          phone: '9876543211', 
+          role: 'Stylist', 
+          salary_type: 'monthly', 
+          base_rate: 18000, 
+          email: 'kumari@kalai.com', 
+          joining_date: '2026-06-01', 
+          dob: '',
+          address: '',
+          emergency_name: '',
+          emergency_number: '',
+          aadhaar_number: '',
+          employment_type: 'Full Time',
+          status: 'Active',
+          photo_url: '',
+          aadhaar_photo_url: '',
+          owner_notes: '',
+          employee_msg: '',
+          leave_balance: 12,
+          bank_details: '',
+          emergency_contact: '', 
+          password: 'emp123',
+          shift_start: '09:00',
+          created_at: new Date().toISOString() 
+        }
+      ];
+      localStorage.setItem('employees', JSON.stringify(mock));
+      return mock;
+    }
+    return list;
+  } catch(e) { return []; }
+}
+
+export async function addEmployee(emp) {
+  const client = initDb();
+  if (!client) {
+    showToast('Database connection is not initialized.', 'error');
+    return null;
+  }
+  
+  if (!emp.emp_id) {
+    let nextNum = 1;
+    try {
+      const list = await fetchEmployees().catch(() => []);
+      if (list && list.length > 0) {
+        const nums = list
+          .map(e => {
+            const match = (e.emp_id || '').match(/kalai-emp-(\d+)/);
+            return match ? parseInt(match[1]) : 0;
+          })
+          .filter(n => n > 0);
+        if (nums.length > 0) {
+          nextNum = Math.max(...nums) + 1;
+        }
+      }
+    } catch(e) {
+      console.warn('Failed to calculate next emp_id sequence:', e);
+    }
+    emp.emp_id = `kalai-emp-${String(nextNum).padStart(2, '0')}`;
+  }
+
+  const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).substring(2, 15) + Date.now().toString(36));
+  const newEmp = { ...emp, id, created_at: new Date().toISOString() };
+
+  const { data, error } = await client.from('employees').insert([newEmp]).select();
+  if (error) {
+    console.error('Add employee DB error:', error);
+    showToast(`Failed to add employee: ${error.message}`, 'error');
+    return null;
+  }
+  showToast('Employee added successfully!');
+  return data?.[0];
+}
+
+export async function updateEmployee(emp) {
+  const client = initDb();
+  if (!client) {
+    showToast('Database connection is not initialized.', 'error');
+    return null;
+  }
+
+  const { data, error } = await client.from('employees').update(emp).eq('id', emp.id).select();
+  if (error) {
+    console.error('Update employee DB error:', error);
+    showToast(`Failed to update employee: ${error.message}`, 'error');
+    return null;
+  }
+  showToast('Employee updated successfully!');
+  return data?.[0];
+}
+
+export async function deleteEmployee(id) {
+  const client = initDb();
+  if (!client) {
+    showToast('Database connection is not initialized.', 'error');
+    return false;
+  }
+
+  const { error } = await client.from('employees').delete().eq('id', id);
+  if (error) {
+    console.error('Delete employee DB error:', error);
+    showToast(`Failed to delete employee: ${error.message}`, 'error');
+    return false;
+  }
+  showToast('Employee deleted successfully!');
+  return true;
+}
+
+export async function fetchAttendance() {
+  const client = initDb();
+  if (!client) return fetchAttendanceLocally();
+
+  const { data, error } = await client.from('attendance').select('*').order('date', { ascending: false });
+  if (error) {
+    console.warn('Fetch attendance DB error, falling back to local storage:', error);
+    return fetchAttendanceLocally();
+  }
+  return data || [];
+}
+
+function fetchAttendanceLocally() {
+  try {
+    return JSON.parse(localStorage.getItem('attendance') || '[]');
+  } catch(e) { return []; }
+}
+
+export async function saveAttendance(log) {
+  const client = initDb();
+  const id = log.id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).substring(2, 15) + Date.now().toString(36)));
+  const fullLog = { ...log, id, created_at: new Date().toISOString() };
+
+  if (!client) return saveAttendanceLocally(fullLog);
+
+  const { data, error } = await client.from('attendance').upsert([fullLog], { onConflict: 'id' }).select();
+  if (error) {
+    console.warn('Save attendance DB error, falling back to local storage:', error);
+    return saveAttendanceLocally(fullLog);
+  }
+  return data?.[0];
+}
+
+function saveAttendanceLocally(fullLog) {
+  try {
+    let list = fetchAttendanceLocally();
+    list = list.filter(a => a.id !== fullLog.id);
+    list.push(fullLog);
+    localStorage.setItem('attendance', JSON.stringify(list));
+    return fullLog;
+  } catch(e) { return null; }
+}
+
+export async function fetchPayslips() {
+  const client = initDb();
+  if (!client) return fetchPayslipsLocally();
+
+  const { data, error } = await client.from('payslips').select('*').order('month', { ascending: false });
+  if (error) {
+    console.warn('Fetch payslips DB error, falling back to local storage:', error);
+    return fetchPayslipsLocally();
+  }
+  return data || [];
+}
+
+function fetchPayslipsLocally() {
+  try {
+    return JSON.parse(localStorage.getItem('payslips') || '[]');
+  } catch(e) { return []; }
+}
+
+export async function savePayslip(payslip) {
+  const client = initDb();
+  const id = payslip.id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).substring(2, 15) + Date.now().toString(36)));
+  const fullPayslip = { ...payslip, id, created_at: new Date().toISOString() };
+
+  if (!client) return savePayslipLocally(fullPayslip);
+
+  const { data, error } = await client.from('payslips').upsert([fullPayslip], { onConflict: 'id' }).select();
+  if (error) {
+    console.warn('Save payslip DB error, falling back to local storage:', error);
+    return savePayslipLocally(fullPayslip);
+  }
+  return data?.[0];
+}
+
+function savePayslipLocally(fullPayslip) {
+  try {
+    let list = fetchPayslipsLocally();
+    list = list.filter(p => !(p.employee_id === fullPayslip.employee_id && p.month === fullPayslip.month));
+    list.push(fullPayslip);
+    localStorage.setItem('payslips', JSON.stringify(list));
+    return fullPayslip;
+  } catch(e) { return null; }
 }

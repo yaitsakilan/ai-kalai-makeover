@@ -1,5 +1,6 @@
 // billl/js/pages/dashboard.js
 import { fetchCustomers, fetchEvents, fetchExpenses } from '../db.js';
+import { formatEmpTag } from '../utils.js';
 
 const MOTIVATIONAL_QUOTES = [
   "Your business grows when you help others feel beautiful and confident. ✨",
@@ -169,17 +170,19 @@ export async function renderDashboard() {
           <i class="ti ti-plus" style="font-size:10px;"></i> Book Event
         </button>
       </div>
-      ${events.filter(e=>e.status!=='Completed').slice(0,4).map(e=>`
+      ${events.filter(e=>e.status!=='Completed').slice(0,4).map(e=>{
+        const { cleanText: cleanCustomer, tagHtml: empBadge } = formatEmpTag(e.customer);
+        return `
         <div class="event-card" style="padding:12px;margin-bottom:8px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
-              <div style="font-size:13px;font-weight:600;color:#1a1a1a">${e.customer}</div>
+              <div style="font-size:13px;font-weight:600;color:#1a1a1a;display:inline-flex;align-items:center;">${cleanCustomer} ${empBadge}</div>
               <div style="font-size:11px;color:#888">${e.type} · ${e.date}</div>
             </div>
             <span class="badge ${(e.pending||0)>0?'badge-amber':'badge-green'}">${(e.pending||0)>0?'₹'+(e.pending||0).toLocaleString()+' pending':'Paid'}</span>
           </div>
         </div>
-      `).join('')}
+      `; }).join('')}
     </div>
   </div>
 
@@ -195,11 +198,12 @@ export async function renderDashboard() {
       </div>
       ${customers.slice(0,4).map((c,i)=>{
         const colors=['av-gold','av-teal','av-rose','av-purple'];
-        const initials = (c.name||'').split(' ').map(n=>n[0]).join('').slice(0,2);
+        const { cleanText: cleanName, tagHtml: empBadge } = formatEmpTag(c.name);
+        const initials = cleanName.split(' ').map(n=>n[0]).join('').slice(0,2);
         return `<div class="customer-row">
           <div class="avatar ${colors[i%4]}">${initials}</div>
           <div style="flex:1">
-            <div style="font-size:13px;font-weight:500">${c.name}</div>
+            <div style="font-size:13px;font-weight:500;display:inline-flex;align-items:center;">${cleanName} ${empBadge}</div>
             <div style="font-size:11px;color:#999">${(c.services||[]).join(', ')}</div>
           </div>
           <div style="text-align:right">

@@ -103,9 +103,8 @@ export async function render() {
     return;
   }
 
-  const client = initDb();
-  if(!client) {
-    main.innerHTML = '<div class="loading-page"><div style="color:#dc2626;font-size:16px;font-weight:600">⚠️ Database not connected</div><div style="color:#888;font-size:13px;margin-top:8px">The Database library failed to load. Check your internet connection and reload.</div></div>';
+  if (typeof supabase === 'undefined') {
+    main.innerHTML = '<div class="loading-page"><div style="color:#dc2626;font-size:16px;font-weight:600">⚠️ Database library not loaded</div><div style="color:#888;font-size:13px;margin-top:8px">The Supabase library failed to load from CDN. Check your internet connection and reload.</div></div>';
     return;
   }
   try {

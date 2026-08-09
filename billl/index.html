@@ -10,6 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
 </head>
 <body>
 
@@ -81,6 +83,9 @@
       </div>
       <div class="nav-item" onclick="showPage('ocr')" id="nav-ocr">
         <i class="ti ti-scan"></i> Bill Scanner
+      </div>
+      <div class="nav-item" onclick="showPage('finance')" id="nav-finance">
+        <i class="ti ti-cash"></i> Finance & P&L
       </div>
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,200,100,0.1);display:flex;flex-direction:column;gap:8px">

@@ -26,5 +26,9 @@ export const state = {
   recordingStartTime: 0,
   recordingInterval: null,
   bulkRowCounter: 0,
-  userRole: null   // set after PIN verification: 'owner' | 'employee'
+  userRole: null   // set after PIN verification: 'owner' | 'employee' | 'accountant'
 };
+
+export function isReadOnlyMode() {
+  return state.userRole === 'accountant';
+}

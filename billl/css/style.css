@@ -1419,9 +1419,26 @@ input[type=number] {
 .pulse-danger-icon {
   animation: pulseDanger 2s infinite;
 }
-@keyframes pulseDanger {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
   70% { transform: scale(1.05); box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
   100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+@media print {
+  .sidebar, .sidebar-overlay, .mobile-menu-btn, button, select, .sidebar-toggle-tab {
+    display: none !important;
+  }
+  .main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+  }
 }
 

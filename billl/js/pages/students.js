@@ -141,7 +141,7 @@ function renderStudentsCards(students) {
       <div style="margin-bottom:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#888; margin-bottom:4px;">
           <span>Classes:</span>
-          <span style="font-weight:600; color:#333;">${(s.classes || []).join(', ')}</span>
+          <span style="font-weight:600; color:#333;">${Array.isArray(s.classes) ? s.classes.join(', ') : (s.classes || 'N/A')}</span>
         </div>
         
         <!-- Progress bar -->
@@ -412,7 +412,7 @@ export function promptStudentWhatsAppBill(studentId, paidAmount = null, paymentD
   const totalPaid = student.total_paid || 0;
   const pending = totalFee - totalPaid;
 
-  const classesStr = (student.classes || []).join(', ');
+  const classesStr = Array.isArray(student.classes) ? student.classes.join(', ') : (student.classes || '');
   const formattedDate = paymentDate 
     ? new Date(paymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });

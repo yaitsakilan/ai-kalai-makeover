@@ -1243,7 +1243,7 @@ window.showEmployeePerformance = async function(empId) {
                   <tr style="border-bottom:0.5px solid #f5f5f5;">
                     <td style="padding:6px 0; font-weight:500;">
                       <div style="color:#1a1a1a; font-weight:600;">${c.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim()}</div>
-                      <div style="font-size:10px; color:#666; margin-top:2px;">${c.services || 'Service'}</div>
+                      <div style="font-size:10px; color:#666; margin-top:2px;">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'Service')}</div>
                     </td>
                     <td style="padding:6px 0; color:#1a1a1a; font-weight:700;">₹${(c.amount || c.total_spend || 0).toLocaleString()}</td>
                     <td style="padding:6px 0; text-align:right; color:#d97706;">

@@ -1,6 +1,6 @@
 // billl/js/pages/customers.js
 import { state } from '../state.js';
-import { fetchCustomers, addCustomer, deleteCustomer, addClassEnrollment, addClassPayment } from '../db.js';
+import { fetchCustomers, addCustomer, updateCustomer, deleteCustomer, addClassEnrollment, addClassPayment } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
@@ -9,6 +9,7 @@ export async function renderCustomers() {
   const customers = await fetchCustomers();
   window._cachedCustomers = customers;
 
+  if (window._customerActiveTab === undefined) window._customerActiveTab = 'analytics';
   if (window._selectedMonth === undefined) window._selectedMonth = 'all';
   if (window._searchQuery === undefined) window._searchQuery = '';
   if (window._monthFilterExpanded === undefined) window._monthFilterExpanded = false;
@@ -19,21 +20,23 @@ export async function renderCustomers() {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  // Apply filters initially
+  // Apply filters for both analytics & history tab
   let filtered = [...customers];
-  if (window._searchQuery) {
+  if (window._searchQuery && window._customerActiveTab === 'history') {
     const q = window._searchQuery.toLowerCase();
     filtered = filtered.filter(c =>
       (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q)
     );
   }
   if (window._selectedMonth !== 'all') {
+    const mTarget = parseInt(window._selectedMonth, 10);
     filtered = filtered.filter(c => {
-      if (!c.last_visit) return false;
-      const parts = c.last_visit.split('-');
+      const dateStr = c.last_visit || c.created_at;
+      if (!dateStr) return false;
+      const parts = String(dateStr).split('-');
       if (parts.length < 2) return false;
       const m = parseInt(parts[1], 10) - 1;
-      return m === window._selectedMonth;
+      return m === mTarget;
     });
   }
 
@@ -45,45 +48,91 @@ export async function renderCustomers() {
     ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
     : '';
 
+  // Trigger chart initialization if analytics tab active
+  if (window._customerActiveTab === 'analytics') {
+    setTimeout(() => initCustomerAnalyticsCharts(filtered), 60);
+  }
+
+  const selectedMonthLabel = window._selectedMonth === 'all' 
+    ? 'All Months' 
+    : MONTHS[parseInt(window._selectedMonth, 10)];
+
   return `
   <div class="top-bar">
-    <h2>Customer Management</h2>
-    <div style="display:flex; gap:10px;">
-      <button class="btn btn-outline btn-icon" onclick="window.toggleSearchField()" id="toggle-search-btn" style="${activeSearchBtnStyle}" title="Search Customers">
-        <i class="ti ti-search" style="color:#d97706"></i>
-      </button>
-      <button class="btn btn-outline" onclick="window.toggleMonthFilter()" id="toggle-filter-btn" style="${activeBtnStyle}">
-        <i class="ti ti-filter" style="color:#d97706"></i> Filter
-      </button>
+    <div>
+      <h2>Customer Management & Insights</h2>
+      <p style="font-size:12px;color:#888;margin-top:2px">Viewing ${selectedMonthLabel} · Customer Analytics, Demographics, Staff Handling & History</p>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center">
+      <!-- Month Filter Select Dropdown -->
+      <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterByMonthSelect(this.value)" title="Choose Month Filter">
+        <option value="all" ${window._selectedMonth === 'all' ? 'selected' : ''}>📅 All Months</option>
+        ${MONTHS.map((m, idx) => `
+          <option value="${idx}" ${window._selectedMonth === idx ? 'selected' : ''}>📅 ${m}</option>
+        `).join('')}
+      </select>
+
+      ${window._customerActiveTab === 'history' ? `
+        <button class="btn btn-outline btn-icon" onclick="window.toggleSearchField()" id="toggle-search-btn" style="${activeSearchBtnStyle}" title="Search Customers">
+          <i class="ti ti-search" style="color:#d97706"></i>
+        </button>
+        <button class="btn btn-outline" onclick="window.toggleMonthFilter()" id="toggle-filter-btn" style="${activeBtnStyle}">
+          <i class="ti ti-filter" style="color:#d97706"></i> Chips
+        </button>
+      ` : ''}
       <button class="btn btn-gold" onclick="window.openShopCustomerForm()">
         <i class="ti ti-plus"></i> Add Customer
       </button>
     </div>
   </div>
 
-  <div id="customer-metrics-container">
-    ${renderCustomerMetrics(filtered)}
-  </div>
-
-  <div class="card" id="search-card" style="margin-bottom:16px; display: ${window._searchFieldExpanded ? 'block' : 'none'};">
-    <input class="form-input" placeholder="Search by name or phone..." id="customer-search" value="${window._searchQuery || ''}" oninput="window.filterCustomers(this.value)">
-  </div>
-
-  <div class="card" id="month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._monthFilterExpanded ? 'block' : 'none'};">
-    <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
-      <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter by Month
+  <!-- Navigation Tabs -->
+  <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">
+    <div class="tab ${window._customerActiveTab === 'analytics' ? 'active' : ''}" onclick="window.switchCustomerTab('analytics')">
+      <i class="ti ti-chart-pie" style="margin-right:6px"></i> Analytics & Insights (${filtered.length})
     </div>
-    <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
-      <div class="chip ${window._selectedMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth('all')" id="month-chip-all">All Months</div>
-      ${MONTHS.map((m, idx) => `
-        <div class="chip ${window._selectedMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth(${idx})" id="month-chip-${idx}">${m}</div>
-      `).join('')}
+    <div class="tab ${window._customerActiveTab === 'top_paid' ? 'active' : ''}" onclick="window.switchCustomerTab('top_paid')">
+      <i class="ti ti-crown" style="margin-right:6px"></i> Top Paid Clients (${customers.length})
+    </div>
+    <div class="tab ${window._customerActiveTab === 'repeat' ? 'active' : ''}" onclick="window.switchCustomerTab('repeat')">
+      <i class="ti ti-refresh" style="margin-right:6px"></i> Repeat & Lapsed Retention
+    </div>
+    <div class="tab ${window._customerActiveTab === 'new' ? 'active' : ''}" onclick="window.switchCustomerTab('new')">
+      <i class="ti ti-user-plus" style="margin-right:6px"></i> New Clients
+    </div>
+    <div class="tab ${window._customerActiveTab === 'history' ? 'active' : ''}" onclick="window.switchCustomerTab('history')">
+      <i class="ti ti-history" style="margin-right:6px"></i> Customer History & Directory (${filtered.length})
     </div>
   </div>
 
-  <div id="customer-list">
-    ${renderCustomerList(filtered)}
-  </div>`;
+  ${window._customerActiveTab === 'analytics' ? renderCustomerAnalyticsDashboard(filtered) :
+    window._customerActiveTab === 'top_paid' ? renderTopPaidClientsTab(filtered) :
+    window._customerActiveTab === 'repeat' ? renderRepeatLapsedTab(customers) :
+    window._customerActiveTab === 'new' ? renderNewClientsTab(customers) : `
+    <div id="customer-metrics-container">
+      ${renderCustomerMetrics(filtered)}
+    </div>
+
+    <div class="card" id="search-card" style="margin-bottom:16px; display: ${window._searchFieldExpanded ? 'block' : 'none'};">
+      <input class="form-input" placeholder="Search by name or phone..." id="customer-search" value="${window._searchQuery || ''}" oninput="window.filterCustomers(this.value)">
+    </div>
+
+    <div class="card" id="month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._monthFilterExpanded ? 'block' : 'none'};">
+      <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
+        <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter History by Month
+      </div>
+      <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
+        <div class="chip ${window._selectedMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth('all')" id="month-chip-all">All Months</div>
+        ${MONTHS.map((m, idx) => `
+          <div class="chip ${window._selectedMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth(${idx})" id="month-chip-${idx}">${m}</div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div id="customer-list">
+      ${renderCustomerList(filtered)}
+    </div>
+  `}`;
 }
 
 export function renderCustomerMetrics(customers) {
@@ -235,7 +284,7 @@ export function renderCustomerList(customers) {
             ${c.referred_by ? `<span class="badge badge-amber" title="Referred by: ${c.referred_by}">📢 Ref: ${c.referred_by}</span>` : ''}
           </div>
           <div style="font-size:12px;color:#888">${c.phone || 'No phone'} · ${c.location || 'No location'}</div>
-          <div style="font-size:12px;color:#aaa;margin-top:2px">${(c.services || []).join(', ')} · Last: ${c.last_visit || 'N/A'}</div>
+          <div style="font-size:12px;color:#aaa;margin-top:2px">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || '')} · Last: ${c.last_visit || 'N/A'}</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:14px;font-weight:700;color:#d97706">₹${(c.total_spend || 0).toLocaleString()}</div>
@@ -350,7 +399,10 @@ export async function analyzeShopCustomers() {
 
   try {
     const customers = await fetchCustomers();
-    const shopCustomers = customers.filter(c => !c.services || !c.services.includes('Classes'));
+    const shopCustomers = customers.filter(c => {
+      const sStr = Array.isArray(c.services) ? c.services.join(', ') : (c.services || '');
+      return !sStr.includes('Classes');
+    });
 
     if (shopCustomers.length === 0) {
       document.getElementById('modal-body').innerHTML = `
@@ -439,6 +491,7 @@ Make it concise, insightful, and formatted beautifully.`
 }
 
 export function openShopCustomerForm() {
+  window._selectedExistingCustomer = null;
   const today = new Date().toISOString().split('T')[0];
   const container = document.getElementById('form-overlay-container');
   if (!container) return;
@@ -459,23 +512,26 @@ export function openShopCustomerForm() {
           <div class="form-section-title" style="border-top:none;margin-top:0;padding-top:0">
             <i class="ti ti-user"></i> Customer Details
           </div>
-          <div class="form-group">
-            <label class="form-label">Customer Name *</label>
-            <input class="form-input" id="sf-name" placeholder="Enter customer name">
-          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
-              <label class="form-label">Phone Number *</label>
-              <input class="form-input" id="sf-phone" placeholder="10-digit number" maxlength="10">
+              <label class="form-label">Phone Number * <span style="font-size:10px;color:#d97706;font-weight:normal">(Auto-checks repeat client)</span></label>
+              <input class="form-input" id="sf-phone" placeholder="10-digit number" maxlength="10" oninput="window.handlePhoneLookup(this.value)">
             </div>
+            <div class="form-group">
+              <label class="form-label">Customer Name *</label>
+              <input class="form-input" id="sf-name" placeholder="Enter customer name">
+            </div>
+          </div>
+          <div id="sf-phone-match-card"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;">
             <div class="form-group">
               <label class="form-label">Location</label>
               <input class="form-input" id="sf-location" placeholder="e.g. Chennai">
             </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Date</label>
-            <input class="form-input" id="sf-date" type="date" value="${today}">
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <input class="form-input" id="sf-date" type="date" value="${today}">
+            </div>
           </div>
           <div style="display:grid;grid-template-columns:1.2fr 1.5fr;gap:12px;margin-bottom:14px;align-items:center;">
             <div class="form-group" style="margin-bottom:0;display:flex;align-items:center;gap:6px;">
@@ -786,20 +842,47 @@ export async function submitShopCustomerForm() {
   const btn = document.getElementById('sf-submit-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="dot-anim"><span></span><span></span><span></span></div> Saving...'; }
 
-  const result = await addCustomer({
-    name,
-    phone: phoneVal,
-    location,
-    services: serviceNames,
-    amount: totalAmount,
-    payment_status: 'paid',
-    payment_method: overallPaymentMethod,
-    last_visit: date,
-    total_spend: totalAmount,
-    visits: 1,
-    rating,
-    referred_by: referredBy || null
-  });
+  let result;
+  if (window._selectedExistingCustomer && window._selectedExistingCustomer.id) {
+    const existing = window._selectedExistingCustomer;
+    const newVisits = (existing.visits || 1) + 1;
+    const newTotalSpend = (existing.total_spend || existing.amount || 0) + totalAmount;
+
+    const existingSvcs = Array.isArray(existing.services)
+      ? existing.services
+      : (typeof existing.services === 'string' && existing.services.trim()
+        ? existing.services.split(',').map(s => s.trim())
+        : []);
+    const mergedServices = [...new Set([...existingSvcs, ...serviceNames])];
+
+    result = await updateCustomer(existing.id, {
+      name: name || existing.name,
+      location: location || existing.location,
+      services: mergedServices,
+      amount: totalAmount,
+      payment_status: 'paid',
+      payment_method: overallPaymentMethod,
+      last_visit: date,
+      total_spend: newTotalSpend,
+      visits: newVisits,
+      rating: rating || existing.rating || 5
+    });
+  } else {
+    result = await addCustomer({
+      name,
+      phone: phoneVal,
+      location,
+      services: serviceNames,
+      amount: totalAmount,
+      payment_status: 'paid',
+      payment_method: overallPaymentMethod,
+      last_visit: date,
+      total_spend: totalAmount,
+      visits: 1,
+      rating,
+      referred_by: referredBy || null
+    });
+  }
 
   if (result) {
     closeFormOverlay();
@@ -1194,9 +1277,116 @@ export function updateClassesBothTotal() {
   }
 }
 
+export function applyRecognizedCustomerDetails(customerId) {
+  const match = window._selectedExistingCustomer || (window._cachedCustomers || []).find(c => String(c.id) === String(customerId));
+  if (!match) return;
+
+  window._selectedExistingCustomer = match;
+
+  const phoneInput = document.getElementById('sf-phone');
+  const nameInput = document.getElementById('sf-name');
+  const locInput = document.getElementById('sf-location');
+
+  if (phoneInput && match.phone) {
+    phoneInput.value = match.phone;
+  }
+
+  if (nameInput) {
+    const cleanName = match.name ? match.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim() : '';
+    nameInput.value = cleanName;
+  }
+
+  if (locInput && match.location) {
+    locInput.value = match.location;
+  }
+
+  if (match.rating && typeof window.setStarRating === 'function') {
+    window.setStarRating(match.rating);
+  }
+
+  if (typeof window.showToast === 'function') {
+    window.showToast(`Auto-filled details for ${match.name ? match.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim() : 'Customer'}`, 'success');
+  }
+}
+
+export function handlePhoneLookup(val) {
+  const cleanDigits = (val || '').replace(/\D/g, '');
+  const matchCard = document.getElementById('sf-phone-match-card');
+
+  if (cleanDigits.length < 3) {
+    window._selectedExistingCustomer = null;
+    if (matchCard) matchCard.innerHTML = '';
+    return;
+  }
+
+  const cached = window._cachedCustomers || [];
+  const match = cached.find(c => {
+    if (!c.phone) return false;
+    const cPhoneClean = c.phone.toString().replace(/\D/g, '');
+    return cPhoneClean.endsWith(cleanDigits) || cPhoneClean.includes(cleanDigits);
+  });
+
+  if (match) {
+    window._selectedExistingCustomer = match;
+    const nameInput = document.getElementById('sf-name');
+    const locInput = document.getElementById('sf-location');
+    if (nameInput && !nameInput.value.trim()) {
+      nameInput.value = match.name ? match.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim() : '';
+    }
+    if (locInput && !locInput.value.trim()) {
+      locInput.value = match.location || '';
+    }
+    if (match.rating) {
+      window.setStarRating(match.rating);
+    }
+
+    const cleanName = match.name ? match.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim() : 'Customer';
+    const totalSpend = match.total_spend || match.amount || 0;
+    const visits = match.visits || 1;
+    const lastVisit = match.last_visit || 'N/A';
+
+    if (matchCard) {
+      matchCard.innerHTML = `
+        <div onclick="window.applyRecognizedCustomerDetails('${match.id}')" style="cursor:pointer; background: linear-gradient(135deg, rgba(217,119,6,0.1), rgba(245,200,66,0.18)); border: 1.5px dashed #d97706; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: 12px; animation: fadeIn 0.2s ease;" title="Click to auto-fill full phone, name & location">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+            <span style="font-weight:700; color:#d97706; font-size:12px; display:inline-flex; align-items:center; gap:4px;">
+              <i class="ti ti-sparkles" style="font-size:14px"></i> Repeat Client Recognized!
+            </span>
+            <button type="button" onclick="event.stopPropagation(); window.clearPhoneMatch()" style="background:none; border:none; color:#dc2626; font-size:11px; cursor:pointer; font-weight:600; text-decoration:underline;">Not this client?</button>
+          </div>
+          <div style="color:#1a1a1a; font-weight:700; font-size:13px; margin-bottom:2px;">${cleanName} · ${match.phone || ''}</div>
+          <div style="color:#555; font-size:11px; display:flex; gap:12px; flex-wrap:wrap; margin-bottom:4px">
+            <span>📍 <strong>Location:</strong> ${match.location || 'No location'}</span>
+            <span>📅 <strong>Last Visit:</strong> ${lastVisit}</span>
+            <span>⭐ <strong>Visits:</strong> ${visits}</span>
+            <span>💰 <strong>Total Spend:</strong> ₹${totalSpend.toLocaleString()}</span>
+          </div>
+          <div style="font-size:11px; color:#d97706; font-weight:600; display:flex; align-items:center; gap:4px">
+            <i class="ti ti-hand-click"></i> 👉 Tap here to auto-fill full phone number (${match.phone}), name & location!
+          </div>
+        </div>`;
+    }
+  } else {
+    window._selectedExistingCustomer = null;
+    if (matchCard) matchCard.innerHTML = '';
+  }
+}
+
+export function clearPhoneMatch() {
+  window._selectedExistingCustomer = null;
+  const matchCard = document.getElementById('sf-phone-match-card');
+  if (matchCard) matchCard.innerHTML = '';
+  const nameInput = document.getElementById('sf-name');
+  const locInput = document.getElementById('sf-location');
+  if (nameInput) nameInput.value = '';
+  if (locInput) locInput.value = '';
+}
+
 // Bind to window to allow HTML inline click handlers to execute
 window.openShopCustomerForm = openShopCustomerForm;
 window.submitShopCustomerForm = submitShopCustomerForm;
+window.handlePhoneLookup = handlePhoneLookup;
+window.clearPhoneMatch = clearPhoneMatch;
 window.serviceChipToggle = serviceChipToggle;
 window.addOtherServiceAmount = addOtherServiceAmount;
 window.removeServiceRow = removeServiceRow;
@@ -1204,6 +1394,383 @@ window.updateServiceTotal = updateServiceTotal;
 window.setStarRating = setStarRating;
 window.filterCustomers = filterCustomers;
 window.filterByMonth = filterByMonth;
+window.toggleMonthFilter = toggleMonthFilter;
+
+// ─────────────────────────────────────────────
+// CUSTOMER ANALYTICS & INSIGHTS DASHBOARD
+// ─────────────────────────────────────────────
+
+export function switchCustomerTab(tab) {
+  window._customerActiveTab = tab;
+  if (typeof window.render === 'function') window.render();
+}
+
+export function renderCustomerAnalyticsDashboard(customers) {
+  if (!customers || !customers.length) {
+    return `<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-chart-pie" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No customer analytics available yet. Add customers to see detailed insights!</div>`;
+  }
+
+  const totalCustomers = customers.length;
+  const repeatCustomers = customers.filter(c => (c.visits || 0) > 1);
+  const retentionRate = Math.round((repeatCustomers.length / totalCustomers) * 100);
+  const totalRevenue = customers.reduce((sum, c) => sum + (c.total_spend || 0), 0);
+  const avgSpend = Math.round(totalRevenue / totalCustomers);
+
+  // 1. Locations Breakdown ("most customer place came from")
+  const locationMap = {};
+  customers.forEach(c => {
+    const loc = (c.location && c.location.trim()) ? c.location.trim() : 'Unspecified';
+    if (!locationMap[loc]) locationMap[loc] = { count: 0, revenue: 0 };
+    locationMap[loc].count += 1;
+    locationMap[loc].revenue += (c.total_spend || 0);
+  });
+  const sortedLocations = Object.entries(locationMap)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.count - a.count);
+
+  // 2. Staff vs Owner Handling ("how customer handle employee and by owner")
+  const staffMap = {};
+  customers.forEach(c => {
+    const match = (c.name || '').match(/\[Emp:\s*([^\]]+)\]/i);
+    const staffName = match ? match[1].trim() : 'Owner (Kalai)';
+    if (!staffMap[staffName]) staffMap[staffName] = { count: 0, revenue: 0 };
+    staffMap[staffName].count += 1;
+    staffMap[staffName].revenue += (c.total_spend || 0);
+  });
+  const sortedStaff = Object.entries(staffMap)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.count - a.count);
+
+  // 3. Payment Method Split ("by cash or gpay")
+  let cashCount = 0, cashRev = 0, gpayCount = 0, gpayRev = 0;
+  customers.forEach(c => {
+    const pmStr = (c.payment_method || '').toLowerCase();
+    const servicesStr = (Array.isArray(c.services) ? c.services.join(' ') : (c.services || '')).toLowerCase();
+    
+    // Check if GPay / UPI is specified in payment_method OR in services text
+    const isGPay = pmStr.includes('gpay') || pmStr.includes('online') || pmStr.includes('upi') || pmStr.includes('bank') || servicesStr.includes('gpay') || servicesStr.includes('online') || servicesStr.includes('upi');
+
+    if (isGPay) {
+      gpayCount++;
+      gpayRev += (c.total_spend || c.amount || 0);
+    } else {
+      cashCount++;
+      cashRev += (c.total_spend || c.amount || 0);
+    }
+  });
+
+  // 4. Ratings Distribution ("by ratings")
+  const ratingCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  let ratingSum = 0, ratingTotal = 0;
+  customers.forEach(c => {
+    if (c.rating) {
+      ratingCounts[c.rating] = (ratingCounts[c.rating] || 0) + 1;
+      ratingSum += c.rating;
+      ratingTotal++;
+    }
+  });
+  const avgRating = ratingTotal > 0 ? (ratingSum / ratingTotal).toFixed(1) : '5.0';
+
+  // 5. Popular Services Breakdown ("which service most")
+  const serviceMap = {};
+  customers.forEach(c => {
+    const sList = Array.isArray(c.services) ? c.services : (c.services || '').split(',');
+    sList.forEach(s => {
+      // Strip payment tags like (GPay), (Cash), (Online) to consolidate identical services
+      const cleanS = s.replace(/\s*\((GPay|Cash|Online|UPI)\)/gi, '').trim();
+      if (!cleanS) return;
+      if (!serviceMap[cleanS]) serviceMap[cleanS] = { count: 0, revenue: 0 };
+      serviceMap[cleanS].count += 1;
+      serviceMap[cleanS].revenue += Math.round((c.total_spend || c.amount || 0) / Math.max(1, sList.length));
+    });
+  });
+  const sortedServices = Object.entries(serviceMap)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.count - a.count);
+
+  // Store for Chart.js
+  window._customerAnalyticsData = {
+    locations: sortedLocations,
+    staff: sortedStaff,
+    services: sortedServices,
+    cashRev, gpayRev, cashCount, gpayCount
+  };
+
+  return `
+    <!-- Top KPI Cards -->
+    <div class="metric-grid" style="margin-bottom:20px">
+      <div class="metric-card mc-gold">
+        <div class="metric-label">Total Customers</div>
+        <div class="metric-value">${totalCustomers}</div>
+        <div class="metric-sub">${repeatCustomers.length} repeat clients (${retentionRate}% retention)</div>
+        <i class="ti ti-users metric-icon"></i>
+      </div>
+      <div class="metric-card mc-teal">
+        <div class="metric-label">Total Customer Spend</div>
+        <div class="metric-value">₹${totalRevenue.toLocaleString()}</div>
+        <div class="metric-sub">Average ₹${avgSpend.toLocaleString()} per customer</div>
+        <i class="ti ti-wallet metric-icon"></i>
+      </div>
+      <div class="metric-card mc-rose">
+        <div class="metric-label">Top Location</div>
+        <div class="metric-value" style="font-size:20px;text-transform:capitalize">${sortedLocations[0]?.name || 'N/A'}</div>
+        <div class="metric-sub">${sortedLocations[0]?.count || 0} customers from here</div>
+        <i class="ti ti-map-pin metric-icon"></i>
+      </div>
+      <div class="metric-card mc-purple">
+        <div class="metric-label">Top Service</div>
+        <div class="metric-value" style="font-size:20px">${sortedServices[0]?.name || 'N/A'}</div>
+        <div class="metric-sub">${sortedServices[0]?.count || 0} bookings total</div>
+        <i class="ti ti-sparkles metric-icon"></i>
+      </div>
+    </div>
+
+    <!-- Row 1: Location Analysis & Owner vs Staff Handling -->
+    <div class="grid-2" style="margin-bottom:20px">
+      <!-- 📍 Customer Location Analysis -->
+      <div class="card">
+        <div class="section-title">
+          <i class="ti ti-map-pin" style="color:#d97706"></i> Top Customer Locations / Places
+        </div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px">Breakdown of where your salon & event customers come from</div>
+        
+        <div style="position:relative;width:100%;height:160px;margin-bottom:14px">
+          <canvas id="customerLocationChart"></canvas>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${sortedLocations.slice(0, 5).map(loc => {
+            const pct = Math.round((loc.count / totalCustomers) * 100);
+            return `
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+                  <span style="font-weight:600;color:#333"><i class="ti ti-location" style="color:#d97706"></i> ${loc.name}</span>
+                  <span style="color:#888">${loc.count} customers (${pct}%) · ₹${loc.revenue.toLocaleString()}</span>
+                </div>
+                <div style="width:100%;height:6px;background:#f3f4f6;border-radius:10px;overflow:hidden">
+                  <div style="width:${pct}%;height:100%;background:linear-gradient(90deg, #f5c842, #e8a020);border-radius:10px"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- 🧑‍💼 Owner vs Staff Handling -->
+      <div class="card">
+        <div class="section-title">
+          <i class="ti ti-user-check" style="color:#d97706"></i> Staff vs Owner Customer Handling
+        </div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px">Customer distribution & revenue generated per employee</div>
+
+        <div style="position:relative;width:100%;height:160px;margin-bottom:14px">
+          <canvas id="customerStaffChart"></canvas>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${sortedStaff.map(st => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fafafa;border-radius:8px;border:1px solid #f0f0f0">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:28px;height:28px;border-radius:50%;background:${st.name.includes('Owner') ? '#fef3c7' : '#e0e7ff'};color:${st.name.includes('Owner') ? '#b45309' : '#4338ca'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">
+                  ${st.name[0]}
+                </div>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:#1a1a1a">${st.name}</div>
+                  <div style="font-size:11px;color:#888">${st.count} customers served</div>
+                </div>
+              </div>
+              <div style="font-size:13px;font-weight:700;color:#d97706">₹${st.revenue.toLocaleString()}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Payment Methods & Ratings Distribution -->
+    <div class="grid-2" style="margin-bottom:20px">
+      <!-- 💵 Cash vs GPay Payment Split -->
+      <div class="card">
+        <div class="section-title">
+          <i class="ti ti-credit-card" style="color:#d97706"></i> Payment Mode Preferences (Cash vs GPay)
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px">
+            <div style="font-size:11px;color:#b45309;font-weight:600">💵 Cash Collections</div>
+            <div style="font-size:20px;font-weight:700;color:#92400e;margin-top:2px">₹${cashRev.toLocaleString()}</div>
+            <div style="font-size:11px;color:#b45309">${cashCount} transactions</div>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px">
+            <div style="font-size:11px;color:#15803d;font-weight:600">📱 GPay / UPI Receipts</div>
+            <div style="font-size:20px;font-weight:700;color:#166534;margin-top:2px">₹${gpayRev.toLocaleString()}</div>
+            <div style="font-size:11px;color:#15803d">${gpayCount} transactions</div>
+          </div>
+        </div>
+
+        <div style="position:relative;width:100%;height:140px">
+          <canvas id="customerPaymentChart"></canvas>
+        </div>
+      </div>
+
+      <!-- ⭐ Ratings & Satisfaction -->
+      <div class="card">
+        <div class="section-title">
+          <i class="ti ti-star" style="color:#d97706"></i> Customer Ratings & Satisfaction
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;background:#fcfcfc;padding:12px;border-radius:10px">
+          <div style="font-size:32px;font-weight:700;color:#d97706">${avgRating}</div>
+          <div>
+            <div style="color:#d97706;font-size:14px;letter-spacing:2px">★★★★★</div>
+            <div style="font-size:11px;color:#888">Based on ${ratingTotal} rated visits</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${[5, 4, 3, 2, 1].map(stars => {
+            const count = ratingCounts[stars] || 0;
+            const pct = ratingTotal > 0 ? Math.round((count / ratingTotal) * 100) : 0;
+            return `
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+                <span style="width:24px;font-weight:600;color:#555">${stars}★</span>
+                <div style="flex:1;height:6px;background:#f3f4f6;border-radius:10px;overflow:hidden">
+                  <div style="width:${pct}%;height:100%;background:#f5c842;border-radius:10px"></div>
+                </div>
+                <span style="width:30px;text-align:right;color:#888">${count}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3: Popular Services & Repeat VIP Clients -->
+    <div class="grid-2">
+      <!-- ✂️ Popular Services -->
+      <div class="card">
+        <div class="section-title">
+          <i class="ti ti-scissors" style="color:#d97706"></i> Most Popular Services
+        </div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px">Most requested salon treatments ranked by volume</div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${sortedServices.slice(0, 6).map((svc, idx) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fafafa;border-radius:8px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:12px;font-weight:700;color:#d97706;width:18px">#${idx + 1}</span>
+                <span style="font-size:13px;font-weight:600;color:#333">${svc.name}</span>
+              </div>
+              <div style="text-align:right">
+                <span class="badge badge-gold" style="font-size:11px">${svc.count} bookings</span>
+                <span style="font-size:12px;font-weight:700;color:#15803d;margin-left:6px">₹${svc.revenue.toLocaleString()}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- 👑 Top VIP Repeat Clients -->
+      <div class="card">
+        <div class="section-title">
+          <i class="ti ti-crown" style="color:#d97706"></i> Top VIP Repeat Clients
+        </div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px">Highest spending & most frequent salon clients</div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${customers.sort((a, b) => (b.total_spend || 0) - (a.total_spend || 0)).slice(0, 5).map((c, i) => {
+            const { cleanText } = formatEmpTag(c.name);
+            return `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border:1px solid #f0f0f0;border-radius:10px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="font-size:12px;font-weight:700;color:#d97706;width:16px">#${i + 1}</div>
+                  <div>
+                    <div style="font-size:13px;font-weight:600;color:#1a1a1a">${cleanText}</div>
+                    <div style="font-size:11px;color:#888">${c.phone || 'No phone'} · ${c.visits || 1} visits</div>
+                  </div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-size:13px;font-weight:700;color:#d97706">₹${(c.total_spend || 0).toLocaleString()}</div>
+                  <span class="badge badge-green" style="font-size:10px">VIP Client</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+export function initCustomerAnalyticsCharts(customers) {
+  const dd = window._customerAnalyticsData;
+  if (!dd || typeof Chart === 'undefined') return;
+
+  // 1. Location Donut Chart
+  const locCtx = document.getElementById('customerLocationChart');
+  if (locCtx) {
+    const topLocs = dd.locations.slice(0, 5);
+    new Chart(locCtx, {
+      type: 'doughnut',
+      data: {
+        labels: topLocs.map(l => l.name),
+        datasets: [{
+          data: topLocs.map(l => l.count),
+          backgroundColor: ['#f5c842', '#14b8a6', '#fb7185', '#a78bfa', '#6366f1']
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } }
+      }
+    });
+  }
+
+  // 2. Staff vs Owner Handling Bar Chart
+  const staffCtx = document.getElementById('customerStaffChart');
+  if (staffCtx) {
+    new Chart(staffCtx, {
+      type: 'bar',
+      data: {
+        labels: dd.staff.map(s => s.name),
+        datasets: [{
+          label: 'Customers Served',
+          data: dd.staff.map(s => s.count),
+          backgroundColor: '#f5c842',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { ticks: { stepSize: 1, font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } }
+      }
+    });
+  }
+
+  // 3. Payment Mode Donut Chart
+  const payCtx = document.getElementById('customerPaymentChart');
+  if (payCtx) {
+    new Chart(payCtx, {
+      type: 'pie',
+      data: {
+        labels: ['Cash', 'GPay / UPI'],
+        datasets: [{
+          data: [dd.cashCount, dd.gpayCount],
+          backgroundColor: ['#fbbf24', '#34d399']
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } }
+      }
+    });
+  }
+}
+
+window.switchCustomerTab = switchCustomerTab;
 window.toggleMonthFilter = toggleMonthFilter;
 window.toggleSearchField = toggleSearchField;
 window.applyFilters = applyFilters;
@@ -1214,9 +1781,224 @@ window.handleDeleteCustomer = handleDeleteCustomer;
 window.promptWhatsAppBill = promptWhatsAppBill;
 window.promptWhatsAppBillFromId = promptWhatsAppBillFromId;
 window.openClassesForm = openClassesForm;
-window.submitClassesForm = submitClassesForm;
-window.getServiceRowHtml = getServiceRowHtml;
-window.handleServiceMethodChange = handleServiceMethodChange;
-window.updateSareePrepleatingAmount = updateSareePrepleatingAmount;
-window.handleClassesPaymentMethodChange = handleClassesPaymentMethodChange;
-window.updateClassesBothTotal = updateClassesBothTotal;
+window.filterByMonthSelect = function(val) {
+  window._selectedMonth = val === 'all' ? 'all' : parseInt(val, 10);
+  if (typeof window.render === 'function') window.render();
+};
+
+// ─────────────────────────────────────────────
+// 📲 SERVICE-BASED WHATSAPP INVITE HANDLER
+// ─────────────────────────────────────────────
+
+export function sendWhatsAppServiceInvite(id, inviteType) {
+  const customers = window._cachedCustomers || [];
+  const c = customers.find(item => String(item.id) === String(id));
+  if (!c || !c.phone) {
+    if (typeof window.showToast === 'function') window.showToast('No valid phone number for WhatsApp', 'error');
+    return;
+  }
+
+  const { cleanText: cleanName } = formatEmpTag(c.name || 'Customer');
+  let firstService = 'salon makeover';
+
+  if (Array.isArray(c.services) && c.services.length > 0) {
+    firstService = c.services[0].replace(/\s*\((GPay|Cash|Online|UPI)\)/gi, '').trim();
+  } else if (c.services) {
+    firstService = String(c.services).split(',')[0].replace(/\s*\((GPay|Cash|Online|UPI)\)/gi, '').trim();
+  }
+  if (!firstService) firstService = 'salon makeover';
+
+  let cleanPhone = validateAndCleanPhone(c.phone);
+  if (!cleanPhone) cleanPhone = c.phone.replace(/\D/g, '');
+
+  let msg = '';
+  if (inviteType === 'lapsed' || inviteType === 'repeat') {
+    msg = `Vanakkam ${cleanName}! ✨\n\nIt's been a while since your last ${firstService} at Kalai Makeover! We miss you! 🌸\n\nBook your next makeover & refresh session today with us. Click to reply or call us to reserve your slot! 💖`;
+  } else if (inviteType === 'new') {
+    msg = `Vanakkam ${cleanName}! 🌸\n\nThank you for visiting Kalai Makeover for your ${firstService}! We hope you loved your makeover experience. ✨\n\nWe'd love to see you again soon for your next care session! Book your next appointment anytime 💅`;
+  } else {
+    msg = `Vanakkam ${cleanName}! 👑\n\nGreetings from Kalai Makeover! We loved hosting you for your ${firstService}. We look forward to your next visit soon! ✨`;
+  }
+
+  const encoded = encodeURIComponent(msg);
+  const waUrl = `https://wa.me/91${cleanPhone}?text=${encoded}`;
+  window.open(waUrl, '_blank');
+}
+
+// ─────────────────────────────────────────────
+// 🏆 TOP PAID CLIENTS TAB
+// ─────────────────────────────────────────────
+
+export function renderTopPaidClientsTab(customers) {
+  const sorted = [...customers].sort((a, b) => (b.total_spend || 0) - (a.total_spend || 0));
+
+  return `
+    <div class="card">
+      <div class="section-title">
+        <i class="ti ti-crown" style="color:#d97706;font-size:18px"></i> 🏆 Highest Spending Clients (Top Paid Customers)
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:16px">Clients ranked strictly by total revenue spend across all visits</div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${sorted.map((c, i) => {
+          const { cleanText, tagHtml } = formatEmpTag(c.name);
+          const servicesText = Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'General Services');
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#fff;border:1px solid #ebebeb;border-radius:12px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="font-size:14px;font-weight:700;color:${i<3?'#d97706':'#888'};width:24px;text-align:center">#${i + 1}</div>
+                <div>
+                  <div style="font-size:14px;font-weight:600;color:#1a1a1a;display:inline-flex;align-items:center;">
+                    ${cleanText} ${tagHtml}
+                    ${i === 0 ? '<span class="badge badge-gold" style="margin-left:6px">👑 Top #1 Spender</span>' : ''}
+                  </div>
+                  <div style="font-size:12px;color:#888;margin-top:2px">${c.phone || 'No phone'} · ${c.location || 'Chennai'} · ${c.visits || 1} visits</div>
+                  <div style="font-size:11px;color:#aaa;margin-top:2px">Services: ${servicesText}</div>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:14px">
+                <div style="text-align:right">
+                  <div style="font-size:16px;font-weight:700;color:#d97706">₹${(c.total_spend || c.amount || 0).toLocaleString()}</div>
+                  <span class="badge badge-green" style="font-size:10px">Paid Client</span>
+                </div>
+                ${c.phone ? `
+                  <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:6px 12px;font-size:11px" onclick="window.sendWhatsAppServiceInvite('${c.id}', 'top_paid')" title="Send WhatsApp Invite">
+                    <i class="ti ti-brand-whatsapp"></i> Send Invite
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────────
+// 🔁 REPEAT & LAPSED CLIENT RETENTION TAB
+// ─────────────────────────────────────────────
+
+export function renderRepeatLapsedTab(customers) {
+  // Lapsed Clients: Visited in earlier months (e.g. May/June), but haven't returned in July/August
+  const currentMonthIdx = new Date().getMonth();
+  const lapsedClients = customers.filter(c => {
+    if (!c.last_visit) return false;
+    const parts = String(c.last_visit).split('-');
+    if (parts.length < 2) return false;
+    const visitMonth = parseInt(parts[1], 10) - 1;
+    return visitMonth < currentMonthIdx;
+  });
+
+  const repeatClients = customers.filter(c => (c.visits || 0) > 1);
+
+  return `
+    <div class="grid-2">
+      <!-- Lapsed Clients (Need Re-engagement) -->
+      <div class="card">
+        <div class="section-title" style="color:#dc2626">
+          <i class="ti ti-alarm" style="color:#dc2626"></i> Lapsed Clients (May/June Visitors - Need Re-invite)
+        </div>
+        <div style="font-size:12px;color:#888;margin-bottom:14px">Clients who visited in earlier months but haven't visited recently. Send personalized WhatsApp invite!</div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${lapsedClients.length ? lapsedClients.map(c => {
+            const { cleanText } = formatEmpTag(c.name);
+            const serviceName = Array.isArray(c.services) ? c.services[0] : (c.services || 'Makeover');
+            return `
+              <div style="padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                  <div>
+                    <div style="font-size:13px;font-weight:600;color:#991b1b">${cleanText}</div>
+                    <div style="font-size:11px;color:#888">${c.phone || 'No phone'} · Last Visit: ${c.last_visit || 'N/A'}</div>
+                    <div style="font-size:11px;color:#b91c1c;margin-top:2px">Last Service: ${serviceName}</div>
+                  </div>
+                  ${c.phone ? `
+                    <button class="btn btn-gold" style="padding:4px 8px;font-size:11px;background:#25d366;color:#fff;border:none" onclick="window.sendWhatsAppServiceInvite('${c.id}', 'lapsed')">
+                      <i class="ti ti-brand-whatsapp"></i> Re-invite
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('') : '<div style="font-size:12px;color:#aaa;padding:14px 0">All clients are up to date with visits! 🎉</div>'}
+        </div>
+      </div>
+
+      <!-- Active Repeat Clients -->
+      <div class="card">
+        <div class="section-title">
+          <i class="ti ti-refresh" style="color:#d97706"></i> Active Repeat Loyal Clients (${repeatClients.length})
+        </div>
+        <div style="font-size:12px;color:#888;margin-bottom:14px">Clients who have visited 2+ times</div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${repeatClients.map(c => {
+            const { cleanText } = formatEmpTag(c.name);
+            return `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px">
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:#166534">${cleanText}</div>
+                  <div style="font-size:11px;color:#15803d">${c.visits || 2} visits total · Spend: ₹${(c.total_spend || 0).toLocaleString()}</div>
+                </div>
+                ${c.phone ? `
+                  <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:4px 8px;font-size:11px" onclick="window.sendWhatsAppServiceInvite('${c.id}', 'repeat')">
+                    <i class="ti ti-brand-whatsapp"></i> Invite
+                  </button>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────────
+// 🆕 NEW CLIENTS TAB
+// ─────────────────────────────────────────────
+
+export function renderNewClientsTab(customers) {
+  const newClients = customers.filter(c => (c.visits || 1) <= 1);
+
+  return `
+    <div class="card">
+      <div class="section-title">
+        <i class="ti ti-user-plus" style="color:#d97706;font-size:18px"></i> 🆕 New First-Time Clients (${newClients.length})
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:16px">First-time visitors. Send them a WhatsApp Thank You & Return Invite based on their first service!</div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${newClients.map(c => {
+          const { cleanText, tagHtml } = formatEmpTag(c.name);
+          const servicesText = Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'First Service');
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fff;border:1px solid #ebebeb;border-radius:10px">
+              <div>
+                <div style="font-size:13px;font-weight:600;color:#1a1a1a;display:inline-flex;align-items:center;">
+                  ${cleanText} ${tagHtml}
+                  <span class="badge badge-amber" style="margin-left:6px;font-size:10px">🆕 New Client</span>
+                </div>
+                <div style="font-size:11px;color:#888;margin-top:2px">${c.phone || 'No phone'} · ${c.location || 'Chennai'} · Last Visit: ${c.last_visit || 'Recent'}</div>
+                <div style="font-size:11px;color:#444;margin-top:2px">Service Taken: <strong>${servicesText}</strong></div>
+              </div>
+
+              <div>
+                ${c.phone ? `
+                  <button class="btn btn-gold" style="background:#25d366;color:#fff;border:none;padding:6px 12px;font-size:11px" onclick="window.sendWhatsAppServiceInvite('${c.id}', 'new')">
+                    <i class="ti ti-brand-whatsapp"></i> Send Welcome & Return Invite
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+window.sendWhatsAppServiceInvite = sendWhatsAppServiceInvite;
+window.applyRecognizedCustomerDetails = applyRecognizedCustomerDetails;

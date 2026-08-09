@@ -12,6 +12,7 @@ import { renderEmployeePage, renderRoleSelector, applyRoleLayout, enterRole, ope
 import { renderStudents } from './pages/students.js';
 import { renderJewels } from './pages/jewels.js';
 import { renderEmployees } from './pages/employees.js';
+import { renderFinance, initFinanceCharts } from './pages/finance.js';
 
 export function toggleSidebar() {
   const app = document.getElementById('app');
@@ -151,6 +152,11 @@ export async function render() {
       case 'employees':
         main.innerHTML = loadingHtml();
         main.innerHTML = await renderEmployees();
+        break;
+      case 'finance':
+        main.innerHTML = loadingHtml();
+        main.innerHTML = await renderFinance();
+        initFinanceCharts();
         break;
     }
   } catch(err) {

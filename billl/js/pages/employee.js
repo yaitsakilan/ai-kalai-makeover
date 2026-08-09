@@ -14,7 +14,6 @@ import {
   saveAttendance
 } from '../db.js';
 import { showToast, showModal, closeModal } from '../ui.js';
-
 const PINS = { owner: 'kalai1610', employee: 'emp123' };
 
 // ─────────────────────────────────────────────

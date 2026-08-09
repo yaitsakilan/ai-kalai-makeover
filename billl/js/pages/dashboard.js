@@ -146,22 +146,6 @@ export async function renderDashboard() {
 
   <div class="grid-2">
     <div class="card">
-      <div class="section-title">
-        <i class="ti ti-bell" style="color:#d97706;font-size:16px"></i>
-        Reminders & Alerts
-        <span class="badge badge-red" style="margin-left:auto">${dynamicReminders.filter(r=>r.level==='red').length} urgent</span>
-      </div>
-      ${dynamicReminders.slice(0,5).map(r=>`
-        <div class="reminder-item">
-          <div class="reminder-dot" style="background:${r.level==='red'?'#ef4444':r.level==='amber'?'#f59e0b':'#3b82f6'}"></div>
-          <div>
-            <div style="font-size:12px;color:#333">${r.text}</div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-
-    <div class="card">
       <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
         <span style="display:inline-flex; align-items:center; gap:8px;">
           <i class="ti ti-calendar-event" style="color:#d97706;font-size:16px"></i> Upcoming Events
@@ -184,9 +168,7 @@ export async function renderDashboard() {
         </div>
       `; }).join('')}
     </div>
-  </div>
 
-  <div class="grid-2">
     <div class="card">
       <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
         <span style="display:inline-flex; align-items:center; gap:8px;">
@@ -204,7 +186,7 @@ export async function renderDashboard() {
           <div class="avatar ${colors[i%4]}">${initials}</div>
           <div style="flex:1">
             <div style="font-size:13px;font-weight:500;display:inline-flex;align-items:center;">${cleanName} ${empBadge}</div>
-            <div style="font-size:11px;color:#999">${(c.services||[]).join(', ')}</div>
+            <div style="font-size:11px;color:#999">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || '')}</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:13px;font-weight:600;color:#d97706">₹${(c.amount||0).toLocaleString()}</div>
@@ -213,25 +195,25 @@ export async function renderDashboard() {
         </div>`;
       }).join('')}
     </div>
+  </div>
 
-    <div class="card">
-      <div class="section-title"><i class="ti ti-chart-donut" style="color:#d97706;font-size:16px"></i>Summary</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        ${[
-          {label:'Total Income',val:'₹'+monthRevenue.toLocaleString(),color:'#15803d'},
-          {label:'Total Expenses',val:'₹'+totalExpenses.toLocaleString(),color:'#dc2626'},
-          {label:'Pending',val:'₹'+pendingTotal.toLocaleString(),color:'#d97706'},
-          {label:'Net Profit',val:'₹'+(monthRevenue-totalExpenses).toLocaleString(),color:'#7c3aed'},
-        ].map(m=>`
-          <div style="background:#f9f9f9;border-radius:10px;padding:12px">
-            <div style="font-size:11px;color:#999;margin-bottom:4px">${m.label}</div>
-            <div style="font-size:18px;font-weight:600;color:${m.color}">${m.val}</div>
-          </div>
-        `).join('')}
-      </div>
-      <div style="position:relative;width:100%;height:120px;margin-top:14px">
-        <canvas id="revenueChart" role="img" aria-label="Revenue vs expenses bar chart">Revenue ${monthRevenue}, Expenses ${totalExpenses}</canvas>
-      </div>
+  <div class="card">
+    <div class="section-title"><i class="ti ti-chart-donut" style="color:#d97706;font-size:16px"></i>Summary</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px">
+      ${[
+        {label:'Total Income',val:'₹'+monthRevenue.toLocaleString(),color:'#15803d'},
+        {label:'Total Expenses',val:'₹'+totalExpenses.toLocaleString(),color:'#dc2626'},
+        {label:'Pending',val:'₹'+pendingTotal.toLocaleString(),color:'#d97706'},
+        {label:'Net Profit',val:'₹'+(monthRevenue-totalExpenses).toLocaleString(),color:'#7c3aed'},
+      ].map(m=>`
+        <div style="background:#f9f9f9;border-radius:10px;padding:12px">
+          <div style="font-size:11px;color:#999;margin-bottom:4px">${m.label}</div>
+          <div style="font-size:18px;font-weight:600;color:${m.color}">${m.val}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div style="position:relative;width:100%;height:140px;margin-top:14px">
+      <canvas id="revenueChart" role="img" aria-label="Revenue vs expenses bar chart">Revenue ${monthRevenue}, Expenses ${totalExpenses}</canvas>
     </div>
   </div>`;
 }

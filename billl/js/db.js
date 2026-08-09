@@ -28,8 +28,11 @@ export function initDb() {
     return null;
   }
 
-  const isPlaceholderUrl = !SUPABASE_URL || SUPABASE_URL.includes('YOUR_SUPABASE_PROJECT_ID');
-  const isPlaceholderKey = !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes('YOUR_SUPABASE_ANON_KEY');
+  const url = window.SUPABASE_URL || localStorage.getItem('SUPABASE_URL') || '';
+  const key = window.SUPABASE_ANON_KEY || localStorage.getItem('SUPABASE_ANON_KEY') || '';
+
+  const isPlaceholderUrl = !url || url.includes('YOUR_SUPABASE_PROJECT_ID');
+  const isPlaceholderKey = !key || key.includes('YOUR_SUPABASE_ANON_KEY');
 
   if (isPlaceholderUrl || isPlaceholderKey) {
     console.warn('Supabase credentials in config.js are placeholders. Operating in LocalStorage fallback mode.');
@@ -37,7 +40,7 @@ export function initDb() {
   }
 
   try {
-    db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    db = supabase.createClient(url, key);
   } catch (e) {
     console.error('Database client init failed:', e);
   }
@@ -82,8 +85,8 @@ function fetchCustomersLocally() {
   const list = getLocalItem('customers', null);
   if (list === null) {
     const sample = [
-      { id: 'demo-c1', name: 'Priya Sundar', phone: '9876543210', location: 'Chennai', services: 'Bridal Makeup, Facial', amount: 3500, total_spend: 3500, rating: 5, payment_method: 'GPay', payment_status: 'completed', last_visit: new Date().toISOString().split('T')[0], created_at: new Date().toISOString() },
-      { id: 'demo-c2', name: 'Anitha Ramesh', phone: '9876543211', location: 'Tambaram', services: 'Hair Spa, Threading', amount: 1200, total_spend: 1200, rating: 5, payment_method: 'Cash', payment_status: 'completed', last_visit: new Date().toISOString().split('T')[0], created_at: new Date().toISOString() }
+      { id: 'demo-c1', name: 'Priya Sundar', phone: '9876543210', location: 'Chennai', services: ['Bridal Makeup', 'Facial'], amount: 3500, total_spend: 3500, rating: 5, payment_method: 'GPay', payment_status: 'completed', last_visit: new Date().toISOString().split('T')[0], created_at: new Date().toISOString() },
+      { id: 'demo-c2', name: 'Anitha Ramesh', phone: '9876543211', location: 'Tambaram', services: ['Hair Spa', 'Threading'], amount: 1200, total_spend: 1200, rating: 5, payment_method: 'Cash', payment_status: 'completed', last_visit: new Date().toISOString().split('T')[0], created_at: new Date().toISOString() }
     ];
     setLocalItem('customers', sample);
     return sample;
@@ -134,6 +137,40 @@ export async function addCustomer(customer) {
     return newCust;
   }
   showToast('Customer added successfully!');
+  return data?.[0];
+}
+
+export async function updateCustomer(id, updates) {
+  const client = initDb();
+  if (updates.amount !== undefined) updates.amount = Math.round(Number(updates.amount) || 0);
+  if (updates.total_spend !== undefined) updates.total_spend = Math.round(Number(updates.total_spend) || 0);
+
+  if (!client) {
+    const list = fetchCustomersLocally();
+    const idx = list.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...updates };
+      setLocalItem('customers', list);
+      showToast('Customer visit updated locally!');
+      return list[idx];
+    }
+    return null;
+  }
+
+  const { data, error } = await client.from('customers').update(updates).eq('id', id).select();
+  if (error) {
+    console.warn('Update customer DB error, updating locally:', error);
+    const list = fetchCustomersLocally();
+    const idx = list.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...updates };
+      setLocalItem('customers', list);
+      showToast('Customer visit updated locally!');
+      return list[idx];
+    }
+    return null;
+  }
+  showToast('Customer visit updated successfully!');
   return data?.[0];
 }
 
@@ -1068,4 +1105,137 @@ function savePayslipLocally(fullPayslip) {
     setLocalItem('payslips', list);
     return fullPayslip;
   } catch(e) { return null; }
+}
+
+export async function fetchAllClassPayments() {
+  const client = initDb();
+  if (!client) return getLocalItem('class_payments', []);
+  const { data, error } = await client.from('class_payments').select('*').order('date', { ascending: false });
+  if (error) return getLocalItem('class_payments', []);
+  return data || [];
+}
+
+export async function fetchAllJewelRentals() {
+  const client = initDb();
+  if (!client) return getLocalItem('jewel_rentals', []);
+  const { data, error } = await client.from('jewel_rentals').select('*').order('created_at', { ascending: false });
+  if (error) return getLocalItem('jewel_rentals', []);
+  return data || [];
+}
+
+export async function fetchFinancialSummary(selectedMonth = 'all') {
+  let [customers, events, expenses, payslips, studentPayments, jewelRentals] = await Promise.all([
+    fetchCustomers().catch(() => []),
+    fetchEvents().catch(() => []),
+    fetchExpenses().catch(() => []),
+    fetchPayslips().catch(() => []),
+    fetchAllClassPayments().catch(() => []),
+    fetchAllJewelRentals().catch(() => [])
+  ]);
+
+  // Extract all unique YYYY-MM months for filter dropdown
+  const monthSet = new Set();
+  const getMonthStr = (dStr) => dStr ? String(dStr).substring(0, 7) : null;
+
+  customers.forEach(c => { const m = getMonthStr(c.last_visit || c.created_at); if(m && m.length===7) monthSet.add(m); });
+  events.forEach(e => { const m = getMonthStr(e.date || e.created_at); if(m && m.length===7) monthSet.add(m); });
+  expenses.forEach(ex => { const m = getMonthStr(ex.date || ex.created_at); if(m && m.length===7) monthSet.add(m); });
+  payslips.forEach(p => { const m = getMonthStr(p.month || p.created_at); if(m && m.length===7) monthSet.add(m); });
+  studentPayments.forEach(sp => { const m = getMonthStr(sp.date || sp.created_at); if(m && m.length===7) monthSet.add(m); });
+  jewelRentals.forEach(r => { const m = getMonthStr(r.start_date || r.created_at); if(m && m.length===7) monthSet.add(m); });
+
+  // Ensure current month is included if set is empty
+  const currentMonthStr = new Date().toISOString().substring(0, 7);
+  monthSet.add(currentMonthStr);
+  const availableMonths = Array.from(monthSet).sort().reverse();
+
+  // Filter lists if a specific month is selected
+  if (selectedMonth && selectedMonth !== 'all') {
+    customers = customers.filter(c => getMonthStr(c.last_visit || c.created_at) === selectedMonth);
+    events = events.filter(e => getMonthStr(e.date || e.created_at) === selectedMonth);
+    expenses = expenses.filter(ex => getMonthStr(ex.date || ex.created_at) === selectedMonth);
+    payslips = payslips.filter(p => getMonthStr(p.month || p.created_at) === selectedMonth);
+    studentPayments = studentPayments.filter(sp => getMonthStr(sp.date || sp.created_at) === selectedMonth);
+    jewelRentals = jewelRentals.filter(r => getMonthStr(r.start_date || r.created_at) === selectedMonth);
+  }
+
+  // Income Streams
+  const shopRevenue = customers.reduce((sum, c) => sum + (c.payment_status === 'paid' ? (c.amount || 0) : 0), 0);
+  const eventAdvance = events.reduce((sum, e) => sum + (e.advance || 0), 0);
+  const eventFinalPaid = events.reduce((sum, e) => {
+    if (e.status === 'Completed' || (e.pending || 0) === 0) {
+      return sum + (e.total ? Math.max(0, e.total - (e.advance || 0)) : 0);
+    }
+    return sum;
+  }, 0);
+  const eventRevenue = eventAdvance + eventFinalPaid;
+  const academyRevenue = studentPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const jewelRevenue = jewelRentals.reduce((sum, r) => sum + (r.rental_fee || 0), 0);
+
+  const totalGrossRevenue = shopRevenue + eventRevenue + academyRevenue + jewelRevenue;
+
+  // Payment Mode Breakdown
+  let cashTotal = 0;
+  let gpayTotal = 0;
+
+  customers.forEach(c => {
+    if (c.payment_status === 'paid') {
+      if ((c.payment_method || '').toLowerCase().includes('cash')) cashTotal += (c.amount || 0);
+      else gpayTotal += (c.amount || 0);
+    }
+  });
+
+  studentPayments.forEach(p => {
+    if ((p.payment_method || '').toLowerCase().includes('cash')) cashTotal += (p.amount || 0);
+    else gpayTotal += (p.amount || 0);
+  });
+
+  events.forEach(e => {
+    gpayTotal += (e.advance || 0);
+  });
+
+  jewelRentals.forEach(r => {
+    if ((r.payment_method || '').toLowerCase().includes('cash')) cashTotal += (r.rental_fee || 0);
+    else gpayTotal += (r.rental_fee || 0);
+  });
+
+  // Expense Streams
+  const generalExpenses = expenses.reduce((sum, ex) => sum + (ex.amount || 0), 0);
+  const payrollExpenses = payslips.reduce((sum, p) => sum + (p.net_salary || 0), 0);
+  const eventStaffWages = events.reduce((sum, e) => {
+    const wages = Array.isArray(e.staff_wages) ? e.staff_wages : [];
+    return sum + wages.reduce((s, w) => s + (w.amount || 0), 0);
+  }, 0);
+  const eventTravelCosts = events.reduce((sum, e) => sum + (e.travel_allowance || 0), 0);
+
+  const totalExpenses = generalExpenses + payrollExpenses + eventStaffWages + eventTravelCosts;
+  const netOperatingProfit = totalGrossRevenue - totalExpenses;
+
+  // Receivables & Payables Dues
+  const customerDues = customers.filter(c => c.payment_status === 'pending').reduce((sum, c) => sum + (c.amount || 0), 0);
+  const eventDues = events.reduce((sum, e) => sum + (e.pending || 0), 0);
+  const totalReceivables = customerDues + eventDues;
+
+  return {
+    selectedMonth,
+    availableMonths,
+    shopRevenue,
+    eventRevenue,
+    academyRevenue,
+    jewelRevenue,
+    totalGrossRevenue,
+    cashTotal,
+    gpayTotal,
+    generalExpenses,
+    payrollExpenses,
+    eventStaffWages,
+    eventTravelCosts,
+    totalExpenses,
+    netOperatingProfit,
+    totalReceivables,
+    customers,
+    events,
+    expenses,
+    payslips
+  };
 }

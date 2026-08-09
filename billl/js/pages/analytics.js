@@ -8,9 +8,11 @@ export async function renderAnalytics() {
     fetchExpenses()
   ]);
 
+  const getSvcArray = (c) => Array.isArray(c.services) ? c.services : (typeof c.services === 'string' && c.services.trim() ? c.services.split(',').map(s => s.trim()) : []);
+
   // Separate normal shop customers and class students
-  const shopCustomers = customers.filter(c => !(c.services || []).includes('Classes'));
-  const classStudents = customers.filter(c => (c.services || []).includes('Classes'));
+  const shopCustomers = customers.filter(c => !getSvcArray(c).some(s => s.includes('Classes')));
+  const classStudents = customers.filter(c => getSvcArray(c).some(s => s.includes('Classes')));
 
   const shopRev = shopCustomers.reduce((s, c) => s + (c.amount || 0), 0);
   const classRev = classStudents.reduce((s, c) => s + (c.amount || 0), 0);
@@ -22,7 +24,7 @@ export async function renderAnalytics() {
 
   // Build service popularity (excluding Classes)
   const serviceCounts = {};
-  shopCustomers.forEach(c => (c.services || []).forEach(s => { serviceCounts[s] = (serviceCounts[s] || 0) + 1; }));
+  shopCustomers.forEach(c => getSvcArray(c).forEach(s => { serviceCounts[s] = (serviceCounts[s] || 0) + 1; }));
   const topServices = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const maxSvc = topServices.length ? topServices[0][1] : 1;
 

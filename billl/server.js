@@ -131,11 +131,49 @@ function handleLocalGroqProxy(req, res) {
     });
 }
 
+function getEnvVars() {
+    const env = { ...process.env };
+    try {
+        const envPath = path.join(__dirname, '..', '.env');
+        if (fs.existsSync(envPath)) {
+            const envContent = fs.readFileSync(envPath, 'utf8');
+            envContent.split(/\r?\n/).forEach(line => {
+                const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+                if (match) {
+                    const key = match[1];
+                    let value = match[2] || '';
+                    if (value.length > 0 && value.charAt(0) === '"' && value.charAt(value.length - 1) === '"') {
+                        value = value.replace(/^"|"$/g, '');
+                    }
+                    env[key] = value.trim();
+                }
+            });
+        }
+    } catch (e) {
+        // Ignore .env read errors
+    }
+    return env;
+}
+
 const server = http.createServer((req, res) => {
     // Intercept Netlify function calls for local development
     if (req.url.startsWith('/.netlify/functions/groq-proxy')) {
         handleLocalGroqProxy(req, res);
         return;
+    }
+
+    // Intercept /config.js request if environment variables are provided locally via .env or shell
+    if (req.url === '/config.js' || req.url === '/config.js?') {
+        const currentEnv = getEnvVars();
+        if (currentEnv.SUPABASE_URL && !currentEnv.SUPABASE_URL.includes('YOUR_SUPABASE')) {
+            const configScript = `window.GROQ_API_KEY = '${currentEnv.GROQ_API_KEY || ''}';\nwindow.SUPABASE_URL = '${currentEnv.SUPABASE_URL || ''}';\nwindow.SUPABASE_ANON_KEY = '${currentEnv.SUPABASE_ANON_KEY || ''}';\n`;
+            res.writeHead(200, {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
+            });
+            res.end(configScript);
+            return;
+        }
     }
 
     // Prevent directory traversal attacks and decode URI

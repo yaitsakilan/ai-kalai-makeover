@@ -2,7 +2,7 @@
 import { state } from '../state.js';
 import { fetchCustomers, addCustomer, updateCustomer, deleteCustomer, addClassEnrollment, addClassPayment } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone, formatEmpTag } from '../utils.js';
+import { validateAndCleanPhone, formatEmpTag, formatVisitedDate, getUniqueCustomersMap, getEffectiveVisits, sortCustomersList } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 
 export async function renderCustomers() {
@@ -14,6 +14,7 @@ export async function renderCustomers() {
   if (window._searchQuery === undefined) window._searchQuery = '';
   if (window._monthFilterExpanded === undefined) window._monthFilterExpanded = false;
   if (window._searchFieldExpanded === undefined) window._searchFieldExpanded = false;
+  if (window._customerSortOption === undefined) window._customerSortOption = 'most_visited';
 
   const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -64,6 +65,15 @@ export async function renderCustomers() {
       <p style="font-size:12px;color:#888;margin-top:2px">Viewing ${selectedMonthLabel} · Customer Analytics, Demographics, Staff Handling & History</p>
     </div>
     <div style="display:flex; gap:10px; align-items:center">
+      <!-- Sort Filter Select Dropdown -->
+      <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.handleCustomerSortChange(this.value)" title="Sort Customer Filter">
+        <option value="most_visited" ${window._customerSortOption === 'most_visited' ? 'selected' : ''}>🔥 More Times Visited</option>
+        <option value="least_visited" ${window._customerSortOption === 'least_visited' ? 'selected' : ''}>🌱 Less Times Visited</option>
+        <option value="date_desc" ${window._customerSortOption === 'date_desc' ? 'selected' : ''}>📅 By Date (Newest First)</option>
+        <option value="date_asc" ${window._customerSortOption === 'date_asc' ? 'selected' : ''}>📅 By Date (Oldest First)</option>
+        <option value="spend_desc" ${window._customerSortOption === 'spend_desc' ? 'selected' : ''}>💰 Highest Spend</option>
+      </select>
+
       <!-- Month Filter Select Dropdown -->
       <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterByMonthSelect(this.value)" title="Choose Month Filter">
         <option value="all" ${window._selectedMonth === 'all' ? 'selected' : ''}>📅 All Months</option>
@@ -137,15 +147,28 @@ export async function renderCustomers() {
 
 export function renderCustomerMetrics(customers) {
   const totalCustomers = customers.length;
-  const repeatedCustomers = customers.filter(c => (c.visits || 0) > 1).length;
-  const totalAmount = customers.reduce((sum, c) => sum + (c.total_spend || 0), 0);
+  const uniqueMap = getUniqueCustomersMap(customers);
+  const repeatedCustomers = Array.from(uniqueMap.values()).filter(g => g.totalVisits > 1 || g.records.length > 1).length;
+  const totalAmount = customers.reduce((sum, c) => sum + (c.total_spend || c.amount || 0), 0);
   const avgSpend = totalCustomers > 0 ? Math.round(totalAmount / totalCustomers) : 0;
+
+  const uniqueDays = new Set();
+  customers.forEach(c => {
+    const dStr = c.last_visit || c.created_at;
+    if (dStr) {
+      const day = String(dStr).split('T')[0];
+      if (day.length >= 10) uniqueDays.add(day);
+    }
+  });
+  const activeDaysCount = uniqueDays.size || 1;
+  const avgCustomersPerDay = (totalCustomers / activeDaysCount).toFixed(1);
 
   return `
   <div class="metric-grid" style="margin-bottom: 16px;">
     <div class="metric-card mc-gold">
       <div class="metric-label">Total Customers</div>
       <div class="metric-value">${totalCustomers}</div>
+      <div class="metric-sub">~${avgCustomersPerDay} customers / day</div>
       <div class="metric-icon"><i class="ti ti-users"></i></div>
     </div>
     <div class="metric-card mc-teal">
@@ -268,34 +291,37 @@ export function toggleSearchField() {
 export function renderCustomerList(customers) {
   if (!customers.length) return '<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No customers found</div>';
   const colors = ['av-gold', 'av-teal', 'av-rose', 'av-purple'];
-  return customers.map((c, i) => {
+  const sorted = sortCustomersList(customers, window._customerSortOption || 'most_visited', window._cachedCustomers || customers);
+  return sorted.map((c, i) => {
     const { cleanText: cleanName, tagHtml: empBadge } = formatEmpTag(c.name);
     const initials = cleanName.split(' ').map(n => n[0]).join('').slice(0, 2);
+    const effVisits = getEffectiveVisits(c, window._cachedCustomers || customers);
+    const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
     return `
-    <div class="card" style="margin-bottom:10px">
+    <div class="card" style="margin-bottom:10px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer history & details">
       <div style="display:flex;align-items:center;gap:14px">
         <div class="avatar ${colors[i % 4]}" style="width:44px;height:44px;font-size:15px">${initials}</div>
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
             <span style="font-size:14px;font-weight:600">${cleanName}</span>
             ${empBadge}
-            ${(c.visits || 0) >= 5 ? '<span class="badge badge-blue">⭐ Regular</span>' : ''}
+            ${effVisits >= 5 ? '<span class="badge badge-blue">⭐ Regular</span>' : ''}
             ${c.rating ? `<span style="color:#d97706;font-size:11px;margin-left:6px;letter-spacing:1px;" title="Owner rating: ${c.rating}/5">${'★'.repeat(c.rating)}${'☆'.repeat(5 - c.rating)}</span>` : ''}
             ${c.referred_by ? `<span class="badge badge-amber" title="Referred by: ${c.referred_by}">📢 Ref: ${c.referred_by}</span>` : ''}
           </div>
-          <div style="font-size:12px;color:#888">${c.phone || 'No phone'} · ${c.location || 'No location'}</div>
-          <div style="font-size:12px;color:#aaa;margin-top:2px">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || '')} · Last: ${c.last_visit || 'N/A'}</div>
+          <div style="font-size:12px;color:#888">${cleanP || 'No phone'} · ${c.location || 'No location'} · 📅 Visited: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
+          <div style="font-size:12px;color:#aaa;margin-top:2px">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || '')}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:14px;font-weight:700;color:#d97706">₹${(c.total_spend || 0).toLocaleString()}</div>
-          <div style="font-size:11px;color:#bbb">${c.visits || 0} visits</div>
+          <div style="font-size:14px;font-weight:700;color:#d97706">₹${(c.total_spend || c.amount || 0).toLocaleString()}</div>
+          <div style="font-size:11px;color:#bbb">${effVisits} visits</div>
         </div>
-        ${c.phone ? `
-        <div onclick="window.promptWhatsAppBillFromId('${c.id}')" style="cursor:pointer;color:#25d366;padding:8px;border-radius:8px;transition:all 0.15s" onmouseover="this.style.color='#20ba5a';this.style.background='#e8fced'" onmouseout="this.style.color='#25d366';this.style.background='transparent'" title="Send WhatsApp Bill">
+        ${cleanP ? `
+        <div onclick="event.stopPropagation(); window.promptWhatsAppBillFromId('${c.id}')" style="cursor:pointer;color:#25d366;padding:8px;border-radius:8px;transition:all 0.15s" onmouseover="this.style.color='#20ba5a';this.style.background='#e8fced'" onmouseout="this.style.color='#25d366';this.style.background='transparent'" title="Send WhatsApp Bill">
           <i class="ti ti-brand-whatsapp" style="font-size:16px"></i>
         </div>
         ` : ''}
-        <div onclick="window.handleDeleteCustomer('${c.id}')" style="cursor:pointer;color:#ccc;padding:8px;border-radius:8px;transition:all 0.15s" onmouseover="this.style.color='#dc2626';this.style.background='#fee2e2'" onmouseout="this.style.color='#ccc';this.style.background='transparent'">
+        <div onclick="event.stopPropagation(); window.handleDeleteCustomer('${c.id}')" style="cursor:pointer;color:#ccc;padding:8px;border-radius:8px;transition:all 0.15s" onmouseover="this.style.color='#dc2626';this.style.background='#fee2e2'" onmouseout="this.style.color='#ccc';this.style.background='transparent'">
           <i class="ti ti-trash" style="font-size:16px"></i>
         </div>
       </div>
@@ -415,9 +441,9 @@ export async function analyzeShopCustomers() {
 
     // Pre-calculate exact shop metrics to ensure consistency and prevent LLM bad-math hallucinations
     const shopCount = shopCustomers.length;
-    const shopRevenue = shopCustomers.reduce((sum, c) => sum + (c.total_spend || 0), 0);
+    const shopRevenue = shopCustomers.reduce((sum, c) => sum + (c.total_spend || c.amount || 0), 0);
     const shopAvgSpend = shopCount > 0 ? Math.round(shopRevenue / shopCount) : 0;
-    const shopRepeated = shopCustomers.filter(c => (c.visits || 0) > 1).length;
+    const shopRepeated = Array.from(getUniqueCustomersMap(shopCustomers).values()).filter(g => g.totalVisits > 1 || g.records.length > 1).length;
     const ratedCustomers = shopCustomers.filter(c => (c.rating || 0) > 0);
     const shopAvgRating = ratedCustomers.length > 0
       ? (ratedCustomers.reduce((sum, c) => sum + (c.rating || 0), 0) / ratedCustomers.length).toFixed(1)
@@ -1411,8 +1437,9 @@ export function renderCustomerAnalyticsDashboard(customers) {
   }
 
   const totalCustomers = customers.length;
-  const repeatCustomers = customers.filter(c => (c.visits || 0) > 1);
-  const retentionRate = Math.round((repeatCustomers.length / totalCustomers) * 100);
+  const uniqueMap = getUniqueCustomersMap(customers);
+  const repeatCustomers = Array.from(uniqueMap.values()).filter(g => g.totalVisits > 1 || g.records.length > 1);
+  const retentionRate = totalCustomers > 0 ? Math.round((repeatCustomers.length / (uniqueMap.size || 1)) * 100) : 0;
   const totalRevenue = customers.reduce((sum, c) => sum + (c.total_spend || 0), 0);
   const avgSpend = Math.round(totalRevenue / totalCustomers);
 
@@ -1488,11 +1515,50 @@ export function renderCustomerAnalyticsDashboard(customers) {
     .map(([name, data]) => ({ name, ...data }))
     .sort((a, b) => b.count - a.count);
 
+  // 6. Calculate active service days & Avg Customers / Day
+  const uniqueDays = new Set();
+  customers.forEach(c => {
+    const dStr = c.last_visit || c.created_at;
+    if (dStr) {
+      const day = String(dStr).split('T')[0];
+      if (day.length >= 10) uniqueDays.add(day);
+    }
+  });
+  const activeDaysCount = uniqueDays.size || 1;
+  const avgCustomersPerDay = (totalCustomers / activeDaysCount).toFixed(1);
+
+  // 7. Monthly Breakdown & Peak Month Analysis ("which month is high")
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthMap = {};
+
+  customers.forEach(c => {
+    const dStr = c.last_visit || c.created_at;
+    if (!dStr) return;
+    const parts = String(dStr).split('T')[0].split('-');
+    if (parts.length < 2) return;
+    const yr = parts[0];
+    const mIdx = parseInt(parts[1], 10) - 1;
+    if (mIdx >= 0 && mIdx < 12) {
+      const key = `${yr}-${String(mIdx + 1).padStart(2, '0')}`;
+      const label = `${MONTH_NAMES[mIdx]} ${yr}`;
+      if (!monthMap[key]) {
+        monthMap[key] = { key, label, count: 0, revenue: 0 };
+      }
+      monthMap[key].count += 1;
+      monthMap[key].revenue += (c.total_spend || c.amount || 0);
+    }
+  });
+
+  const sortedMonths = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
+  const peakMonth = sortedMonths.length ? [...sortedMonths].sort((a, b) => b.count - a.count)[0] : null;
+
   // Store for Chart.js
   window._customerAnalyticsData = {
     locations: sortedLocations,
     staff: sortedStaff,
     services: sortedServices,
+    monthly: sortedMonths,
+    peakMonth,
     cashRev, gpayRev, cashCount, gpayCount
   };
 
@@ -1504,6 +1570,12 @@ export function renderCustomerAnalyticsDashboard(customers) {
         <div class="metric-value">${totalCustomers}</div>
         <div class="metric-sub">${repeatCustomers.length} repeat clients (${retentionRate}% retention)</div>
         <i class="ti ti-users metric-icon"></i>
+      </div>
+      <div class="metric-card mc-orange">
+        <div class="metric-label">Avg Customers / Day</div>
+        <div class="metric-value" style="color:#d97706">${avgCustomersPerDay} <span style="font-size:13px;font-weight:500;color:#888">/ day</span></div>
+        <div class="metric-sub">Across ${activeDaysCount} active service days</div>
+        <i class="ti ti-calendar-stats metric-icon" style="opacity:0.12;color:#d97706"></i>
       </div>
       <div class="metric-card mc-teal">
         <div class="metric-label">Total Customer Spend</div>
@@ -1522,6 +1594,47 @@ export function renderCustomerAnalyticsDashboard(customers) {
         <div class="metric-value" style="font-size:20px">${sortedServices[0]?.name || 'N/A'}</div>
         <div class="metric-sub">${sortedServices[0]?.count || 0} bookings total</div>
         <i class="ti ti-sparkles metric-icon"></i>
+      </div>
+    </div>
+
+    <!-- 📅 Monthly Customer & Revenue Trends (Which Month is High Chart) -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="section-title" style="margin-bottom:2px">
+            <i class="ti ti-chart-bar" style="color:#d97706;font-size:18px"></i> Monthly Customer Visits & Revenue Trend (Peak Month Analysis)
+          </div>
+          <div style="font-size:12px;color:#888">Monthly breakdown showing which months generate peak salon visits & revenue</div>
+        </div>
+        ${peakMonth ? `
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:6px 14px;display:flex;align-items:center;gap:10px">
+            <i class="ti ti-trophy" style="color:#d97706;font-size:22px"></i>
+            <div>
+              <div style="font-size:10px;color:#b45309;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Highest Peak Month</div>
+              <div style="font-size:14px;font-weight:700;color:#92400e">${peakMonth.label} — ${peakMonth.count} Visits <span style="font-size:12px;font-weight:600;color:#15803d">(₹${peakMonth.revenue.toLocaleString()})</span></div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+
+      <div style="position:relative;width:100%;height:220px;margin-bottom:16px">
+        <canvas id="customerMonthlyTrendChart"></canvas>
+      </div>
+
+      <!-- Monthly Breakdown List -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:10px">
+        ${sortedMonths.map(m => {
+          const isPeak = peakMonth && m.key === peakMonth.key;
+          const pct = Math.round((m.count / totalCustomers) * 100);
+          return `
+            <div style="padding:10px 12px;background:${isPeak ? '#fffbeb' : '#fafafa'};border:${isPeak ? '1.5px solid #f5c842' : '1px solid #f0f0f0'};border-radius:10px;position:relative;">
+              ${isPeak ? '<span class="badge badge-gold" style="position:absolute;top:-8px;right:8px;font-size:9px;padding:1px 6px">🏆 Highest</span>' : ''}
+              <div style="font-size:12px;font-weight:700;color:#1a1a1a">${m.label}</div>
+              <div style="font-size:18px;font-weight:700;color:${isPeak ? '#d97706' : '#333'};margin-top:2px">${m.count} <span style="font-size:11px;font-weight:normal;color:#888">cust (${pct}%)</span></div>
+              <div style="font-size:12px;font-weight:600;color:#15803d;margin-top:2px">₹${m.revenue.toLocaleString()}</div>
+            </div>
+          `;
+        }).join('')}
       </div>
     </div>
 
@@ -1677,15 +1790,16 @@ export function renderCustomerAnalyticsDashboard(customers) {
         <div style="font-size:12px;color:#888;margin-bottom:12px">Highest spending & most frequent salon clients</div>
 
         <div style="display:flex;flex-direction:column;gap:8px">
-          ${customers.sort((a, b) => (b.total_spend || 0) - (a.total_spend || 0)).slice(0, 5).map((c, i) => {
+          ${customers.sort((a, b) => (b.total_spend || b.amount || 0) - (a.total_spend || a.amount || 0)).slice(0, 5).map((c, i) => {
             const { cleanText } = formatEmpTag(c.name);
+            const effVisits = getEffectiveVisits(c, customers);
             return `
               <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border:1px solid #f0f0f0;border-radius:10px">
                 <div style="display:flex;align-items:center;gap:10px">
                   <div style="font-size:12px;font-weight:700;color:#d97706;width:16px">#${i + 1}</div>
                   <div>
                     <div style="font-size:13px;font-weight:600;color:#1a1a1a">${cleanText}</div>
-                    <div style="font-size:11px;color:#888">${c.phone || 'No phone'} · ${c.visits || 1} visits</div>
+                    <div style="font-size:11px;color:#888">${c.phone || 'No phone'} · ${effVisits} visits · 📅 Last: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
                   </div>
                 </div>
                 <div style="text-align:right">
@@ -1768,6 +1882,82 @@ export function initCustomerAnalyticsCharts(customers) {
       }
     });
   }
+
+  // 4. Monthly Customer & Revenue Bar Chart ("which month is high")
+  const monthCtx = document.getElementById('customerMonthlyTrendChart');
+  if (monthCtx && dd.monthly && dd.monthly.length) {
+    const labels = dd.monthly.map(m => m.label);
+    const counts = dd.monthly.map(m => m.count);
+    const revenues = dd.monthly.map(m => m.revenue);
+
+    new Chart(monthCtx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Customer Visits',
+            data: counts,
+            backgroundColor: dd.monthly.map(m => (dd.peakMonth && m.key === dd.peakMonth.key) ? '#f5c842' : 'rgba(245, 200, 66, 0.45)'),
+            borderColor: '#f5c842',
+            borderWidth: 1.5,
+            borderRadius: 8,
+            yAxisID: 'y'
+          },
+          {
+            label: 'Revenue (₹)',
+            data: revenues,
+            type: 'line',
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            tension: 0.3,
+            fill: true,
+            pointBackgroundColor: '#10b981',
+            pointRadius: 4,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                if (ctx.dataset.type === 'line') {
+                  return ` Revenue: ₹${ctx.raw.toLocaleString()}`;
+                }
+                return ` Customers: ${ctx.raw} visits`;
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: { display: true, text: 'Customers Count', font: { size: 10 } },
+            ticks: { precision: 0, font: { size: 10 } }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            title: { display: true, text: 'Revenue (₹)', font: { size: 10 } },
+            ticks: {
+              callback: function(val) { return '₹' + val.toLocaleString(); },
+              font: { size: 10 }
+            }
+          },
+          x: { ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
 }
 
 window.switchCustomerTab = switchCustomerTab;
@@ -1830,21 +2020,32 @@ export function sendWhatsAppServiceInvite(id, inviteType) {
 // ─────────────────────────────────────────────
 
 export function renderTopPaidClientsTab(customers) {
-  const sorted = [...customers].sort((a, b) => (b.total_spend || 0) - (a.total_spend || 0));
+  const sorted = sortCustomersList(customers, window._customerSortOption || 'spend_desc', window._cachedCustomers || customers);
 
   return `
     <div class="card">
-      <div class="section-title">
-        <i class="ti ti-crown" style="color:#d97706;font-size:18px"></i> 🏆 Highest Spending Clients (Top Paid Customers)
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="section-title" style="margin-bottom:0">
+          <i class="ti ti-crown" style="color:#d97706;font-size:18px"></i> 🏆 Highest Spending Clients (Top Paid Customers)
+        </div>
+        <select class="form-input form-select" style="width:auto;height:32px;font-size:11px;padding:2px 26px 2px 8px;border-color:#e5e5e5;background-color:#fff;font-weight:500;" onchange="window.handleCustomerSortChange(this.value)" title="Sort Top Paid Clients">
+          <option value="spend_desc" ${window._customerSortOption === 'spend_desc' ? 'selected' : ''}>💰 Highest Spend</option>
+          <option value="most_visited" ${window._customerSortOption === 'most_visited' ? 'selected' : ''}>🔥 More Times Visited</option>
+          <option value="least_visited" ${window._customerSortOption === 'least_visited' ? 'selected' : ''}>🌱 Less Times Visited</option>
+          <option value="date_desc" ${window._customerSortOption === 'date_desc' ? 'selected' : ''}>📅 By Date (Newest First)</option>
+          <option value="date_asc" ${window._customerSortOption === 'date_asc' ? 'selected' : ''}>📅 By Date (Oldest First)</option>
+        </select>
       </div>
       <div style="font-size:12px;color:#888;margin-bottom:16px">Clients ranked strictly by total revenue spend across all visits</div>
 
       <div style="display:flex;flex-direction:column;gap:10px">
-        ${sorted.map((c, i) => {
+          ${sorted.map((c, i) => {
           const { cleanText, tagHtml } = formatEmpTag(c.name);
           const servicesText = Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'General Services');
+          const effVisits = getEffectiveVisits(c, customers);
+          const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
           return `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#fff;border:1px solid #ebebeb;border-radius:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#fff;border:1px solid #ebebeb;border-radius:12px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
               <div style="display:flex;align-items:center;gap:12px">
                 <div style="font-size:14px;font-weight:700;color:${i<3?'#d97706':'#888'};width:24px;text-align:center">#${i + 1}</div>
                 <div>
@@ -1852,7 +2053,7 @@ export function renderTopPaidClientsTab(customers) {
                     ${cleanText} ${tagHtml}
                     ${i === 0 ? '<span class="badge badge-gold" style="margin-left:6px">👑 Top #1 Spender</span>' : ''}
                   </div>
-                  <div style="font-size:12px;color:#888;margin-top:2px">${c.phone || 'No phone'} · ${c.location || 'Chennai'} · ${c.visits || 1} visits</div>
+                  <div style="font-size:12px;color:#888;margin-top:2px">${cleanP || 'No phone'} · ${c.location || 'Chennai'} · ${effVisits} visits · 📅 Visited: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
                   <div style="font-size:11px;color:#aaa;margin-top:2px">Services: ${servicesText}</div>
                 </div>
               </div>
@@ -1862,8 +2063,8 @@ export function renderTopPaidClientsTab(customers) {
                   <div style="font-size:16px;font-weight:700;color:#d97706">₹${(c.total_spend || c.amount || 0).toLocaleString()}</div>
                   <span class="badge badge-green" style="font-size:10px">Paid Client</span>
                 </div>
-                ${c.phone ? `
-                  <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:6px 12px;font-size:11px" onclick="window.sendWhatsAppServiceInvite('${c.id}', 'top_paid')" title="Send WhatsApp Invite">
+                ${cleanP ? `
+                  <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:6px 12px;font-size:11px" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'top_paid')" title="Send WhatsApp Invite">
                     <i class="ti ti-brand-whatsapp"></i> Send Invite
                   </button>
                 ` : ''}
@@ -1881,41 +2082,55 @@ export function renderTopPaidClientsTab(customers) {
 // ─────────────────────────────────────────────
 
 export function renderRepeatLapsedTab(customers) {
-  // Lapsed Clients: Visited in earlier months (e.g. May/June), but haven't returned in July/August
-  const currentMonthIdx = new Date().getMonth();
+  // Lapsed Clients: Has not visited in 40+ days
+  const now = new Date();
+  const LAPSED_THRESHOLD_DAYS = 40;
+
   const lapsedClients = customers.filter(c => {
-    if (!c.last_visit) return false;
-    const parts = String(c.last_visit).split('-');
-    if (parts.length < 2) return false;
-    const visitMonth = parseInt(parts[1], 10) - 1;
-    return visitMonth < currentMonthIdx;
+    const dStr = c.last_visit || c.created_at;
+    if (!dStr) return false;
+    const visitDate = new Date(dStr);
+    if (isNaN(visitDate.getTime())) return false;
+    const diffDays = Math.floor((now.getTime() - visitDate.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays >= LAPSED_THRESHOLD_DAYS;
   });
 
-  const repeatClients = customers.filter(c => (c.visits || 0) > 1);
+  const uniqueMap = getUniqueCustomersMap(customers);
+  const repeatGroups = Array.from(uniqueMap.values()).filter(g => g.totalVisits > 1 || g.records.length > 1);
+  const repeatClients = repeatGroups.map(g => ({
+    ...g.primary,
+    visits: g.totalVisits,
+    total_spend: g.totalSpend
+  }));
+  const sortedRepeatClients = sortCustomersList(repeatClients, window._customerSortOption || 'most_visited', customers);
+  const sortedLapsedClients = sortCustomersList(lapsedClients, window._customerSortOption || 'date_desc', customers);
 
   return `
     <div class="grid-2">
       <!-- Lapsed Clients (Need Re-engagement) -->
       <div class="card">
         <div class="section-title" style="color:#dc2626">
-          <i class="ti ti-alarm" style="color:#dc2626"></i> Lapsed Clients (May/June Visitors - Need Re-invite)
+          <i class="ti ti-alarm" style="color:#dc2626"></i> Lapsed Clients (No Visit in 40+ Days - Need Re-invite)
         </div>
-        <div style="font-size:12px;color:#888;margin-bottom:14px">Clients who visited in earlier months but haven't visited recently. Send personalized WhatsApp invite!</div>
+        <div style="font-size:12px;color:#888;margin-bottom:14px">Clients who haven't visited in over 40 days. Send personalized WhatsApp re-invite!</div>
 
         <div style="display:flex;flex-direction:column;gap:10px">
-          ${lapsedClients.length ? lapsedClients.map(c => {
+          ${sortedLapsedClients.length ? sortedLapsedClients.map(c => {
             const { cleanText } = formatEmpTag(c.name);
-            const serviceName = Array.isArray(c.services) ? c.services[0] : (c.services || 'Makeover');
+            const serviceName = Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'Makeover');
+            const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
+            const dStr = c.last_visit || c.created_at;
+            const daysAgo = dStr ? Math.floor((now.getTime() - new Date(dStr).getTime()) / (1000 * 60 * 60 * 24)) : 0;
             return `
-              <div style="padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px">
+              <div style="padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start">
                   <div>
                     <div style="font-size:13px;font-weight:600;color:#991b1b">${cleanText}</div>
-                    <div style="font-size:11px;color:#888">${c.phone || 'No phone'} · Last Visit: ${c.last_visit || 'N/A'}</div>
+                    <div style="font-size:11px;color:#888">${cleanP || 'No phone'} · 📅 Last Visit: ${formatVisitedDate(dStr)} (${daysAgo}d ago)</div>
                     <div style="font-size:11px;color:#b91c1c;margin-top:2px">Last Service: ${serviceName}</div>
                   </div>
-                  ${c.phone ? `
-                    <button class="btn btn-gold" style="padding:4px 8px;font-size:11px;background:#25d366;color:#fff;border:none" onclick="window.sendWhatsAppServiceInvite('${c.id}', 'lapsed')">
+                  ${cleanP ? `
+                    <button class="btn btn-gold" style="padding:4px 8px;font-size:11px;background:#25d366;color:#fff;border:none" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'lapsed')">
                       <i class="ti ti-brand-whatsapp"></i> Re-invite
                     </button>
                   ` : ''}
@@ -1928,22 +2143,32 @@ export function renderRepeatLapsedTab(customers) {
 
       <!-- Active Repeat Clients -->
       <div class="card">
-        <div class="section-title">
-          <i class="ti ti-refresh" style="color:#d97706"></i> Active Repeat Loyal Clients (${repeatClients.length})
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="section-title" style="margin-bottom:0">
+            <i class="ti ti-refresh" style="color:#d97706"></i> Active Repeat Loyal Clients (${sortedRepeatClients.length})
+          </div>
+          <select class="form-input form-select" style="width:auto;height:32px;font-size:11px;padding:2px 26px 2px 8px;border-color:#e5e5e5;background-color:#fff;font-weight:500;" onchange="window.handleCustomerSortChange(this.value)" title="Sort Repeat Clients">
+            <option value="most_visited" ${window._customerSortOption === 'most_visited' ? 'selected' : ''}>🔥 More Times Visited</option>
+            <option value="least_visited" ${window._customerSortOption === 'least_visited' ? 'selected' : ''}>🌱 Less Times Visited</option>
+            <option value="date_desc" ${window._customerSortOption === 'date_desc' ? 'selected' : ''}>📅 By Date (Newest First)</option>
+            <option value="date_asc" ${window._customerSortOption === 'date_asc' ? 'selected' : ''}>📅 By Date (Oldest First)</option>
+            <option value="spend_desc" ${window._customerSortOption === 'spend_desc' ? 'selected' : ''}>💰 Highest Spend</option>
+          </select>
         </div>
         <div style="font-size:12px;color:#888;margin-bottom:14px">Clients who have visited 2+ times</div>
 
         <div style="display:flex;flex-direction:column;gap:10px">
-          ${repeatClients.map(c => {
+          ${sortedRepeatClients.map(c => {
             const { cleanText } = formatEmpTag(c.name);
+            const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
             return `
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
                 <div>
                   <div style="font-size:13px;font-weight:600;color:#166534">${cleanText}</div>
-                  <div style="font-size:11px;color:#15803d">${c.visits || 2} visits total · Spend: ₹${(c.total_spend || 0).toLocaleString()}</div>
+                  <div style="font-size:11px;color:#15803d">${c.visits || 2} visits total · Spend: ₹${(c.total_spend || 0).toLocaleString()} · 📅 Last Visit: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
                 </div>
-                ${c.phone ? `
-                  <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:4px 8px;font-size:11px" onclick="window.sendWhatsAppServiceInvite('${c.id}', 'repeat')">
+                ${cleanP ? `
+                  <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:4px 8px;font-size:11px" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'repeat')">
                     <i class="ti ti-brand-whatsapp"></i> Invite
                   </button>
                 ` : ''}
@@ -1961,7 +2186,9 @@ export function renderRepeatLapsedTab(customers) {
 // ─────────────────────────────────────────────
 
 export function renderNewClientsTab(customers) {
-  const newClients = customers.filter(c => (c.visits || 1) <= 1);
+  const uniqueMap = getUniqueCustomersMap(customers);
+  const newGroups = Array.from(uniqueMap.values()).filter(g => g.totalVisits <= 1 && g.records.length <= 1);
+  const newClients = newGroups.map(g => g.primary);
 
   return `
     <div class="card">
@@ -1974,20 +2201,21 @@ export function renderNewClientsTab(customers) {
         ${newClients.map(c => {
           const { cleanText, tagHtml } = formatEmpTag(c.name);
           const servicesText = Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'First Service');
+          const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
           return `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fff;border:1px solid #ebebeb;border-radius:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fff;border:1px solid #ebebeb;border-radius:10px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
               <div>
                 <div style="font-size:13px;font-weight:600;color:#1a1a1a;display:inline-flex;align-items:center;">
                   ${cleanText} ${tagHtml}
                   <span class="badge badge-amber" style="margin-left:6px;font-size:10px">🆕 New Client</span>
                 </div>
-                <div style="font-size:11px;color:#888;margin-top:2px">${c.phone || 'No phone'} · ${c.location || 'Chennai'} · Last Visit: ${c.last_visit || 'Recent'}</div>
+                <div style="font-size:11px;color:#888;margin-top:2px">${cleanP || 'No phone'} · ${c.location || 'Chennai'} · 📅 Visited: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
                 <div style="font-size:11px;color:#444;margin-top:2px">Service Taken: <strong>${servicesText}</strong></div>
               </div>
 
               <div>
-                ${c.phone ? `
-                  <button class="btn btn-gold" style="background:#25d366;color:#fff;border:none;padding:6px 12px;font-size:11px" onclick="window.sendWhatsAppServiceInvite('${c.id}', 'new')">
+                ${cleanP ? `
+                  <button class="btn btn-gold" style="background:#25d366;color:#fff;border:none;padding:6px 12px;font-size:11px" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'new')">
                     <i class="ti ti-brand-whatsapp"></i> Send Welcome & Return Invite
                   </button>
                 ` : ''}
@@ -2002,3 +2230,159 @@ export function renderNewClientsTab(customers) {
 
 window.sendWhatsAppServiceInvite = sendWhatsAppServiceInvite;
 window.applyRecognizedCustomerDetails = applyRecognizedCustomerDetails;
+window.handleCustomerSortChange = function(val) {
+  window._customerSortOption = val;
+  if (typeof window.render === 'function') window.render();
+};
+
+export function showCustomerDetailsModal(idOrPhone) {
+  const allCustomers = window._cachedCustomers || [];
+  let target = allCustomers.find(c => String(c.id) === String(idOrPhone));
+  if (!target) {
+    const cleanP = validateAndCleanPhone(idOrPhone);
+    if (cleanP) {
+      target = allCustomers.find(c => c.phone && validateAndCleanPhone(c.phone) === cleanP);
+    }
+  }
+  if (!target) {
+    showToast('Customer details not found', 'error');
+    return;
+  }
+
+  // Find all records matching this customer (by phone or clean name)
+  const cleanPhone = target.phone ? validateAndCleanPhone(target.phone) : null;
+  const cleanName = target.name ? target.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+
+  let matchingRecords = [];
+  if (cleanPhone) {
+    matchingRecords = allCustomers.filter(c => c.phone && validateAndCleanPhone(c.phone) === cleanPhone);
+  } else if (cleanName) {
+    matchingRecords = allCustomers.filter(c => {
+      const n = c.name ? c.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+      return n === cleanName;
+    });
+  } else {
+    matchingRecords = [target];
+  }
+
+  // Sort visits by date (newest first)
+  matchingRecords.sort((a, b) => {
+    const dateA = a.last_visit || a.created_at || '';
+    const dateB = b.last_visit || b.created_at || '';
+    return String(dateB).localeCompare(String(dateA));
+  });
+
+  const { cleanText, tagHtml } = formatEmpTag(target.name);
+  const totalSpend = matchingRecords.reduce((sum, r) => sum + (r.total_spend !== undefined && r.total_spend > 0 ? Number(r.total_spend) : (Number(r.amount) || 0)), 0);
+  const totalVisitsCount = Math.max(target.visits || 1, matchingRecords.reduce((sum, r) => sum + (r.visits && r.visits > 1 ? r.visits : 1), 0), matchingRecords.length);
+
+  // All unique services taken
+  const allServicesSet = new Set();
+  matchingRecords.forEach(r => {
+    const sList = Array.isArray(r.services) ? r.services : (r.services || '').split(',');
+    sList.forEach(s => {
+      const cleanS = s.trim();
+      if (cleanS) allServicesSet.add(cleanS);
+    });
+  });
+  const uniqueServices = Array.from(allServicesSet);
+
+  const validPhone = target.phone ? validateAndCleanPhone(target.phone) : null;
+
+  const modalHtml = `
+    <div style="font-family: inherit; max-width: 100%;">
+      <!-- Customer Top Card Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#fcf8f2;border:1px solid #fde68a;border-radius:10px;padding:10px 12px;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:16px;font-weight:700;color:#1a1a1a;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            ${cleanText} ${tagHtml}
+            ${totalVisitsCount >= 5 ? '<span class="badge badge-blue" style="font-size:10px;padding:2px 6px;">⭐ Regular Client</span>' : '<span class="badge badge-amber" style="font-size:10px;padding:2px 6px;">💖 Valued Client</span>'}
+          </div>
+          <div style="font-size:12px;color:#555;margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <span><i class="ti ti-phone" style="color:#d97706"></i> ${validPhone || 'No phone'}</span>
+            <span><i class="ti ti-map-pin" style="color:#d97706"></i> ${target.location || 'Chennai'}</span>
+            ${target.rating ? `<span style="color:#d97706;">${'★'.repeat(target.rating)}${'☆'.repeat(5 - target.rating)}</span>` : ''}
+          </div>
+        </div>
+        ${validPhone ? `
+          <button class="btn btn-gold" style="background:#25d366;color:#fff;border:none;padding:6px 12px;font-size:11px;border-radius:8px;" onclick="window.sendWhatsAppServiceInvite('${target.id}', 'repeat')">
+            <i class="ti ti-brand-whatsapp" style="font-size:14px"></i> WhatsApp
+          </button>
+        ` : ''}
+      </div>
+
+      <!-- Quick Metrics Grid -->
+      <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-bottom:12px;">
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;">
+          <div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;">Visits</div>
+          <div style="font-size:18px;font-weight:700;color:#d97706;margin-top:1px;">${totalVisitsCount}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;">
+          <div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;">Total Spend</div>
+          <div style="font-size:18px;font-weight:700;color:#15803d;margin-top:1px;">₹${totalSpend.toLocaleString()}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;">
+          <div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;">Last Visited</div>
+          <div style="font-size:12px;font-weight:700;color:#1a1a1a;margin-top:4px;">${formatVisitedDate(target.last_visit || target.created_at)}</div>
+        </div>
+      </div>
+
+      <!-- Services Summary (Scrollable Chips) -->
+      <div style="margin-bottom:12px;">
+        <div class="section-title" style="font-size:12px;margin-bottom:6px;">
+          <i class="ti ti-scissors" style="color:#d97706"></i> All Services Taken (${uniqueServices.length})
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:85px;overflow-y:auto;padding:2px;background:#fafafa;border:1px solid #f0f0f0;border-radius:8px;" class="scrollbar-hide">
+          ${uniqueServices.length ? uniqueServices.map(s => `
+            <span style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:11px;padding:2px 8px;border-radius:14px;font-weight:500;">
+              ✨ ${s}
+            </span>
+          `).join('') : '<span style="color:#888;font-size:11px;padding:4px;">No services recorded yet</span>'}
+        </div>
+      </div>
+
+      <!-- Visit History Timeline (Scrollable List) -->
+      <div>
+        <div class="section-title" style="font-size:12px;margin-bottom:6px;">
+          <i class="ti ti-calendar" style="color:#d97706"></i> Visit History & Records (${matchingRecords.length})
+        </div>
+        <div style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px;" class="scrollbar-hide">
+          ${matchingRecords.map((r, idx) => {
+            const dateDisplay = formatVisitedDate(r.last_visit || r.created_at);
+            const servicesDisplay = Array.isArray(r.services) ? r.services.join(', ') : (r.services || 'General Service');
+            const amt = r.amount || r.total_spend || 0;
+            const pm = r.payment_method || 'Cash';
+            return `
+              <div style="padding:8px 10px;background:#fafafa;border:1px solid #ebebeb;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                <div style="flex:1;min-width:0;padding-right:8px;">
+                  <div style="font-size:11px;font-weight:700;color:#d97706;display:flex;align-items:center;gap:4px;">
+                    📅 ${dateDisplay} <span style="font-weight:normal;color:#888;font-size:10px;">(Visit #${matchingRecords.length - idx})</span>
+                  </div>
+                  <div style="font-size:11px;color:#333;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${servicesDisplay}">Services: <strong>${servicesDisplay}</strong></div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;">
+                  <div style="font-size:12px;font-weight:700;color:#15803d;">₹${amt.toLocaleString()}</div>
+                  <span class="badge badge-gray" style="font-size:9px;padding:1px 5px;">${pm}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  showModal(`Customer Profile: ${cleanText}`, modalHtml, null);
+  
+  // Customize modal footer to hide save button and set cancel text to Close
+  setTimeout(() => {
+    const saveBtn = document.getElementById('modal-save-btn');
+    if (saveBtn) saveBtn.style.display = 'none';
+    const cancelBtn = document.querySelector('#modal-container .btn-outline');
+    if (cancelBtn) cancelBtn.textContent = 'Close';
+  }, 50);
+}
+
+window.showCustomerDetailsModal = showCustomerDetailsModal;
+
+

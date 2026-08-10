@@ -12,6 +12,10 @@ export function validateAndCleanPhone(phone) {
     cleaned = cleaned.substring(2);
   }
   if (cleaned.length === 10) {
+    // Reject all zeros, all identical digits (e.g. 0000000000, 1111111111), or non-mobile prefixes 0-5
+    if (/^0+$/.test(cleaned) || /^(.)\1{9}$/.test(cleaned) || /^[0-5]/.test(cleaned)) {
+      return null;
+    }
     return cleaned;
   }
   return null;
@@ -51,3 +55,141 @@ export function formatEmpTag(text) {
   }
   return { cleanText, tagHtml };
 }
+
+/**
+ * Formats a date string (YYYY-MM-DD or ISO string) into a friendly date display like "10 Aug 2026"
+ * @param {string} dateStr 
+ * @returns {string} Formatted date string or 'N/A'
+ */
+export function formatVisitedDate(dateStr) {
+  if (!dateStr) return 'N/A';
+  try {
+    // If it's a YYYY-MM-DD string, construct Date using parts to prevent UTC timezone shifts
+    const parts = String(dateStr).split('T')[0].split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        const d = new Date(year, month, day);
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+/**
+ * Groups customers by phone number or clean name, accumulating total visits and total spend.
+ * Handles datasets where repeat visits are saved as separate rows or via accumulated visits property.
+ * @param {Array} customers 
+ * @returns {Map<string, Object>} Map of unique customer records
+ */
+export function getUniqueCustomersMap(customers) {
+  const map = new Map();
+  if (!Array.isArray(customers)) return map;
+
+  customers.forEach(c => {
+    const cleanPhone = c.phone ? validateAndCleanPhone(c.phone) : null;
+    const cleanName = c.name ? c.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+    const key = cleanPhone ? `phone:${cleanPhone}` : (cleanName.length > 2 ? `name:${cleanName}` : `id:${c.id || Math.random()}`);
+
+    const itemVisits = (c.visits && typeof c.visits === 'number' && c.visits > 0) ? c.visits : 1;
+    const itemSpend = c.total_spend !== undefined && c.total_spend > 0 ? (Number(c.total_spend) || 0) : (Number(c.amount) || 0);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        primary: c,
+        records: [c],
+        totalVisits: itemVisits,
+        totalSpend: itemSpend
+      });
+    } else {
+      const group = map.get(key);
+      group.records.push(c);
+      group.totalVisits += itemVisits;
+      group.totalSpend += itemSpend;
+      if (c.last_visit && (!group.primary.last_visit || c.last_visit > group.primary.last_visit)) {
+        group.primary = c;
+      }
+    }
+  });
+  return map;
+}
+
+/**
+ * Gets effective visit count for a single customer object, taking into account any duplicate
+ * phone or name entries in the full dataset.
+ * @param {Object} customer 
+ * @param {Array} allCustomers 
+ * @returns {number}
+ */
+export function getEffectiveVisits(customer, allCustomers) {
+  if (!customer) return 1;
+  const baseVisits = (customer.visits && typeof customer.visits === 'number' && customer.visits > 0) ? customer.visits : 1;
+  if (!allCustomers || !Array.isArray(allCustomers) || allCustomers.length === 0) {
+    return baseVisits;
+  }
+
+  const cleanPhone = customer.phone ? validateAndCleanPhone(customer.phone) : null;
+  const cleanName = customer.name ? customer.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+
+  let matchCount = 0;
+  if (cleanPhone) {
+    matchCount = allCustomers.filter(item => {
+      const p = item.phone ? validateAndCleanPhone(item.phone) : null;
+      return p && p === cleanPhone;
+    }).length;
+  } else if (cleanName && cleanName.length > 2) {
+    matchCount = allCustomers.filter(item => {
+      const n = item.name ? item.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+      return n && n === cleanName;
+    }).length;
+  }
+
+  return Math.max(baseVisits, matchCount);
+}
+
+/**
+ * Sorts customer array based on selected sort option ('most_visited', 'least_visited', 'date_desc', 'date_asc', 'spend_desc')
+ * @param {Array} customerList 
+ * @param {string} sortOption 
+ * @param {Array} refAllCustomers 
+ * @returns {Array}
+ */
+export function sortCustomersList(customerList, sortOption = 'most_visited', refAllCustomers = null) {
+  if (!Array.isArray(customerList)) return [];
+  const list = [...customerList];
+
+  return list.sort((a, b) => {
+    const visitsA = (a.visits && typeof a.visits === 'number' && a.visits > 1) ? a.visits : getEffectiveVisits(a, refAllCustomers);
+    const visitsB = (b.visits && typeof b.visits === 'number' && b.visits > 1) ? b.visits : getEffectiveVisits(b, refAllCustomers);
+
+    const dateA = a.last_visit || a.created_at || '';
+    const dateB = b.last_visit || b.created_at || '';
+
+    if (sortOption === 'most_visited') {
+      if (visitsB !== visitsA) return visitsB - visitsA;
+      return String(dateB).localeCompare(String(dateA));
+    } else if (sortOption === 'least_visited') {
+      if (visitsA !== visitsB) return visitsA - visitsB;
+      return String(dateA).localeCompare(String(dateB));
+    } else if (sortOption === 'date_desc') {
+      return String(dateB).localeCompare(String(dateA));
+    } else if (sortOption === 'date_asc') {
+      return String(dateA).localeCompare(String(dateB));
+    } else if (sortOption === 'spend_desc') {
+      const spendA = a.total_spend || a.amount || 0;
+      const spendB = b.total_spend || b.amount || 0;
+      return spendB - spendA;
+    }
+    return 0;
+  });
+}
+
+
+

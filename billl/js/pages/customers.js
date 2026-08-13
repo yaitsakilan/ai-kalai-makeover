@@ -9,12 +9,38 @@ export async function renderCustomers() {
   const customers = await fetchCustomers();
   window._cachedCustomers = customers;
 
+  const currentMonthIndex = new Date().getMonth();
   if (window._customerActiveTab === undefined) window._customerActiveTab = 'analytics';
-  if (window._selectedMonth === undefined) window._selectedMonth = 'all';
+  if (window._selectedMonth === undefined) {
+    const hasCurrentMonthData = customers.some(c => {
+      const dStr = c.last_visit || c.created_at;
+      if (!dStr) return false;
+      const parts = String(dStr).split('T')[0].split('-');
+      return parts.length >= 2 && (parseInt(parts[1], 10) - 1) === currentMonthIndex;
+    });
+    if (hasCurrentMonthData) {
+      window._selectedMonth = currentMonthIndex;
+    } else {
+      let latestMonth = currentMonthIndex;
+      let newestDateStr = '';
+      customers.forEach(c => {
+        const dStr = c.last_visit || c.created_at;
+        if (dStr && String(dStr) > newestDateStr) {
+          newestDateStr = String(dStr);
+          const parts = newestDateStr.split('T')[0].split('-');
+          if (parts.length >= 2) {
+            const m = parseInt(parts[1], 10) - 1;
+            if (m >= 0 && m < 12) latestMonth = m;
+          }
+        }
+      });
+      window._selectedMonth = latestMonth;
+    }
+  }
   if (window._searchQuery === undefined) window._searchQuery = '';
   if (window._monthFilterExpanded === undefined) window._monthFilterExpanded = false;
   if (window._searchFieldExpanded === undefined) window._searchFieldExpanded = false;
-  if (window._customerSortOption === undefined) window._customerSortOption = 'most_visited';
+  if (window._customerSortOption === undefined) window._customerSortOption = 'date_desc';
 
   const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -61,19 +87,10 @@ export async function renderCustomers() {
   return `
   <div class="top-bar">
     <div>
-      <h2>Customer Management & Insights</h2>
-      <p style="font-size:12px;color:#888;margin-top:2px">Viewing ${selectedMonthLabel} · Customer Analytics, Demographics, Staff Handling & History</p>
+      <h2>Customer Management</h2>
+      <p style="font-size:12px;color:#999;margin-top:2px">Viewing ${selectedMonthLabel} · Customer records, visits & history</p>
     </div>
     <div style="display:flex; gap:10px; align-items:center">
-      <!-- Sort Filter Select Dropdown -->
-      <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.handleCustomerSortChange(this.value)" title="Sort Customer Filter">
-        <option value="most_visited" ${window._customerSortOption === 'most_visited' ? 'selected' : ''}>🔥 More Times Visited</option>
-        <option value="least_visited" ${window._customerSortOption === 'least_visited' ? 'selected' : ''}>🌱 Less Times Visited</option>
-        <option value="date_desc" ${window._customerSortOption === 'date_desc' ? 'selected' : ''}>📅 By Date (Newest First)</option>
-        <option value="date_asc" ${window._customerSortOption === 'date_asc' ? 'selected' : ''}>📅 By Date (Oldest First)</option>
-        <option value="spend_desc" ${window._customerSortOption === 'spend_desc' ? 'selected' : ''}>💰 Highest Spend</option>
-      </select>
-
       <!-- Month Filter Select Dropdown -->
       <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterByMonthSelect(this.value)" title="Choose Month Filter">
         <option value="all" ${window._selectedMonth === 'all' ? 'selected' : ''}>📅 All Months</option>
@@ -105,19 +122,23 @@ export async function renderCustomers() {
       <i class="ti ti-crown" style="margin-right:6px"></i> Top Paid Clients (${customers.length})
     </div>
     <div class="tab ${window._customerActiveTab === 'repeat' ? 'active' : ''}" onclick="window.switchCustomerTab('repeat')">
-      <i class="ti ti-refresh" style="margin-right:6px"></i> Repeat & Lapsed Retention
+      <i class="ti ti-refresh" style="margin-right:6px"></i> Repeat Customers
+    </div>
+    <div class="tab ${window._customerActiveTab === 'lapsed' ? 'active' : ''}" onclick="window.switchCustomerTab('lapsed')">
+      <i class="ti ti-alarm" style="margin-right:6px"></i> Lapsed Retention
     </div>
     <div class="tab ${window._customerActiveTab === 'new' ? 'active' : ''}" onclick="window.switchCustomerTab('new')">
       <i class="ti ti-user-plus" style="margin-right:6px"></i> New Clients
     </div>
     <div class="tab ${window._customerActiveTab === 'history' ? 'active' : ''}" onclick="window.switchCustomerTab('history')">
-      <i class="ti ti-history" style="margin-right:6px"></i> Customer History & Directory (${filtered.length})
+      <i class="ti ti-history" style="margin-right:6px"></i> Customer Directory (${filtered.length})
     </div>
   </div>
 
   ${window._customerActiveTab === 'analytics' ? renderCustomerAnalyticsDashboard(filtered) :
     window._customerActiveTab === 'top_paid' ? renderTopPaidClientsTab(filtered) :
-    window._customerActiveTab === 'repeat' ? renderRepeatLapsedTab(customers) :
+    window._customerActiveTab === 'repeat' ? renderRepeatCustomersTab(customers) :
+    window._customerActiveTab === 'lapsed' ? renderLapsedRetentionTab(customers) :
     window._customerActiveTab === 'new' ? renderNewClientsTab(customers) : `
     <div id="customer-metrics-container">
       ${renderCustomerMetrics(filtered)}
@@ -291,7 +312,7 @@ export function toggleSearchField() {
 export function renderCustomerList(customers) {
   if (!customers.length) return '<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No customers found</div>';
   const colors = ['av-gold', 'av-teal', 'av-rose', 'av-purple'];
-  const sorted = sortCustomersList(customers, window._customerSortOption || 'most_visited', window._cachedCustomers || customers);
+  const sorted = sortCustomersList(customers, window._customerSortOption || 'date_desc', window._cachedCustomers || customers);
   return sorted.map((c, i) => {
     const { cleanText: cleanName, tagHtml: empBadge } = formatEmpTag(c.name);
     const initials = cleanName.split(' ').map(n => n[0]).join('').slice(0, 2);
@@ -337,7 +358,12 @@ export function showAddCustomerModal() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group">
         <label class="form-label">Phone</label>
-        <input class="form-input" id="m-cust-phone" placeholder="9876543210">
+        <div style="position:relative; display:flex; align-items:center;">
+          <input class="form-input" id="m-cust-phone" placeholder="9876543210" style="padding-right:38px;">
+          <button type="button" onclick="window.pickContact('m-cust-phone', 'm-cust-name')" title="Pick from contacts" style="position:absolute; right:6px; background:none; border:none; color:#d97706; cursor:pointer; padding:5px 7px; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:17px; transition:all 0.15s;" onmouseover="this.style.background='rgba(217,119,6,0.12)'" onmouseout="this.style.background='transparent'">
+            <i class="ti ti-address-book"></i>
+          </button>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Location</label>
@@ -541,7 +567,12 @@ export function openShopCustomerForm() {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
               <label class="form-label">Phone Number * <span style="font-size:10px;color:#d97706;font-weight:normal">(Auto-checks repeat client)</span></label>
-              <input class="form-input" id="sf-phone" placeholder="10-digit number" maxlength="10" oninput="window.handlePhoneLookup(this.value)">
+              <div style="position:relative; display:flex; align-items:center;">
+                <input class="form-input" id="sf-phone" placeholder="10-digit number" maxlength="10" oninput="window.handlePhoneLookup(this.value)" style="padding-right:38px;">
+                <button type="button" onclick="window.pickContact('sf-phone', 'sf-name')" title="Pick from contacts" style="position:absolute; right:6px; background:none; border:none; color:#d97706; cursor:pointer; padding:5px 7px; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:17px; transition:all 0.15s;" onmouseover="this.style.background='rgba(217,119,6,0.12)'" onmouseout="this.style.background='transparent'">
+                  <i class="ti ti-address-book"></i>
+                </button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Customer Name *</label>
@@ -1050,7 +1081,12 @@ export function openClassesForm() {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
               <label class="form-label">Phone Number *</label>
-              <input class="form-input" id="cf-phone" placeholder="10-digit number" maxlength="10">
+              <div style="position:relative; display:flex; align-items:center;">
+                <input class="form-input" id="cf-phone" placeholder="10-digit number" maxlength="10" style="padding-right:38px;">
+                <button type="button" onclick="window.pickContact('cf-phone', 'cf-name')" title="Pick from contacts" style="position:absolute; right:6px; background:none; border:none; color:#d97706; cursor:pointer; padding:5px 7px; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:17px; transition:all 0.15s;" onmouseover="this.style.background='rgba(217,119,6,0.12)'" onmouseout="this.style.background='transparent'">
+                  <i class="ti ti-address-book"></i>
+                </button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Location</label>
@@ -1960,6 +1996,21 @@ export function initCustomerAnalyticsCharts(customers) {
   }
 }
 
+window.openShopCustomerForm = openShopCustomerForm;
+window.submitShopCustomerForm = submitShopCustomerForm;
+window.serviceChipToggle = serviceChipToggle;
+window.addOtherServiceAmount = addOtherServiceAmount;
+window.removeServiceRow = removeServiceRow;
+window.setStarRating = setStarRating;
+window.updateServiceTotal = updateServiceTotal;
+window.handleServiceMethodChange = handleServiceMethodChange;
+window.updateSareePrepleatingAmount = updateSareePrepleatingAmount;
+window.handlePhoneLookup = handlePhoneLookup;
+window.submitClassesForm = submitClassesForm;
+window.handleClassesPaymentMethodChange = handleClassesPaymentMethodChange;
+window.updateClassesBothTotal = updateClassesBothTotal;
+window.filterCustomers = filterCustomers;
+window.filterByMonth = filterByMonth;
 window.switchCustomerTab = switchCustomerTab;
 window.toggleMonthFilter = toggleMonthFilter;
 window.toggleSearchField = toggleSearchField;
@@ -2020,7 +2071,7 @@ export function sendWhatsAppServiceInvite(id, inviteType) {
 // ─────────────────────────────────────────────
 
 export function renderTopPaidClientsTab(customers) {
-  const sorted = sortCustomersList(customers, window._customerSortOption || 'spend_desc', window._cachedCustomers || customers);
+  const sorted = sortCustomersList(customers, 'spend_desc', window._cachedCustomers || customers);
 
   return `
     <div class="card">
@@ -2028,13 +2079,6 @@ export function renderTopPaidClientsTab(customers) {
         <div class="section-title" style="margin-bottom:0">
           <i class="ti ti-crown" style="color:#d97706;font-size:18px"></i> 🏆 Highest Spending Clients (Top Paid Customers)
         </div>
-        <select class="form-input form-select" style="width:auto;height:32px;font-size:11px;padding:2px 26px 2px 8px;border-color:#e5e5e5;background-color:#fff;font-weight:500;" onchange="window.handleCustomerSortChange(this.value)" title="Sort Top Paid Clients">
-          <option value="spend_desc" ${window._customerSortOption === 'spend_desc' ? 'selected' : ''}>💰 Highest Spend</option>
-          <option value="most_visited" ${window._customerSortOption === 'most_visited' ? 'selected' : ''}>🔥 More Times Visited</option>
-          <option value="least_visited" ${window._customerSortOption === 'least_visited' ? 'selected' : ''}>🌱 Less Times Visited</option>
-          <option value="date_desc" ${window._customerSortOption === 'date_desc' ? 'selected' : ''}>📅 By Date (Newest First)</option>
-          <option value="date_asc" ${window._customerSortOption === 'date_asc' ? 'selected' : ''}>📅 By Date (Oldest First)</option>
-        </select>
       </div>
       <div style="font-size:12px;color:#888;margin-bottom:16px">Clients ranked strictly by total revenue spend across all visits</div>
 
@@ -2078,11 +2122,61 @@ export function renderTopPaidClientsTab(customers) {
 }
 
 // ─────────────────────────────────────────────
-// 🔁 REPEAT & LAPSED CLIENT RETENTION TAB
+// 🔁 REPEAT CUSTOMERS TAB
 // ─────────────────────────────────────────────
 
-export function renderRepeatLapsedTab(customers) {
-  // Lapsed Clients: Has not visited in 40+ days
+export function renderRepeatCustomersTab(customers) {
+  const uniqueMap = getUniqueCustomersMap(customers);
+  const repeatGroups = Array.from(uniqueMap.values()).filter(g => g.totalVisits > 1 || g.records.length > 1);
+  const repeatClients = repeatGroups.map(g => ({
+    ...g.primary,
+    visits: g.totalVisits,
+    total_spend: g.totalSpend
+  }));
+  const sortedRepeatClients = sortCustomersList(repeatClients, 'most_visited', customers);
+
+  return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="section-title" style="margin-bottom:2px">
+            <i class="ti ti-refresh" style="color:#d97706;font-size:18px"></i> 🔁 Active Repeat Loyal Clients (${sortedRepeatClients.length})
+          </div>
+          <div style="font-size:12px;color:#888">Clients who have visited your salon 2 or more times</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+        ${sortedRepeatClients.length ? sortedRepeatClients.map((c, i) => {
+          const { cleanText } = formatEmpTag(c.name);
+          const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="font-size:14px;font-weight:700;color:#166534;width:24px;text-align:center">#${i + 1}</div>
+                <div>
+                  <div style="font-size:14px;font-weight:600;color:#166534">${cleanText} <span class="badge badge-green" style="margin-left:6px;font-size:10px">${c.visits || 2} Visits</span></div>
+                  <div style="font-size:12px;color:#15803d;margin-top:2px">${cleanP || 'No phone'} · ${c.location || 'Chennai'} · Spend: ₹${(c.total_spend || 0).toLocaleString()} · 📅 Last Visit: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
+                </div>
+              </div>
+              ${cleanP ? `
+                <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:6px 12px;font-size:11px" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'repeat')">
+                  <i class="ti ti-brand-whatsapp"></i> Invite Again
+                </button>
+              ` : ''}
+            </div>
+          `;
+        }).join('') : '<div style="font-size:12px;color:#888;padding:20px 0;text-align:center">No repeat customers found in selected range.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────────
+// ⏰ LAPSED CLIENT RETENTION TAB
+// ─────────────────────────────────────────────
+
+export function renderLapsedRetentionTab(customers) {
   const now = new Date();
   const LAPSED_THRESHOLD_DAYS = 40;
 
@@ -2095,87 +2189,43 @@ export function renderRepeatLapsedTab(customers) {
     return diffDays >= LAPSED_THRESHOLD_DAYS;
   });
 
-  const uniqueMap = getUniqueCustomersMap(customers);
-  const repeatGroups = Array.from(uniqueMap.values()).filter(g => g.totalVisits > 1 || g.records.length > 1);
-  const repeatClients = repeatGroups.map(g => ({
-    ...g.primary,
-    visits: g.totalVisits,
-    total_spend: g.totalSpend
-  }));
-  const sortedRepeatClients = sortCustomersList(repeatClients, window._customerSortOption || 'most_visited', customers);
   const sortedLapsedClients = sortCustomersList(lapsedClients, window._customerSortOption || 'date_desc', customers);
 
   return `
-    <div class="grid-2">
-      <!-- Lapsed Clients (Need Re-engagement) -->
-      <div class="card">
-        <div class="section-title" style="color:#dc2626">
-          <i class="ti ti-alarm" style="color:#dc2626"></i> Lapsed Clients (No Visit in 40+ Days - Need Re-invite)
-        </div>
-        <div style="font-size:12px;color:#888;margin-bottom:14px">Clients who haven't visited in over 40 days. Send personalized WhatsApp re-invite!</div>
-
-        <div style="display:flex;flex-direction:column;gap:10px">
-          ${sortedLapsedClients.length ? sortedLapsedClients.map(c => {
-            const { cleanText } = formatEmpTag(c.name);
-            const serviceName = Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'Makeover');
-            const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
-            const dStr = c.last_visit || c.created_at;
-            const daysAgo = dStr ? Math.floor((now.getTime() - new Date(dStr).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-            return `
-              <div style="padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                  <div>
-                    <div style="font-size:13px;font-weight:600;color:#991b1b">${cleanText}</div>
-                    <div style="font-size:11px;color:#888">${cleanP || 'No phone'} · 📅 Last Visit: ${formatVisitedDate(dStr)} (${daysAgo}d ago)</div>
-                    <div style="font-size:11px;color:#b91c1c;margin-top:2px">Last Service: ${serviceName}</div>
-                  </div>
-                  ${cleanP ? `
-                    <button class="btn btn-gold" style="padding:4px 8px;font-size:11px;background:#25d366;color:#fff;border:none" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'lapsed')">
-                      <i class="ti ti-brand-whatsapp"></i> Re-invite
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-            `;
-          }).join('') : '<div style="font-size:12px;color:#aaa;padding:14px 0">All clients are up to date with visits! 🎉</div>'}
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="section-title" style="color:#dc2626;margin-bottom:2px">
+            <i class="ti ti-alarm" style="color:#dc2626;font-size:18px"></i> ⏰ Lapsed Retention Clients (${sortedLapsedClients.length})
+          </div>
+          <div style="font-size:12px;color:#888">Clients who haven't visited in over 40 days. Send personalized WhatsApp re-invites!</div>
         </div>
       </div>
 
-      <!-- Active Repeat Clients -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <div class="section-title" style="margin-bottom:0">
-            <i class="ti ti-refresh" style="color:#d97706"></i> Active Repeat Loyal Clients (${sortedRepeatClients.length})
-          </div>
-          <select class="form-input form-select" style="width:auto;height:32px;font-size:11px;padding:2px 26px 2px 8px;border-color:#e5e5e5;background-color:#fff;font-weight:500;" onchange="window.handleCustomerSortChange(this.value)" title="Sort Repeat Clients">
-            <option value="most_visited" ${window._customerSortOption === 'most_visited' ? 'selected' : ''}>🔥 More Times Visited</option>
-            <option value="least_visited" ${window._customerSortOption === 'least_visited' ? 'selected' : ''}>🌱 Less Times Visited</option>
-            <option value="date_desc" ${window._customerSortOption === 'date_desc' ? 'selected' : ''}>📅 By Date (Newest First)</option>
-            <option value="date_asc" ${window._customerSortOption === 'date_asc' ? 'selected' : ''}>📅 By Date (Oldest First)</option>
-            <option value="spend_desc" ${window._customerSortOption === 'spend_desc' ? 'selected' : ''}>💰 Highest Spend</option>
-          </select>
-        </div>
-        <div style="font-size:12px;color:#888;margin-bottom:14px">Clients who have visited 2+ times</div>
-
-        <div style="display:flex;flex-direction:column;gap:10px">
-          ${sortedRepeatClients.map(c => {
-            const { cleanText } = formatEmpTag(c.name);
-            const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
-            return `
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+        ${sortedLapsedClients.length ? sortedLapsedClients.map(c => {
+          const { cleanText } = formatEmpTag(c.name);
+          const serviceName = Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'Makeover');
+          const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
+          const dStr = c.last_visit || c.created_at;
+          const daysAgo = dStr ? Math.floor((now.getTime() - new Date(dStr).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+          return `
+            <div style="padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
+              <div style="display:flex;justify-content:space-between;align-items:center">
                 <div>
-                  <div style="font-size:13px;font-weight:600;color:#166534">${cleanText}</div>
-                  <div style="font-size:11px;color:#15803d">${c.visits || 2} visits total · Spend: ₹${(c.total_spend || 0).toLocaleString()} · 📅 Last Visit: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
+                  <div style="font-size:14px;font-weight:600;color:#991b1b">${cleanText} <span class="badge badge-red" style="margin-left:6px;font-size:10px;background:#fee2e2;color:#991b1b">${daysAgo} Days Ago</span></div>
+                  <div style="font-size:12px;color:#888;margin-top:2px">${cleanP || 'No phone'} · 📅 Last Visit: ${formatVisitedDate(dStr)}</div>
+                  <div style="font-size:11px;color:#b91c1c;margin-top:2px">Last Service: ${serviceName}</div>
                 </div>
                 ${cleanP ? `
-                  <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:4px 8px;font-size:11px" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'repeat')">
-                    <i class="ti ti-brand-whatsapp"></i> Invite
+                  <button class="btn btn-gold" style="padding:6px 12px;font-size:11px;background:#25d366;color:#fff;border:none" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'lapsed')">
+                    <i class="ti ti-brand-whatsapp"></i> Send Re-invite
                   </button>
                 ` : ''}
               </div>
-            `;
-          }).join('')}
-        </div>
+            </div>
+          `;
+        }).join('') : '<div style="font-size:12px;color:#15803d;padding:20px 0;text-align:center">🎉 All clients are up to date with salon visits! No lapsed retention needed right now.</div>'}
       </div>
     </div>
   `;

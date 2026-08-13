@@ -327,7 +327,12 @@ export function openRentJewelModal(jewelId) {
     </div>
     <div class="form-group">
       <label class="form-label">Customer Phone</label>
-      <input class="form-input" id="mr-phone" placeholder="10-digit phone" maxlength="10">
+      <div style="position:relative; display:flex; align-items:center;">
+        <input class="form-input" id="mr-phone" placeholder="10-digit phone" maxlength="10" style="padding-right:38px;">
+        <button type="button" onclick="window.pickContact('mr-phone', 'mr-cust')" title="Pick from contacts" style="position:absolute; right:6px; background:none; border:none; color:#d97706; cursor:pointer; padding:5px 7px; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:17px; transition:all 0.15s;" onmouseover="this.style.background='rgba(217,119,6,0.12)'" onmouseout="this.style.background='transparent'">
+          <i class="ti ti-address-book"></i>
+        </button>
+      </div>
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
       <div class="form-group">

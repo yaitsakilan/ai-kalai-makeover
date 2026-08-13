@@ -9,7 +9,32 @@ export async function renderEvents() {
   const events = await fetchEvents();
   window._cachedEvents = events;
 
-  if (window._selectedEventMonth === undefined) window._selectedEventMonth = 'all';
+  const currentMonthIndex = new Date().getMonth();
+  if (window._eventActiveTab === undefined) window._eventActiveTab = 'analytics';
+  if (window._selectedEventMonth === undefined) {
+    const hasCurrentMonthData = events.some(e => {
+      if (!e.date) return false;
+      const parts = String(e.date).split('T')[0].split('-');
+      return parts.length >= 2 && (parseInt(parts[1], 10) - 1) === currentMonthIndex;
+    });
+    if (hasCurrentMonthData) {
+      window._selectedEventMonth = currentMonthIndex;
+    } else {
+      let latestMonth = currentMonthIndex;
+      let newestDateStr = '';
+      events.forEach(e => {
+        if (e.date && String(e.date) > newestDateStr) {
+          newestDateStr = String(e.date);
+          const parts = newestDateStr.split('T')[0].split('-');
+          if (parts.length >= 2) {
+            const m = parseInt(parts[1], 10) - 1;
+            if (m >= 0 && m < 12) latestMonth = m;
+          }
+        }
+      });
+      window._selectedEventMonth = latestMonth;
+    }
+  }
   if (window._eventSearchQuery === undefined) window._eventSearchQuery = '';
   if (window._eventMonthFilterExpanded === undefined) window._eventMonthFilterExpanded = false;
   if (window._eventSearchFieldExpanded === undefined) window._eventSearchFieldExpanded = false;
@@ -20,26 +45,28 @@ export async function renderEvents() {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  // Apply filters initially
+  // Apply filters initially for directory & analytics
   let filtered = [...events];
-  if (window._eventSearchQuery) {
+  if (window._eventSearchQuery && window._eventActiveTab === 'directory') {
     const q = window._eventSearchQuery.toLowerCase();
     filtered = filtered.filter(e =>
       (e.customer || '').toLowerCase().includes(q) ||
       (e.phone || '').includes(q) ||
-      (e.type || '').toLowerCase().includes(q)
+      (e.type || '').toLowerCase().includes(q) ||
+      (e.makeup_type || '').toLowerCase().includes(q)
     );
   }
   if (window._selectedEventMonth !== 'all') {
+    const mTarget = parseInt(window._selectedEventMonth, 10);
     filtered = filtered.filter(e => {
       if (!e.date) return false;
-      const parts = e.date.split('-');
+      const parts = String(e.date).split('-');
       if (parts.length < 2) return false;
       const m = parseInt(parts[1], 10) - 1;
-      return m === window._selectedEventMonth;
+      return m === mTarget;
     });
   }
-  if (window._eventStatusFilter !== 'all') {
+  if (window._eventStatusFilter !== 'all' && window._eventActiveTab === 'directory') {
     filtered = filtered.filter(e => e.status === window._eventStatusFilter);
   }
 
@@ -51,51 +78,105 @@ export async function renderEvents() {
     ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
     : '';
 
+  // Trigger chart initialization if analytics tab active
+  if (window._eventActiveTab === 'analytics') {
+    setTimeout(() => initEventAnalyticsCharts(filtered), 60);
+  }
+
+  const selectedMonthLabel = window._selectedEventMonth === 'all' 
+    ? 'All Months' 
+    : MONTHS[parseInt(window._selectedEventMonth, 10)];
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const upcomingEvents = events.filter(e => e.date && e.date >= todayStr);
+
   return `
   <div class="top-bar">
-    <h2>Event Bookings</h2>
-    <div style="display:flex; gap:10px;">
-      <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Events">
-        <i class="ti ti-search" style="color:#d97706"></i>
+    <div>
+      <h2>Event Management & Bookings</h2>
+      <p style="font-size:12px;color:#999;margin-top:2px">Viewing ${selectedMonthLabel} · Bridal & event bookings, analytics, schedules & revenue</p>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterEventByMonthSelect(this.value)" title="Choose Month Filter">
+        <option value="all" ${window._selectedEventMonth === 'all' ? 'selected' : ''}>📅 All Months</option>
+        ${MONTHS.map((m, idx) => `
+          <option value="${idx}" ${window._selectedEventMonth === idx ? 'selected' : ''}>📅 ${m}</option>
+        `).join('')}
+      </select>
+
+      <button class="btn btn-outline" onclick="window.analyzeEvents()" title="AI Event Analysis">
+        <i class="ti ti-sparkles" style="color:#d97706"></i> AI Insights
       </button>
-      <button class="btn btn-outline" onclick="window.toggleEventMonthFilter()" id="toggle-evt-filter-btn" style="${activeBtnStyle}">
-        <i class="ti ti-filter" style="color:#d97706"></i> Filter
+
+      ${window._eventActiveTab === 'directory' ? `
+        <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Events">
+          <i class="ti ti-search" style="color:#d97706"></i>
+        </button>
+        <button class="btn btn-outline" onclick="window.toggleEventMonthFilter()" id="toggle-evt-filter-btn" style="${activeBtnStyle}">
+          <i class="ti ti-filter" style="color:#d97706"></i> Chips
+        </button>
+      ` : ''}
+      <button class="btn btn-gold" onclick="window.openEventCustomerForm()">
+        <i class="ti ti-plus"></i> Book Event
       </button>
-      <button class="btn btn-gold" onclick="window.openEventCustomerForm()"><i class="ti ti-plus"></i> Book Event</button>
     </div>
   </div>
 
-  <div id="event-metrics-container">
-    ${renderEventMetrics(filtered)}
-  </div>
-
-  <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
-    <div class="card" style="padding: 6px 12px; display:flex; gap:8px;">
-      <span class="chip ${window._eventStatusFilter === 'all' ? 'selected' : ''}" onclick="window.filterEventsStatus('all')" style="padding: 4px 10px; font-size:11px;">All</span>
-      <span class="chip ${window._eventStatusFilter === 'Completed' ? 'selected' : ''}" onclick="window.filterEventsStatus('Completed')" style="padding: 4px 10px; font-size:11px;">Completed</span>
-      <span class="chip ${window._eventStatusFilter === 'Booked' ? 'selected' : ''}" onclick="window.filterEventsStatus('Booked')" style="padding: 4px 10px; font-size:11px;">Pending</span>
+  <!-- Navigation Tabs -->
+  <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">
+    <div class="tab ${window._eventActiveTab === 'analytics' ? 'active' : ''}" onclick="window.switchEventTab('analytics')">
+      <i class="ti ti-chart-pie" style="margin-right:6px"></i> Analytics & Insights (${filtered.length})
+    </div>
+    <div class="tab ${window._eventActiveTab === 'upcoming' ? 'active' : ''}" onclick="window.switchEventTab('upcoming')">
+      <i class="ti ti-calendar-event" style="margin-right:6px"></i> Upcoming Events (${upcomingEvents.length})
+    </div>
+    <div class="tab ${window._eventActiveTab === 'top_paid' ? 'active' : ''}" onclick="window.switchEventTab('top_paid')">
+      <i class="ti ti-crown" style="margin-right:6px"></i> Top Paid Weddings (${events.length})
+    </div>
+    <div class="tab ${window._eventActiveTab === 'completed' ? 'active' : ''}" onclick="window.switchEventTab('completed')">
+      <i class="ti ti-circle-check" style="margin-right:6px"></i> Completed Events
+    </div>
+    <div class="tab ${window._eventActiveTab === 'directory' ? 'active' : ''}" onclick="window.switchEventTab('directory')">
+      <i class="ti ti-history" style="margin-right:6px"></i> Event Directory (${filtered.length})
     </div>
   </div>
 
-  <div class="card" id="event-search-card" style="margin-bottom:16px; display: ${window._eventSearchFieldExpanded ? 'block' : 'none'};">
-    <input class="form-input" placeholder="Search by name, phone, or event type..." id="event-search-input" value="${window._eventSearchQuery || ''}" oninput="window.filterEventCustomers(this.value)">
-  </div>
-
-  <div class="card" id="event-month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._eventMonthFilterExpanded ? 'block' : 'none'};">
-    <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
-      <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter by Month
+  ${window._eventActiveTab === 'analytics' ? renderEventAnalyticsDashboard(filtered) :
+    window._eventActiveTab === 'upcoming' ? renderUpcomingEventsTab(events) :
+    window._eventActiveTab === 'top_paid' ? renderTopPaidEventsTab(events) :
+    window._eventActiveTab === 'completed' ? renderCompletedEventsTab(events) : `
+    <div id="event-metrics-container">
+      ${renderEventMetrics(filtered)}
     </div>
-    <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
-      <div class="chip ${window._selectedEventMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterEventByMonth('all')" id="evt-month-chip-all">All Months</div>
-      ${MONTHS.map((m, idx) => `
-        <div class="chip ${window._selectedEventMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterEventByMonth(${idx})" id="evt-month-chip-${idx}">${m}</div>
-      `).join('')}
-    </div>
-  </div>
 
-  <div id="event-list">
-    ${renderEventList(filtered)}
-  </div>`;
+    <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+      <div class="card" style="padding: 6px 12px; display:flex; gap:8px;">
+        <span class="chip ${window._eventStatusFilter === 'all' ? 'selected' : ''}" onclick="window.filterEventsStatus('all')" style="padding: 4px 10px; font-size:11px;">All</span>
+        <span class="chip ${window._eventStatusFilter === 'Completed' ? 'selected' : ''}" onclick="window.filterEventsStatus('Completed')" style="padding: 4px 10px; font-size:11px;">Completed</span>
+        <span class="chip ${window._eventStatusFilter === 'Booked' ? 'selected' : ''}" onclick="window.filterEventsStatus('Booked')" style="padding: 4px 10px; font-size:11px;">Pending</span>
+      </div>
+    </div>
+
+    <div class="card" id="event-search-card" style="margin-bottom:16px; display: ${window._eventSearchFieldExpanded ? 'block' : 'none'};">
+      <input class="form-input" placeholder="Search by name, phone, or event type..." id="event-search-input" value="${window._eventSearchQuery || ''}" oninput="window.filterEventCustomers(this.value)">
+    </div>
+
+    <div class="card" id="event-month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._eventMonthFilterExpanded ? 'block' : 'none'};">
+      <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
+        <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter by Month
+      </div>
+      <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
+        <div class="chip ${window._selectedEventMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterEventByMonth('all')" id="evt-month-chip-all">All Months</div>
+        ${MONTHS.map((m, idx) => `
+          <div class="chip ${window._selectedEventMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterEventByMonth(${idx})" id="evt-month-chip-${idx}">${m}</div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div id="event-list">
+      ${renderEventList(filtered)}
+    </div>
+  `}`;
 }
 
 export function renderEventMetrics(events) {
@@ -363,7 +444,12 @@ export function showAddEventModal() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group">
         <label class="form-label">Phone</label>
-        <input class="form-input" id="m-evt-phone" placeholder="9876543210">
+        <div style="position:relative; display:flex; align-items:center;">
+          <input class="form-input" id="m-evt-phone" placeholder="9876543210" style="padding-right:38px;">
+          <button type="button" onclick="window.pickContact('m-evt-phone', 'm-evt-customer')" title="Pick from contacts" style="position:absolute; right:6px; background:none; border:none; color:#d97706; cursor:pointer; padding:5px 7px; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:17px; transition:all 0.15s;" onmouseover="this.style.background='rgba(217,119,6,0.12)'" onmouseout="this.style.background='transparent'">
+            <i class="ti ti-address-book"></i>
+          </button>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Event Type</label>
@@ -590,7 +676,12 @@ export function openEventCustomerForm(eventId = null) {
             </div>
             <div class="form-group">
               <label class="form-label">Customer Number *</label>
-              <input class="form-input" id="ef-phone" value="${isEdit && event ? event.phone : ''}" placeholder="10-digit number" maxlength="10">
+              <div style="position:relative; display:flex; align-items:center;">
+                <input class="form-input" id="ef-phone" value="${isEdit && event ? event.phone : ''}" placeholder="10-digit number" maxlength="10" style="padding-right:38px;">
+                <button type="button" onclick="window.pickContact('ef-phone', 'ef-name')" title="Pick from contacts" style="position:absolute; right:6px; background:none; border:none; color:#d97706; cursor:pointer; padding:5px 7px; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:17px; transition:all 0.15s;" onmouseover="this.style.background='rgba(217,119,6,0.12)'" onmouseout="this.style.background='transparent'">
+                  <i class="ti ti-address-book"></i>
+                </button>
+              </div>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -1793,4 +1884,565 @@ export function updateEventFunctionDates() {
     }
   }
 }
+
+// ─────────────────────────────────────────────
+// EVENT ANALYTICS & INSIGHTS DASHBOARD
+// ─────────────────────────────────────────────
+
+export function switchEventTab(tab) {
+  window._eventActiveTab = tab;
+  if (typeof window.render === 'function') window.render();
+}
+
+export function filterEventByMonthSelect(val) {
+  window._selectedEventMonth = val === 'all' ? 'all' : parseInt(val, 10);
+  if (typeof window.render === 'function') window.render();
+}
+
+export function renderEventAnalyticsDashboard(events) {
+  if (!events || !events.length) {
+    return `<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-chart-pie" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No event booking analytics available yet. Book events to see detailed insights!</div>`;
+  }
+
+  const totalBookings = events.length;
+  const totalRevenue = events.reduce((sum, e) => sum + (e.total || 0), 0);
+  const avgBookingValue = totalBookings > 0 ? Math.round(totalRevenue / totalBookings) : 0;
+  const totalPending = events.reduce((sum, e) => sum + (e.pending || 0), 0);
+  const totalAdvance = events.reduce((sum, e) => sum + (e.advance || 0), 0);
+
+  // 1. Makeup & Event Types Breakdown
+  const typeMap = {};
+  events.forEach(e => {
+    const typeName = (e.type || e.makeup_type || 'Bridal Makeup').trim();
+    if (!typeMap[typeName]) typeMap[typeName] = { count: 0, revenue: 0 };
+    typeMap[typeName].count += 1;
+    typeMap[typeName].revenue += (e.total || 0);
+  });
+  const sortedTypes = Object.entries(typeMap)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.count - a.count);
+
+  // 2. Locations / Destination Weddings Breakdown
+  const locationMap = {};
+  events.forEach(e => {
+    const loc = (e.location && e.location.trim()) ? e.location.trim() : 'Unspecified Venue';
+    if (!locationMap[loc]) locationMap[loc] = { count: 0, revenue: 0 };
+    locationMap[loc].count += 1;
+    locationMap[loc].revenue += (e.total || 0);
+  });
+  const sortedLocations = Object.entries(locationMap)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.count - a.count);
+
+  // 3. Monthly Trends & Peak Wedding Month
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthMap = {};
+  events.forEach(e => {
+    if (!e.date) return;
+    const parts = String(e.date).split('T')[0].split('-');
+    if (parts.length < 2) return;
+    const yr = parts[0];
+    const mIdx = parseInt(parts[1], 10) - 1;
+    if (mIdx >= 0 && mIdx < 12) {
+      const key = `${yr}-${String(mIdx + 1).padStart(2, '0')}`;
+      const label = `${MONTH_NAMES[mIdx]} ${yr}`;
+      if (!monthMap[key]) {
+        monthMap[key] = { key, label, count: 0, revenue: 0 };
+      }
+      monthMap[key].count += 1;
+      monthMap[key].revenue += (e.total || 0);
+    }
+  });
+
+  const sortedMonths = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
+  const peakMonth = sortedMonths.length ? [...sortedMonths].sort((a, b) => b.revenue - a.revenue)[0] : null;
+
+  // Store data for Chart.js
+  window._eventAnalyticsData = {
+    types: sortedTypes,
+    locations: sortedLocations,
+    monthly: sortedMonths,
+    peakMonth,
+    totalAdvance,
+    totalPending,
+    totalRevenue
+  };
+
+  return `
+  <!-- Top Metrics Overview -->
+  <div class="metric-grid" style="margin-bottom: 20px;">
+    <div class="metric-card mc-gold">
+      <div class="metric-label">Total Event Bookings</div>
+      <div class="metric-value">${totalBookings}</div>
+      <div class="metric-sub">Peak Month: <strong>${peakMonth ? peakMonth.label : 'N/A'}</strong></div>
+      <div class="metric-icon"><i class="ti ti-calendar-event"></i></div>
+    </div>
+    <div class="metric-card mc-teal">
+      <div class="metric-label">Total Booking Revenue</div>
+      <div class="metric-value">₹${totalRevenue.toLocaleString('en-IN')}</div>
+      <div class="metric-sub">Avg Package: ₹${avgBookingValue.toLocaleString('en-IN')}</div>
+      <div class="metric-icon"><i class="ti ti-currency-rupee"></i></div>
+    </div>
+    <div class="metric-card mc-rose">
+      <div class="metric-label">Advance Collected</div>
+      <div class="metric-value">₹${totalAdvance.toLocaleString('en-IN')}</div>
+      <div class="metric-sub">${totalRevenue ? Math.round((totalAdvance/totalRevenue)*100) : 0}% of Total Revenue</div>
+      <div class="metric-icon"><i class="ti ti-cash"></i></div>
+    </div>
+    <div class="metric-card mc-purple">
+      <div class="metric-label">Pending Payments Balance</div>
+      <div class="metric-value" style="color:${totalPending > 0 ? '#dc2626' : '#10b981'}">₹${totalPending.toLocaleString('en-IN')}</div>
+      <div class="metric-sub">${totalPending > 0 ? 'To be collected on event dates' : 'All cleared 🎉'}</div>
+      <div class="metric-icon"><i class="ti ti-alert-triangle"></i></div>
+    </div>
+  </div>
+
+  <!-- Charts Grid -->
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px;">
+    <!-- Monthly Revenue & Bookings Trend Chart -->
+    <div class="card" style="padding:16px;">
+      <div style="font-weight:600; font-size:13px; color:#1a1a1a; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-chart-bar" style="color:#d97706;"></i> Monthly Event Revenue & Booking Volume
+      </div>
+      <div style="font-size:11px; color:#888; margin-bottom:12px;">Track peak wedding seasons and booking trends month-by-month</div>
+      <div style="height:220px; position:relative;">
+        <canvas id="eventMonthlyTrendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Event Makeup Type Distribution -->
+    <div class="card" style="padding:16px;">
+      <div style="font-weight:600; font-size:13px; color:#1a1a1a; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-chart-pie" style="color:#d97706;"></i> Makeup & Function Type Share
+      </div>
+      <div style="font-size:11px; color:#888; margin-bottom:12px;">Bridal, Reception, Engagement, Saree Prepleating breakdown</div>
+      <div style="height:220px; position:relative;">
+        <canvas id="eventMakeupTypeChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px;">
+    <!-- Payment & Advance Collection Status -->
+    <div class="card" style="padding:16px;">
+      <div style="font-weight:600; font-size:13px; color:#1a1a1a; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-wallet" style="color:#d97706;"></i> Advance vs Pending Balance
+      </div>
+      <div style="font-size:11px; color:#888; margin-bottom:12px;">Ratio of collected advance money to remaining balance</div>
+      <div style="height:220px; position:relative;">
+        <canvas id="eventPaymentChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Event Venues & Locations Grid -->
+    <div class="card" style="padding:16px;">
+      <div style="font-weight:600; font-size:13px; color:#1a1a1a; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-map-pin" style="color:#d97706;"></i> Top Booking Venues & Locations
+      </div>
+      <div style="font-size:11px; color:#888; margin-bottom:12px;">Locations driving the highest number of event bookings</div>
+      <div style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; padding-right:4px;" class="scrollbar-hide">
+        ${sortedLocations.length ? sortedLocations.map((loc, idx) => `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#fafafa; border:1px solid #ebebeb; border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:12px; font-weight:700; color:#d97706; width:18px;">#${idx + 1}</span>
+              <span style="font-size:12.5px; font-weight:600; color:#1a1a1a;">📍 ${loc.name}</span>
+            </div>
+            <div style="text-align:right;">
+              <span style="font-size:12px; font-weight:700; color:#15803d;">₹${loc.revenue.toLocaleString()}</span>
+              <span style="font-size:10px; color:#888; margin-left:6px;">(${loc.count} events)</span>
+            </div>
+          </div>
+        `).join('') : '<div style="font-size:12px; color:#888; text-align:center; padding:20px;">No location data found</div>'}
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Function Packages Table Card -->
+  <div class="card" style="padding:16px;">
+    <div style="font-weight:600; font-size:13px; color:#1a1a1a; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+      <i class="ti ti-sparkles" style="color:#d97706;"></i> Event Makeup Service Performance Summary
+    </div>
+    <div style="font-size:11px; color:#888; margin-bottom:14px;">Total bookings and revenue performance categorized by makeup service type</div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:10px;">
+      ${sortedTypes.map(t => `
+        <div style="background:#fffdf5; border:1px solid #fde68a; border-radius:10px; padding:12px;">
+          <div style="font-size:12px; font-weight:700; color:#b45309; margin-bottom:4px; display:flex; align-items:center; justify-content:space-between;">
+            <span>✨ ${t.name}</span>
+            <span class="badge badge-gold" style="font-size:10px">${t.count} Bookings</span>
+          </div>
+          <div style="font-size:15px; font-weight:700; color:#1a1a1a; margin-top:6px;">₹${t.revenue.toLocaleString()}</div>
+          <div style="font-size:10.5px; color:#888; margin-top:2px;">Avg: ₹${Math.round(t.revenue / Math.max(1, t.count)).toLocaleString()} / booking</div>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  `;
+}
+
+export function initEventAnalyticsCharts(events) {
+  const dd = window._eventAnalyticsData;
+  if (!dd || typeof Chart === 'undefined') return;
+
+  // 1. Monthly Revenue & Bookings Bar + Line Chart
+  const monthCtx = document.getElementById('eventMonthlyTrendChart');
+  if (monthCtx && dd.monthly && dd.monthly.length) {
+    const labels = dd.monthly.map(m => m.label);
+    const counts = dd.monthly.map(m => m.count);
+    const revenues = dd.monthly.map(m => m.revenue);
+
+    new Chart(monthCtx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Event Count',
+            data: counts,
+            backgroundColor: dd.monthly.map(m => (dd.peakMonth && m.key === dd.peakMonth.key) ? '#f5c842' : 'rgba(245, 200, 66, 0.45)'),
+            borderColor: '#f5c842',
+            borderWidth: 1.5,
+            borderRadius: 8,
+            yAxisID: 'y'
+          },
+          {
+            label: 'Revenue (₹)',
+            data: revenues,
+            type: 'line',
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            tension: 0.3,
+            fill: true,
+            pointBackgroundColor: '#10b981',
+            pointRadius: 4,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                if (ctx.dataset.type === 'line') {
+                  return ` Revenue: ₹${ctx.raw.toLocaleString()}`;
+                }
+                return ` Events: ${ctx.raw} bookings`;
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: { display: true, text: 'Events Count', font: { size: 10 } },
+            ticks: { precision: 0, font: { size: 10 } }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            title: { display: true, text: 'Revenue (₹)', font: { size: 10 } },
+            ticks: {
+              callback: function(val) { return '₹' + val.toLocaleString(); },
+              font: { size: 10 }
+            }
+          },
+          x: { ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  // 2. Makeup Type Share Doughnut Chart
+  const typeCtx = document.getElementById('eventMakeupTypeChart');
+  if (typeCtx && dd.types && dd.types.length) {
+    const topTypes = dd.types.slice(0, 6);
+    new Chart(typeCtx, {
+      type: 'doughnut',
+      data: {
+        labels: topTypes.map(t => t.name),
+        datasets: [{
+          data: topTypes.map(t => t.count),
+          backgroundColor: ['#f5c842', '#14b8a6', '#fb7185', '#a78bfa', '#6366f1', '#ec4899']
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } }
+      }
+    });
+  }
+
+  // 3. Payment Status Pie Chart
+  const payCtx = document.getElementById('eventPaymentChart');
+  if (payCtx) {
+    new Chart(payCtx, {
+      type: 'pie',
+      data: {
+        labels: ['Advance Collected', 'Pending Balance'],
+        datasets: [{
+          data: [dd.totalAdvance, dd.totalPending],
+          backgroundColor: ['#10b981', '#ef4444']
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } }
+      }
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+// 🗓️ UPCOMING EVENTS TAB
+// ─────────────────────────────────────────────
+
+export function renderUpcomingEventsTab(events) {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const upcoming = events.filter(e => e.date && e.date >= todayStr);
+
+  upcoming.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="section-title" style="margin-bottom:2px">
+            <i class="ti ti-calendar-event" style="color:#d97706;font-size:18px"></i> 🗓️ Scheduled Upcoming Events (${upcoming.length})
+          </div>
+          <div style="font-size:12px;color:#888">All upcoming weddings & function bookings ordered by date</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+        ${upcoming.length ? upcoming.map(e => {
+          const today = new Date(todayStr);
+          const evtDate = new Date(e.date);
+          const diffDays = Math.ceil((evtDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          
+          let badgeHtml = '';
+          if (diffDays === 0) {
+            badgeHtml = '<span class="badge badge-gold" style="font-size:11px;padding:3px 8px;">🎉 TODAY!</span>';
+          } else if (diffDays === 1) {
+            badgeHtml = '<span class="badge badge-amber" style="font-size:11px;padding:3px 8px;">⏰ Tomorrow</span>';
+          } else {
+            badgeHtml = `<span class="badge badge-blue" style="font-size:11px;padding:3px 8px;">🗓️ In ${diffDays} Days</span>`;
+          }
+
+          return renderEventCard(e, badgeHtml);
+        }).join('') : '<div style="font-size:12px;color:#888;padding:30px 0;text-align:center">🎉 No upcoming scheduled events. Tap "Book Event" to add a new booking!</div>'}
+      </div>
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────────
+// 🏆 TOP PAID WEDDINGS & EVENTS TAB
+// ─────────────────────────────────────────────
+
+export function renderTopPaidEventsTab(events) {
+  const sorted = [...events].sort((a, b) => (b.total || 0) - (a.total || 0));
+
+  return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="section-title" style="margin-bottom:0">
+          <i class="ti ti-crown" style="color:#d97706;font-size:18px"></i> 🏆 Highest Revenue Weddings & Events (Top Paid)
+        </div>
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:16px">Event bookings ranked strictly by total package billing amount</div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        ${sorted.map((e, i) => {
+          let rankBadge = '';
+          if (i === 0) rankBadge = '<span class="badge badge-gold" style="margin-left:6px">👑 #1 Top Event Billing</span>';
+          else if (i === 1) rankBadge = '<span class="badge badge-amber" style="margin-left:6px">🥈 #2 Highest Spender</span>';
+          else if (i === 2) rankBadge = '<span class="badge badge-blue" style="margin-left:6px">🥉 #3 Top Spender</span>';
+
+          return renderEventCard(e, rankBadge, i + 1);
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────────
+// ✅ COMPLETED EVENTS TAB
+// ─────────────────────────────────────────────
+
+export function renderCompletedEventsTab(events) {
+  const completed = events.filter(e => e.status === 'Completed');
+
+  return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="section-title" style="margin-bottom:0">
+          <i class="ti ti-circle-check" style="color:#10b981;font-size:18px"></i> ✅ Completed Event Bookings (${completed.length})
+        </div>
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:16px">Successfully completed makeup assignments and fully settled events</div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        ${completed.length ? completed.map(e => renderEventCard(e, '<span class="badge badge-green">Fully Completed</span>')).join('') : '<div style="font-size:12px;color:#888;padding:30px 0;text-align:center">No completed events found yet.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function renderEventCard(e, extraBadge = '', rankNum = null) {
+  let addonsHtml = '';
+  let funcDatesHtml = '';
+  
+  if (e.additional_makeup) {
+    try {
+      const arr = typeof e.additional_makeup === 'string' ? JSON.parse(e.additional_makeup) : e.additional_makeup;
+      if (Array.isArray(arr)) {
+        const cleanArr = arr.filter(a => a.name && !a.name.startsWith('Meta:') && a.amount > 0);
+        if (cleanArr.length > 0) {
+          addonsHtml = `
+            <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">
+              ${cleanArr.map(a => `<span style="font-size:10px; font-weight:500; color:#4f46e5; background:#edf2f7; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center; border: 0.5px solid #cbd5e0; gap: 4px;"><i class="ti ti-circle-plus" style="font-size:11px; color:#4f46e5;"></i>${a.name}: ₹${a.amount.toLocaleString()}</span>`).join('')}
+            </div>
+          `;
+        }
+
+        const meta = arr.find(a => a.name === 'Meta:FunctionDates');
+        if (meta && meta.dates && Object.keys(meta.dates).length > 1) {
+          funcDatesHtml = `
+            <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px; border-top: 0.5px dashed #e2e8f0; padding-top: 5px;">
+              ${Object.entries(meta.dates).map(([func, dateVal]) => `
+                <div style="font-size:10px; color:#555; display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                  <span style="font-weight:600; color:#4f46e5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85px;" title="${func}">${func}:</span>
+                  <span style="background:#e0e7ff; color:#4338ca; padding:1px 5px; border-radius:4px; font-size:9.5px; font-weight:600; white-space:nowrap;">${new Date(dateVal).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }
+      }
+    } catch(err) {}
+  }
+  
+  const { cleanText: cleanCustomer, tagHtml: empBadge } = formatEmpTag(e.customer);
+
+  return `
+  <div class="card" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div style="display:flex; align-items:flex-start; gap:10px;">
+        ${rankNum !== null ? `<div style="font-size:15px; font-weight:700; color:#d97706; margin-top:2px;">#${rankNum}</div>` : ''}
+        <div>
+          <div style="font-size:15px;font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            ${cleanCustomer}
+            ${empBadge}
+            ${extraBadge}
+            ${e.rating ? `<span style="color:#d97706;font-size:11px;letter-spacing:1px;" title="Owner rating: ${e.rating}/5">${'★'.repeat(e.rating)}${'☆'.repeat(5-e.rating)}</span>` : ''}
+          </div>
+          <div style="font-size:12px;color:#888; margin-top:2px;">
+            ${e.phone || 'No phone'} · ${e.location || 'Chennai'}
+            ${e.referred_by ? ` · <span style="color:#b45309;font-weight:500;" title="Referred by: ${e.referred_by}">📢 Ref: ${e.referred_by}</span>` : ''}
+          </div>
+          <div style="font-size:11px;color:#999;margin-top:2px;">
+            <i class="ti ti-clock" style="font-size:11px;vertical-align:middle;margin-right:2px;"></i>Booked on: ${e.created_at ? new Date(e.created_at).toLocaleDateString('en-IN') : 'N/A'}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge ${e.status==='Completed'?'badge-green':e.status==='Booked'?'badge-blue':'badge-amber'}">${e.status}</span>
+        <div onclick="window.promptEventWhatsAppBillFromId('${e.id}')" style="cursor:pointer;color:#ccc;padding:4px" onmouseover="this.style.color='#25d366'" onmouseout="this.style.color='#ccc'" title="Send Invoice via WhatsApp">
+          <i class="ti ti-brand-whatsapp" style="font-size:16px"></i>
+        </div>
+        <div onclick="window.openEventCustomerForm('${e.id}')" style="cursor:pointer;color:#ccc;padding:4px" onmouseover="this.style.color='#f5c842'" onmouseout="this.style.color='#ccc'" title="Edit Event">
+          <i class="ti ti-edit" style="font-size:15px"></i>
+        </div>
+        <div onclick="window.handleDeleteEvent('${e.id}')" style="cursor:pointer;color:#ccc;padding:4px" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#ccc'" title="Delete Event">
+          <i class="ti ti-trash" style="font-size:15px"></i>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;background:#f9f9f9;border-radius:10px;padding:12px;font-size:12px">
+      <div><div style="color:#999;margin-bottom:2px">Event</div><div style="font-weight:500">${e.type}</div></div>
+      <div>
+        <div style="color:#999;margin-bottom:2px">Event Date</div>
+        <div style="font-weight:500; ${funcDatesHtml ? 'color:#4f46e5; font-weight:600;' : ''}">${e.date}</div>
+        ${funcDatesHtml}
+      </div>
+      <div><div style="color:#999;margin-bottom:2px">Total</div><div style="font-weight:500;color:#d97706">₹${(e.total||0).toLocaleString()}</div></div>
+      <div><div style="color:#999;margin-bottom:2px">Pending</div><div style="font-weight:500;color:${(e.pending||0)>0?'#dc2626':'#15803d'}">₹${(e.pending||0).toLocaleString()}</div></div>
+    </div>
+    ${addonsHtml}
+    ${(() => {
+      let staffWagesHtml = '';
+      if (e.staff_wages) {
+        try {
+          const wages = typeof e.staff_wages === 'string' ? JSON.parse(e.staff_wages) : e.staff_wages;
+          if (Array.isArray(wages) && wages.length > 0) {
+            staffWagesHtml = `
+              <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                <span style="font-size:10px; font-weight:600; color:#dc2626; text-transform:uppercase; letter-spacing:0.05em;"><i class="ti ti-users" style="font-size:11px;"></i> Staff Wages (My Expense):</span>
+                ${wages.map(w => `<span style="font-size:10px; font-weight:500; color:#dc2626; background:#fff5f5; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center; border: 0.5px solid #fca5a5; gap: 4px;"><i class="ti ti-user-dollar" style="font-size:11px;"></i>${w.name}: ₹${(w.amount||0).toLocaleString()}</span>`).join('')}
+              </div>
+            `;
+          }
+        } catch(err) {}
+      }
+      return staffWagesHtml;
+    })()}
+    <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+      <div style="flex:1; margin-right:12px;">
+        <div style="font-size:11px;color:#bbb;margin-bottom:4px">Payment Progress</div>
+        <div style="background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden">
+          <div style="height:6px;border-radius:4px;background:#f5c842;width:${e.total?Math.round(((e.advance||0)/e.total)*100):0}%"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+          <div style="font-size:11px;color:#888">Advance ₹${(e.advance||0).toLocaleString()} / ₹${(e.total||0).toLocaleString()} (${e.total?Math.round(((e.advance||0)/e.total)*100):0}%)</div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            ${(e.travel_allowance > 0) ? `<span style="font-size:10px; color:#d97706; cursor:pointer; display:flex; align-items:center; gap:3px;" onclick="window.quickEditTransport('${e.id}')" title="Edit transport cost"><i class="ti ti-car" style="font-size:11px;"></i>Transport: ₹${(e.travel_allowance||0).toLocaleString()} <i class="ti ti-pencil" style="font-size:10px;"></i></span>` : ''}
+          </div>
+        </div>
+      </div>
+      ${(e.pending || 0) > 0 ? `
+        <button class="btn btn-gold" onclick="window.openEventCollectPaymentModal('${e.id}')" style="padding: 6px 12px; font-size: 11px; height: 32px; white-space: nowrap; border-radius: 8px;">
+          <i class="ti ti-cash"></i> Collect Payment
+        </button>
+      ` : ''}
+    </div>
+  </div>`;
+}
+
+// Bind to window object for inline HTML event handling
+window.switchEventTab = switchEventTab;
+window.filterEventByMonthSelect = filterEventByMonthSelect;
+window.filterEventByMonth = filterEventByMonth;
+window.filterEventCustomers = filterEventCustomers;
+window.filterEventsStatus = filterEventsStatus;
+window.toggleEventMonthFilter = toggleEventMonthFilter;
+window.toggleEventSearchField = toggleEventSearchField;
+window.analyzeEvents = analyzeEvents;
+window.showAddEventModal = showAddEventModal;
+window.handleDeleteEvent = handleDeleteEvent;
+window.openEventCustomerForm = openEventCustomerForm;
+window.submitEventCustomerForm = submitEventCustomerForm;
+window.promptEventWhatsAppBill = promptEventWhatsAppBill;
+window.promptEventWhatsAppBillFromId = promptEventWhatsAppBillFromId;
+window.openEventCollectPaymentModal = openEventCollectPaymentModal;
+window.quickEditTransport = quickEditTransport;
+window.eventAddonChipToggle = eventAddonChipToggle;
+window.removeEventAddonRow = removeEventAddonRow;
+window.updateEventTotalDisplay = updateEventTotalDisplay;
+window.eventFunctionChipToggle = eventFunctionChipToggle;
+window.updateEventFunctionDates = updateEventFunctionDates;
+window.renderEventAnalyticsDashboard = renderEventAnalyticsDashboard;
+window.initEventAnalyticsCharts = initEventAnalyticsCharts;
+window.renderUpcomingEventsTab = renderUpcomingEventsTab;
+window.renderTopPaidEventsTab = renderTopPaidEventsTab;
+window.renderCompletedEventsTab = renderCompletedEventsTab;
+
 

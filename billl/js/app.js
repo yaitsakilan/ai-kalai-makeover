@@ -58,7 +58,7 @@ export function showPage(page) {
 
   state.currentPage = page;
   if (page === 'customers') {
-    window._selectedMonth = 'all';
+    window._selectedMonth = undefined;
     window._searchQuery = '';
     window._monthFilterExpanded = false;
     window._searchFieldExpanded = false;

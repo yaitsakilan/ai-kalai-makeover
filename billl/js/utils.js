@@ -191,5 +191,56 @@ export function sortCustomersList(customerList, sortOption = 'most_visited', ref
   });
 }
 
+/**
+ * Triggers the browser's Web Contact Picker API (supported on mobile Chrome/Edge/Opera/Safari)
+ * to select a contact from the user's phone contacts list and auto-fill phone and name inputs.
+ * @param {string} phoneInputId - The DOM ID of the phone input element
+ * @param {string|null} nameInputId - Optional DOM ID of the name input element
+ */
+export async function pickContact(phoneInputId, nameInputId = null) {
+  const phoneInput = document.getElementById(phoneInputId);
+  const nameInput = nameInputId ? document.getElementById(nameInputId) : null;
+
+  if ('contacts' in navigator && 'ContactsManager' in window) {
+    try {
+      const props = ['tel'];
+      if (nameInputId) props.push('name');
+      const contacts = await navigator.contacts.select(props, { multiple: false });
+      if (contacts && contacts.length > 0) {
+        const contact = contacts[0];
+        if (phoneInput && contact.tel && contact.tel.length > 0) {
+          let rawTel = contact.tel[0];
+          let cleanPhone = rawTel.replace(/\D/g, '');
+          if (cleanPhone.length > 10) cleanPhone = cleanPhone.slice(-10);
+          phoneInput.value = cleanPhone;
+          phoneInput.dispatchEvent(new Event('input', { bubbles: true }));
+          phoneInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (nameInput && contact.name && contact.name.length > 0) {
+          if (!nameInput.value.trim()) {
+            nameInput.value = contact.name[0];
+            nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+            nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+        if (typeof window.showToast === 'function') {
+          window.showToast('Contact imported successfully!', 'success');
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'InvalidStateError' && err.name !== 'SecurityError' && err.name !== 'AbortError') {
+        console.warn('Contact picker error:', err);
+      }
+    }
+  } else {
+    if (typeof window.showToast === 'function') {
+      window.showToast('Contact Picker is supported on mobile devices (Android Chrome/Safari). On desktop, enter number manually.', 'info');
+    }
+  }
+}
+
+window.pickContact = pickContact;
+
+
 
 

@@ -4,17 +4,89 @@ import { fetchExpenses, addExpense, deleteExpense, fetchMonthlyBalances, saveMon
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { callGroqAPI } from '../api.js';
 import { formatEmpTag } from '../utils.js';
+import { calculateModuleStreak, renderModuleStreakWidget } from '../streak.js';
+
+export function setExpenseTab(tab) {
+  window._expenseTabFilter = tab;
+  if (typeof window.render === 'function') window.render();
+}
+
+export function openExpenseFormSelector() {
+  showModal('Select Expense Type to Add', `
+    <div style="font-size:12.5px; color:#666; margin-bottom:16px; text-align:center;">
+      Choose the expense form you would like to fill out:
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div onclick="window.closeModal(); window.openProductExpenseForm();" class="expense-type-card" style="display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid #e5e7eb; border-radius:12px; cursor:pointer; background:#fff; transition:all 0.2s;">
+        <div style="width:42px; height:42px; border-radius:10px; background:#f3e8ff; color:#7c3aed; display:flex; align-items:center; justify-content:center; font-size:20px;">
+          <i class="ti ti-package"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:14px; font-weight:600; color:#1f2937;">Product Expenses Form</div>
+          <div style="font-size:12px; color:#6b7280;">Salon product purchases, facial kits, hair colors, makeup items & accessories</div>
+        </div>
+        <i class="ti ti-chevron-right" style="color:#9ca3af; font-size:18px;"></i>
+      </div>
+
+      <div onclick="window.closeModal(); window.showAddExpenseModal();" class="expense-type-card" style="display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid #e5e7eb; border-radius:12px; cursor:pointer; background:#fff; transition:all 0.2s;">
+        <div style="width:42px; height:42px; border-radius:10px; background:#fef3c7; color:#d97706; display:flex; align-items:center; justify-content:center; font-size:20px;">
+          <i class="ti ti-receipt"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:14px; font-weight:600; color:#1f2937;">General Expenses Form</div>
+          <div style="font-size:12px; color:#6b7280;">Rent, staff salaries, electricity, water bills, travel & utilities</div>
+        </div>
+        <i class="ti ti-chevron-right" style="color:#9ca3af; font-size:18px;"></i>
+      </div>
+
+      <div onclick="window.closeModal(); window.openBulkExpenseForm();" class="expense-type-card" style="display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid #e5e7eb; border-radius:12px; cursor:pointer; background:#fff; transition:all 0.2s;">
+        <div style="width:42px; height:42px; border-radius:10px; background:#ede9fe; color:#6d28d9; display:flex; align-items:center; justify-content:center; font-size:20px;">
+          <i class="ti ti-receipt-2"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:14px; font-weight:600; color:#1f2937;">Bulk Expenses Form</div>
+          <div style="font-size:12px; color:#6b7280;">Add multiple expense transactions at once in table view</div>
+        </div>
+        <i class="ti ti-chevron-right" style="color:#9ca3af; font-size:18px;"></i>
+      </div>
+
+      <div onclick="window.closeModal(); window.showPage('ocr');" class="expense-type-card" style="display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid #e5e7eb; border-radius:12px; cursor:pointer; background:#fff; transition:all 0.2s;">
+        <div style="width:42px; height:42px; border-radius:10px; background:#fff7ed; color:#ea580c; display:flex; align-items:center; justify-content:center; font-size:20px;">
+          <i class="ti ti-scan"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:14px; font-weight:600; color:#1f2937;">Scan Bill (AI OCR)</div>
+          <div style="font-size:12px; color:#6b7280;">Upload bill receipt image or photo to extract and save expense</div>
+        </div>
+        <i class="ti ti-chevron-right" style="color:#9ca3af; font-size:18px;"></i>
+      </div>
+    </div>
+  `, null);
+  
+  const saveBtn = document.getElementById('modal-save-btn');
+  if (saveBtn) saveBtn.style.display = 'none';
+  const cancelBtn = document.querySelector('#modal-container .btn-outline');
+  if (cancelBtn) cancelBtn.textContent = 'Close';
+}
 
 export async function renderExpenses() {
   const allExpenses = await fetchExpenses();
-  const isProductPage = state.currentPage === 'product-expenses';
+  const streakData = calculateModuleStreak(allExpenses, 'date');
+  const activeTab = window._expenseTabFilter || 'all';
 
-  // Filter based on page type: Products vs General (everything else)
-  const expenses = isProductPage 
-    ? allExpenses.filter(e => e.category === 'Products')
-    : allExpenses.filter(e => e.category !== 'Products');
+  // Filter based on active tab
+  let expenses = allExpenses;
+  if (activeTab === 'product') {
+    expenses = allExpenses.filter(e => e.category === 'Products');
+  } else if (activeTab === 'general') {
+    expenses = allExpenses.filter(e => e.category !== 'Products');
+  }
 
   const total = expenses.reduce((s,e)=>s+(e.amount||0),0);
+  const totalAllExpenses = allExpenses.reduce((s,e)=>s+(e.amount||0),0);
+  const totalGeneralExpenses = allExpenses.filter(e => e.category !== 'Products').reduce((s,e)=>s+(e.amount||0),0);
+  const totalProductExpenses = allExpenses.filter(e => e.category === 'Products').reduce((s,e)=>s+(e.amount||0),0);
+
   const cats = {};
   expenses.forEach(e=>{ cats[e.category]=(cats[e.category]||0)+(e.amount||0); });
 
@@ -42,7 +114,7 @@ export async function renderExpenses() {
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const currentMonthName = `${monthNames[now.getMonth()]} ${currentYear}`;
   const hasBalances = currentBalance.cash_balance !== undefined || currentBalance.gpay_balance !== undefined;
-  const showBanner = !isProductPage && (!hasBalances || (cashStarting === 0 && gpayStarting === 0));
+  const showBanner = (!hasBalances || (cashStarting === 0 && gpayStarting === 0));
 
   const bannerHtml = showBanner ? `
     <div class="preview-box" style="margin-bottom:16px; border-color:#f59e0b; background:#fffbeb; padding: 14px 18px; border-radius: 12px;" id="starting-balance-banner">
@@ -58,35 +130,34 @@ export async function renderExpenses() {
     </div>
   ` : '';
 
-  const titleText = isProductPage ? 'Product Expenses' : 'General Expenses';
-  const subtitleText = isProductPage 
-    ? 'Track salon product purchases, makeup kits, accessories, and supplier spends'
-    : 'Track salon overheads, rent, staff salaries, bills, and utilities';
-
-  const actionButtonsHtml = isProductPage
-    ? `<button class="btn btn-gold" onclick="window.openProductExpenseForm()"><i class="ti ti-plus"></i> Add Product Expense</button>`
-    : `<button class="btn btn-outline" onclick="window.openBulkExpenseForm()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;border:none;"><i class="ti ti-receipt-2"></i> Bulk Expense</button>
-       <button class="btn btn-gold" onclick="window.showAddExpenseModal()"><i class="ti ti-plus"></i> Add General Expense</button>`;
-
   return `
   <div class="top-bar">
     <div>
-      <h2>${titleText}</h2>
-      <p style="font-size:12px;color:#999;margin-top:2px">${subtitleText}</p>
+      <h2>Expenses Management</h2>
     </div>
-    <div style="display:flex; gap:10px; flex-wrap: wrap;">
-      ${!isProductPage ? `
-      <button class="btn btn-outline" onclick="window.showStartingBalanceModal('${currentMonthStr}', ${cashStarting}, ${gpayStarting})">
-        <i class="ti ti-wallet" style="color:#d97706"></i> Set Starting Balance
+    <div style="display:flex; gap:8px; flex-wrap: wrap; align-items:center;">
+      <button class="btn btn-gold" onclick="window.openExpenseFormSelector()" style="box-shadow:0 2px 8px rgba(245,200,66,0.3);">
+        <i class="ti ti-plus"></i> Add Expense
       </button>
-      ` : ''}
-      ${actionButtonsHtml}
+      <button class="btn btn-outline" onclick="window.openProductExpenseForm()" style="border-color:#7c3aed; color:#7c3aed;">
+        <i class="ti ti-package"></i> Product Expense
+      </button>
+      <button class="btn btn-outline" onclick="window.showAddExpenseModal()">
+        <i class="ti ti-receipt"></i> General Expense
+      </button>
+      <button class="btn btn-outline" onclick="window.openBulkExpenseForm()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;border:none;">
+        <i class="ti ti-receipt-2"></i> Bulk Expense
+      </button>
+      <button class="btn btn-outline" onclick="window.showPage('ocr')" style="border-color:#ea580c; color:#ea580c;">
+        <i class="ti ti-scan"></i> Scan Bill
+      </button>
     </div>
   </div>
 
   ${bannerHtml}
 
-  ${!isProductPage ? `
+  ${renderModuleStreakWidget('Expense Entries', streakData, '#7c3aed')}
+
   <div class="metric-grid" style="margin-bottom: 20px;">
     <div class="metric-card mc-orange">
       <div class="metric-label">Cash in Hand Balance</div>
@@ -107,14 +178,28 @@ export async function renderExpenses() {
       <div class="metric-icon"><i class="ti ti-cash"></i></div>
     </div>
   </div>
-  ` : ''}
+
+  <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center; background:#f9fafb; padding:8px; border-radius:12px; border:1px solid #f3f4f6;">
+    <button class="btn ${activeTab === 'all' ? 'btn-gold' : 'btn-outline'}" onclick="window.setExpenseTab('all')" style="padding:6px 16px; font-size:12px; height:34px;">
+      <i class="ti ti-list"></i> All Expenses (₹${totalAllExpenses.toLocaleString()})
+    </button>
+    <button class="btn ${activeTab === 'general' ? 'btn-gold' : 'btn-outline'}" onclick="window.setExpenseTab('general')" style="padding:6px 16px; font-size:12px; height:34px;">
+      <i class="ti ti-receipt"></i> General Expenses (₹${totalGeneralExpenses.toLocaleString()})
+    </button>
+    <button class="btn ${activeTab === 'product' ? 'btn-gold' : 'btn-outline'}" onclick="window.setExpenseTab('product')" style="padding:6px 16px; font-size:12px; height:34px;">
+      <i class="ti ti-package"></i> Product Expenses (₹${totalProductExpenses.toLocaleString()})
+    </button>
+  </div>
 
   <div class="card" style="margin-bottom:16px;padding:20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:0">${isProductPage ? 'All Product Expenses' : 'All General Expenses'} (All Time)</div>
+      <div class="section-title" style="margin-bottom:0">
+        ${activeTab === 'product' ? 'Product Expenses Breakdown' : activeTab === 'general' ? 'General Expenses Breakdown' : 'All Expenses Breakdown'} (All Time)
+      </div>
       <div style="font-size:22px;font-weight:700;color:#dc2626">₹${total.toLocaleString()}</div>
     </div>
-    ${Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+    ${Object.keys(cats).length === 0 ? '<div style="color:#999;font-size:13px;padding:12px 0;">No expense entries in this category yet.</div>' :
+      Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
       <div class="service-row">
         <div style="width:30px;height:30px;border-radius:8px;background:#fef3c7;display:flex;align-items:center;justify-content:center">
           <i class="ti ${expenseIcon(cat)}" style="font-size:15px;color:#d97706"></i>
@@ -133,8 +218,9 @@ export async function renderExpenses() {
     `).join('')}
   </div>
   <div class="card">
-    <div class="section-title">Transaction History</div>
-    ${expenses.map(e=>{
+    <div class="section-title">Transaction History (${expenses.length} entries)</div>
+    ${expenses.length === 0 ? '<div style="color:#999;font-size:13px;padding:20px;text-align:center;">No expense records found.</div>' :
+      expenses.map(e=>{
       const { cleanText: cleanNote, tagHtml: empBadge } = formatEmpTag(e.note || e.category);
       return `
       <div class="expense-row">
@@ -705,7 +791,8 @@ export async function submitProductExpenseForm() {
   }
 }
 
-// Bind to window to allow HTML inline click handlers to execute
+window.setExpenseTab = setExpenseTab;
+window.openExpenseFormSelector = openExpenseFormSelector;
 window.openBulkExpenseForm = openBulkExpenseForm;
 window.addBulkExpenseRow = addBulkExpenseRow;
 window.removeBulkExpenseRow = removeBulkExpenseRow;

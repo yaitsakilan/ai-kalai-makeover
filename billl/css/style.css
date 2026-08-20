@@ -1443,3 +1443,9 @@ input[type=number] {
   }
 }
 
+.expense-type-card:hover {
+  border-color: #7c3aed !important;
+  background: #faf5ff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.12);
+}

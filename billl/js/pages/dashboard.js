@@ -1,6 +1,7 @@
 // billl/js/pages/dashboard.js
-import { fetchCustomers, fetchEvents, fetchExpenses } from '../db.js';
+import { fetchCustomers, fetchEvents, fetchExpenses, fetchClassEnrollments, fetchJewels } from '../db.js';
 import { formatEmpTag } from '../utils.js';
+import { calculateMonthlyGamification, showMonthlyReportModal } from '../streak.js';
 
 const MOTIVATIONAL_QUOTES = [
   "Your business grows when you help others feel beautiful and confident. ✨",
@@ -27,7 +28,16 @@ function getDailyQuote() {
 }
 
 export async function renderDashboard() {
-  const [customers, events, expenses] = await Promise.all([fetchCustomers(), fetchEvents(), fetchExpenses()]);
+  const [customers, events, expenses, students, jewels] = await Promise.all([
+    fetchCustomers(),
+    fetchEvents(),
+    fetchExpenses(),
+    fetchClassEnrollments().catch(() => []),
+    fetchJewels().catch(() => [])
+  ]);
+
+  window._cachedAllModulesData = { customers, events, expenses, students, jewels };
+  const stats = calculateMonthlyGamification(window._cachedAllModulesData);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const todayCustomers = customers.filter(c => c.last_visit === todayStr);
@@ -109,6 +119,50 @@ export async function renderDashboard() {
       </div>
     </div>
     <div class="date" style="align-self:flex-start;"><i class="ti ti-sparkles" style="color:#d97706;margin-right:4px"></i>Kalai Makeover</div>
+  </div>
+
+  <!-- Salon Master Streak & Gamification Card -->
+  <div class="card" style="margin-bottom:20px; padding:20px; background:linear-gradient(135deg, #1f1b2e, #110e1b); color:#ffffff; border:1px solid #332a4d; border-radius:16px; box-shadow:0 8px 30px rgba(124, 58, 237, 0.15);">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:16px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:48px; height:48px; border-radius:14px; background:linear-gradient(135deg,#f59e0b,#ea580c); display:flex; align-items:center; justify-content:center; font-size:24px; box-shadow:0 4px 14px rgba(245,158,11,0.4);">
+          🔥
+        </div>
+        <div>
+          <div style="font-size:18px; font-weight:700; color:#ffffff; display:flex; align-items:center; gap:8px;">
+            Overall Salon Master Streak
+            <span style="font-size:11px; background:rgba(245,200,66,0.2); color:#f5c842; border:1px solid rgba(245,200,66,0.4); padding:2px 8px; border-radius:12px;">
+              ${stats.title}
+            </span>
+          </div>
+          <div style="font-size:12px; color:rgba(255,255,255,0.65); margin-top:2px;">
+            Monthly Points: <strong style="color:#f5c842">${stats.totalPoints.toLocaleString()} Pts</strong> · Consistency: <strong style="color:#34d399">${stats.consistencyRate}%</strong>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-gold" onclick="window.showMonthlyReportModal(window._cachedAllModulesData)" style="box-shadow:0 4px 12px rgba(245,200,66,0.3); font-size:12px; height:34px; padding:0 16px;">
+        <i class="ti ti-trophy"></i> Monthly Report Scorecard
+      </button>
+    </div>
+
+    <!-- Today's 3-Module Entry Matrix -->
+    <div style="font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em; color:rgba(255,255,255,0.5); font-weight:600; margin-bottom:10px;">
+      Today's Data Entry Matrix (${stats.todayCompletedCount}/3 Completed)
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;">
+      <div onclick="showPage('customers')" style="background:${stats.todayMatrix.customers ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)'}; border:1px solid ${stats.todayMatrix.customers ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.1)'}; padding:12px; border-radius:10px; text-align:center; cursor:pointer;" title="Go to Customers">
+        <div style="font-size:12px; color:${stats.todayMatrix.customers ? '#4ade80' : 'rgba(255,255,255,0.5)'}; font-weight:600;">👥 Customers</div>
+        <div style="font-size:18px; margin-top:4px;">${stats.todayMatrix.customers ? '✅' : '⏳'}</div>
+      </div>
+      <div onclick="showPage('expenses')" style="background:${stats.todayMatrix.expenses ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)'}; border:1px solid ${stats.todayMatrix.expenses ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.1)'}; padding:12px; border-radius:10px; text-align:center; cursor:pointer;" title="Go to Expenses">
+        <div style="font-size:12px; color:${stats.todayMatrix.expenses ? '#4ade80' : 'rgba(255,255,255,0.5)'}; font-weight:600;">💸 Expenses</div>
+        <div style="font-size:18px; margin-top:4px;">${stats.todayMatrix.expenses ? '✅' : '⏳'}</div>
+      </div>
+      <div onclick="showPage('events')" style="background:${stats.todayMatrix.events ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)'}; border:1px solid ${stats.todayMatrix.events ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.1)'}; padding:12px; border-radius:10px; text-align:center; cursor:pointer;" title="Go to Events">
+        <div style="font-size:12px; color:${stats.todayMatrix.events ? '#4ade80' : 'rgba(255,255,255,0.5)'}; font-weight:600;">🎉 Events</div>
+        <div style="font-size:18px; margin-top:4px;">${stats.todayMatrix.events ? '✅' : '⏳'}</div>
+      </div>
+    </div>
   </div>
 
   <div class="metric-grid">

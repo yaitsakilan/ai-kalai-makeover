@@ -23,7 +23,6 @@ export async function renderFinance() {
           💰 Financial Statements & Accounts
           ${readOnly ? '<span class="badge badge-amber" style="font-size:11px;font-family:sans-serif;font-weight:normal"><i class="ti ti-lock" style="margin-right:4px"></i> Read-Only Mode</span>' : ''}
         </h2>
-        <p style="font-size:12px;color:#888;margin-top:2px">Comprehensive P&L Statement, Cash Flow Reconciliation & Dues Ledger</p>
       </div>
       <div style="display:flex;gap:10px;align-items:center">
         <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterFinanceMonth(this.value)" title="Choose Month Filter">

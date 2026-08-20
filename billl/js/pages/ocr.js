@@ -38,7 +38,6 @@ export async function renderOCR() {
   <div class="top-bar">
     <div>
       <h2>Bill Scanner</h2>
-      <p style="font-size:12px;color:#999">Upload a receipt photo — AI will extract and save to Database</p>
     </div>
     <button class="btn btn-outline" onclick="window.clearOcrData()" id="clear-ocr-btn" style="display:${hasResult ? 'inline-flex' : 'none'}; align-items:center; gap:6px;">
       <i class="ti ti-refresh"></i> Clear Data
@@ -199,6 +198,7 @@ export async function saveOcrToSupabase() {
 
   const storeName = document.getElementById('ocr-store')?.value || parsed.store || 'Unknown';
   const billDate = document.getElementById('ocr-date')?.value || new Date().toISOString().split('T')[0];
+  const expenseCat = document.getElementById('ocr-category')?.value || 'Products';
   const itemSummary = (parsed.items || []).map(i => `${i.name} (₹${(i.amount || 0).toLocaleString()})`).join(', ');
 
   // Save as bill scan
@@ -211,7 +211,7 @@ export async function saveOcrToSupabase() {
 
   // Also save as expense
   await addExpense({
-    category: 'Products',
+    category: expenseCat,
     amount: parsed.total || 0,
     date: billDate,
     note: `Bill from ${storeName}${itemSummary ? ' | Items: ' + itemSummary : ''}`
@@ -240,10 +240,24 @@ export function renderOcrResult() {
       <div class="form-label">Store / Vendor</div>
       <input class="form-input" id="ocr-store" value="${parsed.store || ''}" oninput="window._lastOcrResult.store = this.value">
     </div>
-    <div style="margin-bottom:12px">
-      <div class="form-label">Bill Date</div>
-      <input class="form-input" id="ocr-date" type="date" value="${displayDate}" oninput="window._lastOcrResult.date = this.value">
-      ${dateWarning}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <div class="form-label">Expense Category *</div>
+        <select class="form-input form-select" id="ocr-category">
+          <option value="Products" ${(!parsed.category || parsed.category === 'Products') ? 'selected' : ''}>Product Expenses</option>
+          <option value="Rent" ${parsed.category === 'Rent' ? 'selected' : ''}>General - Rent</option>
+          <option value="Electricity" ${parsed.category === 'Electricity' ? 'selected' : ''}>General - Electricity</option>
+          <option value="Water" ${parsed.category === 'Water' ? 'selected' : ''}>General - Water</option>
+          <option value="Salary" ${parsed.category === 'Salary' ? 'selected' : ''}>General - Salary</option>
+          <option value="Travel" ${parsed.category === 'Travel' ? 'selected' : ''}>General - Travel</option>
+          <option value="Miscellaneous" ${parsed.category === 'Miscellaneous' ? 'selected' : ''}>General - Miscellaneous</option>
+        </select>
+      </div>
+      <div>
+        <div class="form-label">Bill Date</div>
+        <input class="form-input" id="ocr-date" type="date" value="${displayDate}" oninput="window._lastOcrResult.date = this.value">
+        ${dateWarning}
+      </div>
     </div>
     <div style="margin-bottom:12px">
       <div class="form-label" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">

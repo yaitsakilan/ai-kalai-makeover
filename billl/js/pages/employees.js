@@ -38,7 +38,6 @@ export async function renderEmployees() {
   <div class="top-bar">
     <div>
       <h2>Employee Management</h2>
-      <p style="font-size:12px;color:#999;margin-top:2px">Manage staff, track check-in/out attendance, and generate monthly payslips</p>
     </div>
     <div style="display:flex; gap:10px;">
       ${window._employeesTab === 'directory' ? `

@@ -4,10 +4,12 @@ import { fetchEvents, addEvent, deleteEvent, updateEvent } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone, getSelectedChips, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
+import { calculateModuleStreak, renderModuleStreakWidget } from '../streak.js';
 
 export async function renderEvents() {
   const events = await fetchEvents();
   window._cachedEvents = events;
+  const streakData = calculateModuleStreak(events, 'date');
 
   const currentMonthIndex = new Date().getMonth();
   if (window._eventActiveTab === undefined) window._eventActiveTab = 'analytics';
@@ -94,7 +96,6 @@ export async function renderEvents() {
   <div class="top-bar">
     <div>
       <h2>Event Management & Bookings</h2>
-      <p style="font-size:12px;color:#999;margin-top:2px">Viewing ${selectedMonthLabel} · Bridal & event bookings, analytics, schedules & revenue</p>
     </div>
     <div style="display:flex; gap:10px; align-items:center;">
       <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterEventByMonthSelect(this.value)" title="Choose Month Filter">
@@ -103,10 +104,6 @@ export async function renderEvents() {
           <option value="${idx}" ${window._selectedEventMonth === idx ? 'selected' : ''}>📅 ${m}</option>
         `).join('')}
       </select>
-
-      <button class="btn btn-outline" onclick="window.analyzeEvents()" title="AI Event Analysis">
-        <i class="ti ti-sparkles" style="color:#d97706"></i> AI Insights
-      </button>
 
       ${window._eventActiveTab === 'directory' ? `
         <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Events">
@@ -121,6 +118,8 @@ export async function renderEvents() {
       </button>
     </div>
   </div>
+
+  ${renderModuleStreakWidget('Event Bookings', streakData, '#7c3aed')}
 
   <!-- Navigation Tabs -->
   <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">

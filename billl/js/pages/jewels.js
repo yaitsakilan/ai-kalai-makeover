@@ -39,7 +39,6 @@ export async function renderJewels() {
   <div class="top-bar">
     <div>
       <h2>Jewellery Rental Tracker</h2>
-      <p style="font-size:12px;color:#999;margin-top:2px">Monitor jewel purchases, rental transactions, outstanding deposits, and net ROI</p>
     </div>
     <div style="display:flex; gap:10px;">
       <button class="btn btn-gold" onclick="window.openAddJewelModal()">

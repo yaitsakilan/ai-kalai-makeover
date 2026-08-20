@@ -35,7 +35,6 @@ export async function renderStudents() {
   <div class="top-bar">
     <div>
       <h2>Student Management</h2>
-      <p style="font-size:12px;color:#999;margin-top:2px">Track course enrollments, fees, monthly installments, and collection progress</p>
     </div>
     <div style="display:flex; gap:10px;">
       <button class="btn btn-gold" onclick="window.openClassesForm()">

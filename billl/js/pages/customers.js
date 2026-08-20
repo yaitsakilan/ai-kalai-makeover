@@ -4,10 +4,12 @@ import { fetchCustomers, addCustomer, updateCustomer, deleteCustomer, addClassEn
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone, formatEmpTag, formatVisitedDate, getUniqueCustomersMap, getEffectiveVisits, sortCustomersList } from '../utils.js';
 import { callGroqAPI } from '../api.js';
+import { calculateModuleStreak, renderModuleStreakWidget } from '../streak.js';
 
 export async function renderCustomers() {
   const customers = await fetchCustomers();
   window._cachedCustomers = customers;
+  const streakData = calculateModuleStreak(customers, 'date');
 
   const currentMonthIndex = new Date().getMonth();
   if (window._customerActiveTab === undefined) window._customerActiveTab = 'analytics';
@@ -88,7 +90,6 @@ export async function renderCustomers() {
   <div class="top-bar">
     <div>
       <h2>Customer Management</h2>
-      <p style="font-size:12px;color:#999;margin-top:2px">Viewing ${selectedMonthLabel} · Customer records, visits & history</p>
     </div>
     <div style="display:flex; gap:10px; align-items:center">
       <!-- Month Filter Select Dropdown -->
@@ -112,6 +113,8 @@ export async function renderCustomers() {
       </button>
     </div>
   </div>
+
+  ${renderModuleStreakWidget('Customer Entries', streakData, '#7c3aed')}
 
   <!-- Navigation Tabs -->
   <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">

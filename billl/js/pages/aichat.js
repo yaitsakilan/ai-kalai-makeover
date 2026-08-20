@@ -10,7 +10,6 @@ export function renderAIChat() {
   <div class="top-bar">
     <div>
       <h2>AI Entry Assistant</h2>
-      <p style="font-size:12px;color:#999;margin-top:2px">Type in English or Tamil — I'll extract and save to Database</p>
     </div>
     <button class="btn btn-outline" onclick="window.clearAIChat()">
       <i class="ti ti-refresh"></i> Clear Chat

@@ -655,7 +655,7 @@ export function productExpenseChipToggle(chipEl, category) {
       row.innerHTML = `
         <div class="sa-name" style="color:${color}"><i class="ti ${icon}"></i><input type="text" class="sa-name-input" value="${name}"></div>
         <span style="font-size:12px;color:#888">₹</span>
-        <input type="number" placeholder="Amount" oninput="window.updateProductExpenseTotal()" style="width: 80px;">
+        <input type="number" class="pe-amount-input" placeholder="Amount" oninput="window.updateProductExpenseTotal()" style="width: 80px;">
         <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', '${name}', '${category}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
       amountList.appendChild(row);
     }
@@ -689,7 +689,7 @@ export function addOtherProductExpenseAmount(category) {
   row.innerHTML = `
     <div class="sa-name" style="color:${color}"><i class="ti ${icon}"></i><input type="text" class="sa-name-input" value="${otherName}"></div>
     <span style="font-size:12px;color:#888">₹</span>
-    <input type="number" placeholder="Amount" oninput="window.updateProductExpenseTotal()" style="width: 80px;">
+    <input type="number" class="pe-amount-input" placeholder="Amount" oninput="window.updateProductExpenseTotal()" style="width: 80px;">
     <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', null, '${category}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
   amountList.appendChild(row);
   
@@ -714,8 +714,8 @@ export function updateProductExpenseTotal() {
   const makeupRows = document.querySelectorAll('#pe-makeup-amounts .service-amount-row');
   
   let total = 0;
-  productRows.forEach(r => { total += parseInt(r.querySelector('input')?.value) || 0; });
-  makeupRows.forEach(r => { total += parseInt(r.querySelector('input')?.value) || 0; });
+  productRows.forEach(r => { total += parseInt(r.querySelector('.pe-amount-input, input[type="number"]')?.value) || 0; });
+  makeupRows.forEach(r => { total += parseInt(r.querySelector('.pe-amount-input, input[type="number"]')?.value) || 0; });
 
   const el = document.getElementById('pe-total-amount');
   if (el) el.textContent = '₹' + total.toLocaleString();
@@ -737,7 +737,7 @@ export async function submitProductExpenseForm() {
   productRows.forEach(r => {
     const nameInput = r.querySelector('.sa-name-input');
     const name = nameInput ? nameInput.value.trim() : r.dataset.name;
-    const amount = parseInt(r.querySelector('input')?.value) || 0;
+    const amount = parseInt(r.querySelector('.pe-amount-input, input[type="number"]')?.value) || 0;
     if (amount > 0) {
       const note = shopName ? `Products: ${name} (${shopName})` : `Products: ${name}`;
       items.push({ category: 'Products', amount, date, note });
@@ -747,7 +747,7 @@ export async function submitProductExpenseForm() {
   makeupRows.forEach(r => {
     const nameInput = r.querySelector('.sa-name-input');
     const name = nameInput ? nameInput.value.trim() : r.dataset.name;
-    const amount = parseInt(r.querySelector('input')?.value) || 0;
+    const amount = parseInt(r.querySelector('.pe-amount-input, input[type="number"]')?.value) || 0;
     if (amount > 0) {
       const note = shopName ? `Makeup: ${name} (${shopName})` : `Makeup: ${name}`;
       items.push({ category: 'Products', amount, date, note });

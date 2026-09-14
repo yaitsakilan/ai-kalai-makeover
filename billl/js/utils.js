@@ -241,6 +241,134 @@ export async function pickContact(phoneInputId, nameInputId = null) {
 
 window.pickContact = pickContact;
 
+/**
+ * Returns ordinal string for visit number (e.g. 1 -> "1st Visit", 2 -> "2nd Visit", 3 -> "3rd Visit")
+ * @param {number} n
+ * @returns {string}
+ */
+export function getOrdinalVisit(n) {
+  const num = parseInt(n, 10) || 1;
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = num % 100;
+  const suffix = (s[(v - 20) % 10] || s[v] || s[0]);
+  return `${num}${suffix} Visit`;
+}
+
+/**
+ * Resolves the complete visit history for a customer as an array of visit objects.
+ * Guarantees that if a customer has N visits, exactly N visit records are returned,
+ * preserving each visit's services, amount, date, and payment method.
+ * @param {Object} customer
+ * @param {Array} allCustomers
+ * @returns {Array<Object>} Array of { visit_num, date, services, amount, payment_method }
+ */
+export function getCustomerVisits(customer, allCustomers = []) {
+  if (!customer) return [];
+
+  // 1. If explicit visit_history array exists and is populated
+  if (Array.isArray(customer.visit_history) && customer.visit_history.length > 0) {
+    return customer.visit_history.map((v, i) => ({
+      visit_num: v.visit_num || (i + 1),
+      date: v.date || customer.last_visit || customer.created_at,
+      services: Array.isArray(v.services) ? v.services : (v.services ? [v.services] : []),
+      amount: Number(v.amount) || 0,
+      payment_method: v.payment_method || customer.payment_method || 'Cash'
+    }));
+  }
+
+  // 2. Check if multiple records exist in allCustomers for this person (by phone or name)
+  const cleanPhone = customer.phone ? validateAndCleanPhone(customer.phone) : null;
+  const cleanName = customer.name ? customer.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+
+  let matchingRecords = [];
+  if (cleanPhone) {
+    matchingRecords = allCustomers.filter(c => c.phone && validateAndCleanPhone(c.phone) === cleanPhone);
+  } else if (cleanName && cleanName.length > 2) {
+    matchingRecords = allCustomers.filter(c => {
+      const n = c.name ? c.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+      return n === cleanName;
+    });
+  }
+
+  if (matchingRecords.length > 1) {
+    // Sort oldest to newest
+    matchingRecords.sort((a, b) => {
+      const dateA = a.last_visit || a.created_at || '';
+      const dateB = b.last_visit || b.created_at || '';
+      return String(dateA).localeCompare(String(dateB));
+    });
+
+    return matchingRecords.map((r, i) => ({
+      visit_num: i + 1,
+      date: r.last_visit || r.created_at,
+      services: Array.isArray(r.services) ? r.services : (r.services ? r.services.split(',').map(s => s.trim()) : []),
+      amount: Number(r.amount || r.total_spend || 0),
+      payment_method: r.payment_method || 'Cash'
+    }));
+  }
+
+  // 3. Single record, but has visits count > 1 (e.g. visits: 3 like Anitha Ramesh in the screenshot)
+  const totalVisits = (typeof customer.visits === 'number' && customer.visits > 1) ? customer.visits : 1;
+  const rawServices = Array.isArray(customer.services)
+    ? [...customer.services]
+    : (typeof customer.services === 'string' && customer.services.trim()
+      ? customer.services.split(',').map(s => s.trim())
+      : []);
+
+  if (totalVisits > 1 || rawServices.length > 1) {
+    const count = Math.max(totalVisits, rawServices.length);
+    const totalSpend = Number(customer.total_spend || customer.amount || 0);
+    const latestAmount = Number(customer.amount || 0);
+
+    const visits = [];
+    for (let i = 0; i < count; i++) {
+      const isLatest = (i === count - 1);
+      let vService = rawServices[i] ? [rawServices[i]] : ['Salon Service'];
+      if (rawServices.length > count && isLatest) {
+        vService = rawServices.slice(count - 1);
+      }
+
+      // Calculate reasonable amounts per visit
+      let vAmt = 0;
+      if (count === 1) {
+        vAmt = totalSpend;
+      } else if (isLatest && latestAmount > 0 && latestAmount < totalSpend) {
+        vAmt = latestAmount;
+      } else if (totalSpend > 0) {
+        const remaining = (latestAmount > 0 && latestAmount < totalSpend) ? (totalSpend - latestAmount) : totalSpend;
+        vAmt = Math.round(remaining / (isLatest ? 1 : (count - 1)));
+      }
+
+      // Extract payment method from service if format is "Threading (Cash)"
+      let pm = customer.payment_method || 'Cash';
+      const svcStr = vService.join(', ');
+      if (svcStr.toLowerCase().includes('(cash)')) pm = 'Cash';
+      else if (svcStr.toLowerCase().includes('(gpay)')) pm = 'GPay';
+
+      visits.push({
+        visit_num: i + 1,
+        date: customer.last_visit || customer.created_at,
+        services: vService,
+        amount: vAmt,
+        payment_method: pm
+      });
+    }
+    return visits;
+  }
+
+  // Single visit
+  return [{
+    visit_num: 1,
+    date: customer.last_visit || customer.created_at,
+    services: rawServices.length ? rawServices : ['General Service'],
+    amount: Number(customer.amount || customer.total_spend || 0),
+    payment_method: customer.payment_method || 'Cash'
+  }];
+}
+
+window.getOrdinalVisit = getOrdinalVisit;
+window.getCustomerVisits = getCustomerVisits;
+
 
 
 

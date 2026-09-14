@@ -2,7 +2,7 @@
 import { state } from '../state.js';
 import { fetchCustomers, addCustomer, updateCustomer, deleteCustomer, addClassEnrollment, addClassPayment } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone, formatEmpTag, formatVisitedDate, getUniqueCustomersMap, getEffectiveVisits, sortCustomersList } from '../utils.js';
+import { validateAndCleanPhone, formatEmpTag, formatVisitedDate, getUniqueCustomersMap, getEffectiveVisits, sortCustomersList, getOrdinalVisit, getCustomerVisits } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 import { calculateModuleStreak, renderModuleStreakWidget } from '../streak.js';
 
@@ -320,6 +320,8 @@ export function renderCustomerList(customers) {
     const { cleanText: cleanName, tagHtml: empBadge } = formatEmpTag(c.name);
     const initials = cleanName.split(' ').map(n => n[0]).join('').slice(0, 2);
     const effVisits = getEffectiveVisits(c, window._cachedCustomers || customers);
+    const visitsList = getCustomerVisits(c, window._cachedCustomers || customers);
+    const displayVisitsCount = Math.max(effVisits, visitsList.length);
     const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
     return `
     <div class="card" style="margin-bottom:10px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer history & details">
@@ -329,16 +331,31 @@ export function renderCustomerList(customers) {
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
             <span style="font-size:14px;font-weight:600">${cleanName}</span>
             ${empBadge}
-            ${effVisits >= 5 ? '<span class="badge badge-blue">⭐ Regular</span>' : ''}
+            ${displayVisitsCount >= 5 ? '<span class="badge badge-blue">⭐ Regular</span>' : ''}
             ${c.rating ? `<span style="color:#d97706;font-size:11px;margin-left:6px;letter-spacing:1px;" title="Owner rating: ${c.rating}/5">${'★'.repeat(c.rating)}${'☆'.repeat(5 - c.rating)}</span>` : ''}
             ${c.referred_by ? `<span class="badge badge-amber" title="Referred by: ${c.referred_by}">📢 Ref: ${c.referred_by}</span>` : ''}
           </div>
           <div style="font-size:12px;color:#888">${cleanP || 'No phone'} · ${c.location || 'No location'} · 📅 Visited: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
-          <div style="font-size:12px;color:#aaa;margin-top:2px">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || '')}</div>
+          
+          ${visitsList.length > 1 ? `
+            <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;">
+              ${visitsList.map((v, vIdx) => {
+                const vServices = Array.isArray(v.services) ? v.services.join(', ') : (v.services || 'Service');
+                const vAmt = v.amount ? `<span style="color:#15803d;font-weight:600;margin-left:3px;">₹${Number(v.amount).toLocaleString()}</span>` : '';
+                return `
+                  <span style="background:rgba(245,200,66,0.12);color:#92400e;border:0.5px solid rgba(245,200,66,0.3);font-size:11px;padding:2px 7px;border-radius:6px;display:inline-flex;align-items:center;">
+                    <strong style="color:#b45309;margin-right:4px;">${getOrdinalVisit(v.visit_num || (vIdx + 1))}:</strong> ${vServices} ${vAmt}
+                  </span>
+                `;
+              }).join('')}
+            </div>
+          ` : `
+            <div style="font-size:12px;color:#aaa;margin-top:2px">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || '')}</div>
+          `}
         </div>
         <div style="text-align:right">
           <div style="font-size:14px;font-weight:700;color:#d97706">₹${(c.total_spend || c.amount || 0).toLocaleString()}</div>
-          <div style="font-size:11px;color:#bbb">${effVisits} visits</div>
+          <div style="font-size:11px;color:#bbb">${displayVisitsCount} visits</div>
         </div>
         ${cleanP ? `
         <div onclick="event.stopPropagation(); window.promptWhatsAppBillFromId('${c.id}')" style="cursor:pointer;color:#25d366;padding:8px;border-radius:8px;transition:all 0.15s" onmouseover="this.style.color='#20ba5a';this.style.background='#e8fced'" onmouseout="this.style.color='#25d366';this.style.background='transparent'" title="Send WhatsApp Bill">
@@ -437,6 +454,128 @@ export async function handleDeleteCustomer(id) {
   await deleteCustomer(id);
   if (typeof window.render === 'function') window.render();
 }
+
+export async function handleDeleteCustomerVisit(customerId, visitNum) {
+  const allCustomers = window._cachedCustomers || await fetchCustomers();
+  let target = allCustomers.find(c => String(c.id) === String(customerId));
+  if (!target) {
+    const cleanP = validateAndCleanPhone(customerId);
+    if (cleanP) target = allCustomers.find(c => c.phone && validateAndCleanPhone(c.phone) === cleanP);
+  }
+  if (!target) {
+    showToast('Customer not found', 'error');
+    return;
+  }
+
+  const visitsList = getCustomerVisits(target, allCustomers);
+
+  // Special action: Delete all repeat visits at once (keep only 1st visit)
+  if (visitNum === 'repeat_visits') {
+    const confirmed = await showConfirmDelete(
+      'Delete Repeat Visits',
+      `Are you sure you want to delete all repeat visits (Visits 2 to ${visitsList.length}) and keep only the 1st Visit?`
+    );
+    if (!confirmed) {
+      showCustomerDetailsModal(target.id);
+      return;
+    }
+
+    const firstVisit = visitsList[0] || { visit_num: 1, services: ['Hair Spa'], amount: target.amount || 1200, date: target.created_at, payment_method: 'Cash' };
+    const remainingVisits = [{ ...firstVisit, visit_num: 1 }];
+    const firstServices = Array.isArray(firstVisit.services) ? firstVisit.services : [firstVisit.services];
+    const firstAmount = Number(firstVisit.amount) > 0 ? Number(firstVisit.amount) : (Number(target.amount) || Number(target.total_spend) || 0);
+
+    await updateCustomer(target.id, {
+      visits: 1,
+      total_spend: firstAmount,
+      amount: firstAmount,
+      last_visit: firstVisit.date || target.created_at,
+      services: firstServices,
+      visit_history: remainingVisits
+    });
+
+    showToast('Repeat visits removed! Kept 1st Visit only.');
+    const updatedCustomers = await fetchCustomers();
+    window._cachedCustomers = updatedCustomers;
+    if (typeof window.render === 'function') window.render();
+    setTimeout(() => {
+      showCustomerDetailsModal(target.id);
+    }, 100);
+    return;
+  }
+
+  const targetVisit = visitsList.find(v => Number(v.visit_num) === Number(visitNum));
+  const ordinalName = getOrdinalVisit(visitNum);
+
+  const confirmed = await showConfirmDelete(
+    `Delete ${ordinalName}`,
+    `Are you sure you want to delete ${ordinalName} (${Array.isArray(targetVisit?.services) ? targetVisit.services.join(', ') : (targetVisit?.services || 'Service')})? Total spend and visit count will be updated automatically.`
+  );
+  if (!confirmed) {
+    showCustomerDetailsModal(target.id);
+    return;
+  }
+
+  const remainingVisits = visitsList
+    .filter(v => Number(v.visit_num) !== Number(visitNum))
+    .map((v, idx) => ({ ...v, visit_num: idx + 1 }));
+
+  if (remainingVisits.length === 0) {
+    await deleteCustomer(target.id);
+    closeModal();
+    if (typeof window.render === 'function') window.render();
+    showToast('Customer removed completely.');
+    return;
+  }
+
+  const newVisits = remainingVisits.length;
+  const newTotalSpend = remainingVisits.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+  const lastVisitObj = remainingVisits[remainingVisits.length - 1];
+  const newAmount = Number(lastVisitObj?.amount) || 0;
+  const newLastVisit = lastVisitObj?.date || target.created_at;
+  const allRemainingSvcs = [...new Set(remainingVisits.flatMap(v => Array.isArray(v.services) ? v.services : [v.services]))];
+
+  await updateCustomer(target.id, {
+    visits: newVisits,
+    total_spend: newTotalSpend,
+    amount: newAmount,
+    last_visit: newLastVisit,
+    services: allRemainingSvcs,
+    visit_history: remainingVisits
+  });
+
+  // Also check if there was a separate duplicate record in database representing this visit
+  const cleanPhone = target.phone ? validateAndCleanPhone(target.phone) : null;
+  const cleanName = target.name ? target.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+  const matchingRecords = allCustomers.filter(c => {
+    if (String(c.id) === String(target.id)) return false;
+    if (cleanPhone && c.phone && validateAndCleanPhone(c.phone) === cleanPhone) return true;
+    if (cleanName && c.name && c.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() === cleanName) return true;
+    return false;
+  });
+
+  if (matchingRecords.length > 0) {
+    const recordToDelete = matchingRecords[matchingRecords.length - 1];
+    if (recordToDelete) {
+      await deleteCustomer(recordToDelete.id);
+    }
+  }
+
+  showToast(`${ordinalName} deleted successfully!`);
+  
+  // Refresh cached customers and page
+  const updatedCustomers = await fetchCustomers();
+  window._cachedCustomers = updatedCustomers;
+  if (typeof window.render === 'function') window.render();
+
+  // Re-open modal showing remaining visits
+  setTimeout(() => {
+    showCustomerDetailsModal(target.id);
+  }, 100);
+}
+
+window.handleDeleteCustomerVisit = handleDeleteCustomerVisit;
+
 
 export async function analyzeShopCustomers() {
   showModal('Shop Customers AI Analysis', `
@@ -905,8 +1044,18 @@ export async function submitShopCustomerForm() {
   let result;
   if (window._selectedExistingCustomer && window._selectedExistingCustomer.id) {
     const existing = window._selectedExistingCustomer;
-    const newVisits = (existing.visits || 1) + 1;
+    const currentVisits = getCustomerVisits(existing, window._cachedCustomers || []);
+    const newVisits = (existing.visits || currentVisits.length || 1) + 1;
     const newTotalSpend = (existing.total_spend || existing.amount || 0) + totalAmount;
+
+    const newVisitEntry = {
+      visit_num: newVisits,
+      date: date,
+      services: serviceNames,
+      amount: totalAmount,
+      payment_method: overallPaymentMethod
+    };
+    const updatedVisitHistory = [...currentVisits, newVisitEntry];
 
     const existingSvcs = Array.isArray(existing.services)
       ? existing.services
@@ -925,9 +1074,18 @@ export async function submitShopCustomerForm() {
       last_visit: date,
       total_spend: newTotalSpend,
       visits: newVisits,
-      rating: rating || existing.rating || 5
+      rating: rating || existing.rating || 5,
+      visit_history: updatedVisitHistory
     });
   } else {
+    const initialVisit = [{
+      visit_num: 1,
+      date: date,
+      services: serviceNames,
+      amount: totalAmount,
+      payment_method: overallPaymentMethod
+    }];
+
     result = await addCustomer({
       name,
       phone: phoneVal,
@@ -940,7 +1098,8 @@ export async function submitShopCustomerForm() {
       total_spend: totalAmount,
       visits: 1,
       rating,
-      referred_by: referredBy || null
+      referred_by: referredBy || null,
+      visit_history: initialVisit
     });
   }
 
@@ -2153,13 +2312,24 @@ export function renderRepeatCustomersTab(customers) {
         ${sortedRepeatClients.length ? sortedRepeatClients.map((c, i) => {
           const { cleanText } = formatEmpTag(c.name);
           const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
+          const repeatVisits = getCustomerVisits(c, customers);
+          const displayVisits = repeatVisits.length > 1 ? repeatVisits.length : (c.visits || 2);
           return `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
               <div style="display:flex;align-items:center;gap:12px">
                 <div style="font-size:14px;font-weight:700;color:#166534;width:24px;text-align:center">#${i + 1}</div>
                 <div>
-                  <div style="font-size:14px;font-weight:600;color:#166534">${cleanText} <span class="badge badge-green" style="margin-left:6px;font-size:10px">${c.visits || 2} Visits</span></div>
+                  <div style="font-size:14px;font-weight:600;color:#166534">${cleanText} <span class="badge badge-green" style="margin-left:6px;font-size:10px">${displayVisits} Visits</span></div>
                   <div style="font-size:12px;color:#15803d;margin-top:2px">${cleanP || 'No phone'} · ${c.location || 'Chennai'} · Spend: ₹${(c.total_spend || 0).toLocaleString()} · 📅 Last Visit: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
+                  ${repeatVisits.length > 1 ? `
+                    <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px;">
+                      ${repeatVisits.map((v, vIdx) => `
+                        <span style="background:rgba(22,101,52,0.1);color:#166534;font-size:10px;padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;">
+                          <strong>${getOrdinalVisit(v.visit_num || (vIdx + 1))}:</strong>&nbsp;${Array.isArray(v.services) ? v.services.join(', ') : (v.services || 'Service')}
+                        </span>
+                      `).join('')}
+                    </div>
+                  ` : ''}
                 </div>
               </div>
               ${cleanP ? `
@@ -2325,21 +2495,31 @@ export function showCustomerDetailsModal(idOrPhone) {
     return String(dateB).localeCompare(String(dateA));
   });
 
-  const { cleanText, tagHtml } = formatEmpTag(target.name);
-  const totalSpend = matchingRecords.reduce((sum, r) => sum + (r.total_spend !== undefined && r.total_spend > 0 ? Number(r.total_spend) : (Number(r.amount) || 0)), 0);
-  const totalVisitsCount = Math.max(target.visits || 1, matchingRecords.reduce((sum, r) => sum + (r.visits && r.visits > 1 ? r.visits : 1), 0), matchingRecords.length);
+  const visitsList = getCustomerVisits(target, allCustomers);
+  const totalVisitsCount = Math.max(target.visits || 1, visitsList.length);
+  const totalSpend = Number(target.total_spend) > 0 
+    ? Number(target.total_spend) 
+    : visitsList.reduce((sum, v) => sum + (Number(v.amount) || 0), 0) || Number(target.amount) || 0;
 
   // All unique services taken
   const allServicesSet = new Set();
-  matchingRecords.forEach(r => {
-    const sList = Array.isArray(r.services) ? r.services : (r.services || '').split(',');
+  visitsList.forEach(v => {
+    const sList = Array.isArray(v.services) ? v.services : (v.services || '').split(',');
     sList.forEach(s => {
       const cleanS = s.trim();
       if (cleanS) allServicesSet.add(cleanS);
     });
   });
+  if (target.services) {
+    const sList = Array.isArray(target.services) ? target.services : (target.services || '').split(',');
+    sList.forEach(s => {
+      const cleanS = s.trim();
+      if (cleanS) allServicesSet.add(cleanS);
+    });
+  }
   const uniqueServices = Array.from(allServicesSet);
 
+  const { cleanText, tagHtml } = formatEmpTag(target.name);
   const validPhone = target.phone ? validateAndCleanPhone(target.phone) : null;
 
   const modalHtml = `
@@ -2396,26 +2576,48 @@ export function showCustomerDetailsModal(idOrPhone) {
 
       <!-- Visit History Timeline (Scrollable List) -->
       <div>
-        <div class="section-title" style="font-size:12px;margin-bottom:6px;">
-          <i class="ti ti-calendar" style="color:#d97706"></i> Visit History & Records (${matchingRecords.length})
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+          <div class="section-title" style="font-size:12px;margin-bottom:0;">
+            <i class="ti ti-calendar" style="color:#d97706"></i> Visit History & Records (${visitsList.length})
+          </div>
+          ${visitsList.length > 1 ? `
+            <button type="button" class="btn" onclick="event.stopPropagation(); window.handleDeleteCustomerVisit('${target.id}', 'repeat_visits')" 
+                    style="cursor:pointer;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;font-family:inherit;transition:all 0.15s;" 
+                    onmouseover="this.style.background='#dc2626';this.style.color='#fff'" 
+                    onmouseout="this.style.background='#fee2e2';this.style.color='#dc2626'" 
+                    title="Delete all repeat visits and keep 1st Visit only">
+              <i class="ti ti-trash" style="font-size:12px"></i> Delete Repeat Visits (Visits 2 & 3)
+            </button>
+          ` : ''}
         </div>
-        <div style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px;" class="scrollbar-hide">
-          ${matchingRecords.map((r, idx) => {
-            const dateDisplay = formatVisitedDate(r.last_visit || r.created_at);
-            const servicesDisplay = Array.isArray(r.services) ? r.services.join(', ') : (r.services || 'General Service');
-            const amt = r.amount || r.total_spend || 0;
-            const pm = r.payment_method || 'Cash';
+        <div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px;" class="scrollbar-hide">
+          ${[...visitsList].reverse().map((v) => {
+            const dateDisplay = formatVisitedDate(v.date || target.last_visit || target.created_at);
+            const servicesDisplay = Array.isArray(v.services) ? v.services.join(', ') : (v.services || 'General Service');
+            const amt = Number(v.amount) || 0;
+            const pm = v.payment_method || 'Cash';
+            const ordinal = getOrdinalVisit(v.visit_num);
             return `
-              <div style="padding:8px 10px;background:#fafafa;border:1px solid #ebebeb;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+              <div style="padding:10px 12px;background:#fafafa;border:1px solid #ebebeb;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
                 <div style="flex:1;min-width:0;padding-right:8px;">
-                  <div style="font-size:11px;font-weight:700;color:#d97706;display:flex;align-items:center;gap:4px;">
-                    📅 ${dateDisplay} <span style="font-weight:normal;color:#888;font-size:10px;">(Visit #${matchingRecords.length - idx})</span>
+                  <div style="font-size:12px;font-weight:700;color:#d97706;display:flex;align-items:center;gap:6px;">
+                    <span class="badge badge-amber" style="font-size:10px;padding:2px 7px;font-weight:700;">${ordinal}</span>
+                    <span style="color:#555;font-size:11px;font-weight:normal;">📅 ${dateDisplay}</span>
                   </div>
-                  <div style="font-size:11px;color:#333;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${servicesDisplay}">Services: <strong>${servicesDisplay}</strong></div>
+                  <div style="font-size:12px;color:#333;margin-top:4px;" title="${servicesDisplay}">Services: <strong>${servicesDisplay}</strong></div>
                 </div>
-                <div style="text-align:right;flex-shrink:0;">
-                  <div style="font-size:12px;font-weight:700;color:#15803d;">₹${amt.toLocaleString()}</div>
-                  <span class="badge badge-gray" style="font-size:9px;padding:1px 5px;">${pm}</span>
+                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+                  <div style="text-align:right;">
+                    <div style="font-size:13px;font-weight:700;color:#15803d;">₹${amt.toLocaleString()}</div>
+                    <span class="badge badge-gray" style="font-size:9px;padding:1px 5px;margin-top:2px;">${pm}</span>
+                  </div>
+                  <button type="button" onclick="event.stopPropagation(); window.handleDeleteCustomerVisit('${target.id}', ${v.visit_num})" 
+                          style="cursor:pointer;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:5px 9px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;transition:all 0.15s;font-family:inherit;" 
+                          onmouseover="this.style.background='#dc2626';this.style.color='#fff'" 
+                          onmouseout="this.style.background='#fee2e2';this.style.color='#dc2626'" 
+                          title="Delete ${ordinal}">
+                    <i class="ti ti-trash" style="font-size:13px"></i> Delete
+                  </button>
                 </div>
               </div>
             `;

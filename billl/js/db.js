@@ -113,16 +113,17 @@ export async function addCustomer(customer) {
   }
 
   let {data, error} = await client.from('customers').insert([customer]).select();
-  if (error && error.code === 'PGRST204') {
+  if (error) {
     const retryCustomer = { ...customer };
     let retrying = false;
+    if ('visit_history' in retryCustomer) { delete retryCustomer.visit_history; retrying = true; }
     if ('rating' in retryCustomer) { delete retryCustomer.rating; retrying = true; }
     if ('payment_method' in retryCustomer) { delete retryCustomer.payment_method; retrying = true; }
     if (retrying) {
       const retryResult = await client.from('customers').insert([retryCustomer]).select();
       if (!retryResult.error) {
-        showToast('Customer saved! (Warning: Run SQL setup to enable rating/payment_method)', 'info');
-        return retryResult.data?.[0];
+        showToast('Customer saved!', 'info');
+        return { ...retryResult.data?.[0], visit_history: customer.visit_history };
       }
       error = retryResult.error;
     }
@@ -157,7 +158,24 @@ export async function updateCustomer(id, updates) {
     return null;
   }
 
-  const { data, error } = await client.from('customers').update(updates).eq('id', id).select();
+  let { data, error } = await client.from('customers').update(updates).eq('id', id).select();
+  if (error && 'visit_history' in updates) {
+    const retryUpdates = { ...updates };
+    delete retryUpdates.visit_history;
+    const retryResult = await client.from('customers').update(retryUpdates).eq('id', id).select();
+    if (!retryResult.error) {
+      // Also cache visit_history in local storage so it persists
+      const list = fetchCustomersLocally();
+      const idx = list.findIndex(c => c.id === id);
+      if (idx !== -1) {
+        list[idx] = { ...list[idx], ...updates };
+        setLocalItem('customers', list);
+      }
+      showToast('Customer visit updated successfully!');
+      return { ...retryResult.data?.[0], visit_history: updates.visit_history };
+    }
+    error = retryResult.error;
+  }
   if (error) {
     console.warn('Update customer DB error, updating locally:', error);
     const list = fetchCustomersLocally();

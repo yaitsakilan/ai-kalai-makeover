@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS customers (
   visits INTEGER DEFAULT 1,
   rating INTEGER DEFAULT 5,
   referred_by TEXT,
+  visit_history JSONB DEFAULT '[]',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

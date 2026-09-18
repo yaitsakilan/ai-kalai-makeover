@@ -5,6 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kalai Makeover — AI Business Assistant</title>
   <meta name="description" content="AI-powered business assistant for Kalai Makeover beauty salon — manage customers, events, expenses and more.">
+  <meta name="theme-color" content="#0d0904">
+  <meta name="color-scheme" content="dark">
+  <script>
+    (function() {
+      try {
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+          document.documentElement.classList.add('theme-light');
+          document.addEventListener('DOMContentLoaded', () => {
+            document.body.classList.remove('theme-dark');
+            document.body.classList.add('theme-light');
+          });
+        } else {
+          document.documentElement.classList.add('theme-dark');
+          document.addEventListener('DOMContentLoaded', () => {
+            document.body.classList.remove('theme-light');
+            document.body.classList.add('theme-dark');
+          });
+        }
+      } catch(e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -84,6 +106,13 @@
     <div style="padding:12px 16px;border-top:1px solid rgba(255,200,100,0.1);display:flex;flex-direction:column;gap:8px">
       <div style="font-size:11px;color:rgba(255,255,255,0.35)" id="sidebar-role-label">Parlour Owner</div>
       <div style="font-size:13px;color:rgba(245,200,66,0.8);font-weight:500" id="sidebar-user-name">Kalai</div>
+      <button onclick="window.toggleTheme()" id="sidebar-theme-toggle-btn" class="theme-toggle-sidebar-btn" title="Switch between Dark & White Theme">
+        <span id="sidebar-theme-label" style="display:flex;align-items:center;gap:6px">
+          <i class="ti ti-moon" id="sidebar-theme-icon" style="color:#f5c842"></i>
+          <span id="sidebar-theme-text">Dark Theme</span>
+        </span>
+        <span class="theme-toggle-pill" id="sidebar-theme-pill">Toggle</span>
+      </button>
       <button onclick="window.openSwitchRoleModal()" id="sidebar-switch-role-btn" style="margin-top:2px;background:rgba(255,200,66,0.08);border:0.5px solid rgba(245,200,66,0.2);border-radius:8px;color:rgba(255,255,255,0.45);font-size:11px;padding:6px 10px;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:'DM Sans',sans-serif;transition:all 0.2s">
         <i class="ti ti-switch-horizontal" style="font-size:13px"></i> Switch Role
       </button>
@@ -98,6 +127,12 @@
     <i class="ti ti-menu-2"></i>
   </div>
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleMobileSidebar()"></div>
+
+  <!-- Floating quick toggle for Dark / White theme -->
+  <button class="theme-quick-btn" id="theme-quick-btn" onclick="window.toggleTheme()" title="Switch between Dark & White Theme">
+    <i class="ti ti-sun" id="theme-quick-icon"></i>
+    <span class="theme-quick-text" id="theme-quick-text">White Theme</span>
+  </button>
 
   <div class="main">
     <div id="main-content">

@@ -9,10 +9,14 @@ import { calculateModuleStreak, renderModuleStreakWidget } from '../streak.js';
 export async function renderCustomers() {
   const customers = await fetchCustomers();
   window._cachedCustomers = customers;
-  const streakData = calculateModuleStreak(customers, 'date');
 
   const currentMonthIndex = new Date().getMonth();
-  if (window._customerActiveTab === undefined) window._customerActiveTab = 'analytics';
+  if (window._customerActiveTab === undefined) window._customerActiveTab = 'history';
+  if (['top_paid', 'repeat', 'lapsed', 'new'].includes(window._customerActiveTab)) {
+    window._customerHistoryView = window._customerActiveTab;
+    window._customerActiveTab = 'history';
+  }
+  if (window._customerHistoryView === undefined) window._customerHistoryView = 'all';
   if (window._selectedMonth === undefined) {
     const hasCurrentMonthData = customers.some(c => {
       const dStr = c.last_visit || c.created_at;
@@ -43,6 +47,8 @@ export async function renderCustomers() {
   if (window._monthFilterExpanded === undefined) window._monthFilterExpanded = false;
   if (window._searchFieldExpanded === undefined) window._searchFieldExpanded = false;
   if (window._customerSortOption === undefined) window._customerSortOption = 'date_desc';
+
+  const streakData = calculateModuleStreak(customers, 'last_visit', window._selectedMonth);
 
   const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -82,9 +88,21 @@ export async function renderCustomers() {
     setTimeout(() => initCustomerAnalyticsCharts(filtered), 60);
   }
 
-  const selectedMonthLabel = window._selectedMonth === 'all' 
-    ? 'All Months' 
-    : MONTHS[parseInt(window._selectedMonth, 10)];
+  const uniqueMap = getUniqueCustomersMap(customers);
+  const repeatCount = Array.from(uniqueMap.values()).filter(g => g.totalVisits > 1 || g.records.length > 1).length;
+
+  const now = new Date();
+  const LAPSED_THRESHOLD_DAYS = 40;
+  const lapsedCount = customers.filter(c => {
+    const dStr = c.last_visit || c.created_at;
+    if (!dStr) return false;
+    const visitDate = new Date(dStr);
+    if (isNaN(visitDate.getTime())) return false;
+    const diffDays = Math.floor((now.getTime() - visitDate.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays >= LAPSED_THRESHOLD_DAYS;
+  }).length;
+
+  const newCount = Array.from(uniqueMap.values()).filter(g => g.totalVisits <= 1 && g.records.length <= 1).length;
 
   return `
   <div class="top-bar">
@@ -100,7 +118,7 @@ export async function renderCustomers() {
         `).join('')}
       </select>
 
-      ${window._customerActiveTab === 'history' ? `
+      ${window._customerActiveTab === 'history' && (window._customerHistoryView === 'all' || !window._customerHistoryView) ? `
         <button class="btn btn-outline btn-icon" onclick="window.toggleSearchField()" id="toggle-search-btn" style="${activeSearchBtnStyle}" title="Search Customers">
           <i class="ti ti-search" style="color:#d97706"></i>
         </button>
@@ -116,56 +134,64 @@ export async function renderCustomers() {
 
   ${renderModuleStreakWidget('Customer Entries', streakData, '#7c3aed')}
 
-  <!-- Navigation Tabs -->
+  <!-- Main Navigation Tabs -->
   <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">
+    <div class="tab ${window._customerActiveTab === 'history' ? 'active' : ''}" onclick="window.switchCustomerTab('history')">
+      <i class="ti ti-history" style="margin-right:6px"></i> Customer History (${filtered.length})
+    </div>
     <div class="tab ${window._customerActiveTab === 'analytics' ? 'active' : ''}" onclick="window.switchCustomerTab('analytics')">
       <i class="ti ti-chart-pie" style="margin-right:6px"></i> Analytics & Insights (${filtered.length})
     </div>
-    <div class="tab ${window._customerActiveTab === 'top_paid' ? 'active' : ''}" onclick="window.switchCustomerTab('top_paid')">
-      <i class="ti ti-crown" style="margin-right:6px"></i> Top Paid Clients (${customers.length})
-    </div>
-    <div class="tab ${window._customerActiveTab === 'repeat' ? 'active' : ''}" onclick="window.switchCustomerTab('repeat')">
-      <i class="ti ti-refresh" style="margin-right:6px"></i> Repeat Customers
-    </div>
-    <div class="tab ${window._customerActiveTab === 'lapsed' ? 'active' : ''}" onclick="window.switchCustomerTab('lapsed')">
-      <i class="ti ti-alarm" style="margin-right:6px"></i> Lapsed Retention
-    </div>
-    <div class="tab ${window._customerActiveTab === 'new' ? 'active' : ''}" onclick="window.switchCustomerTab('new')">
-      <i class="ti ti-user-plus" style="margin-right:6px"></i> New Clients
-    </div>
-    <div class="tab ${window._customerActiveTab === 'history' ? 'active' : ''}" onclick="window.switchCustomerTab('history')">
-      <i class="ti ti-history" style="margin-right:6px"></i> Customer Directory (${filtered.length})
-    </div>
   </div>
 
-  ${window._customerActiveTab === 'analytics' ? renderCustomerAnalyticsDashboard(filtered) :
-    window._customerActiveTab === 'top_paid' ? renderTopPaidClientsTab(filtered) :
-    window._customerActiveTab === 'repeat' ? renderRepeatCustomersTab(customers) :
-    window._customerActiveTab === 'lapsed' ? renderLapsedRetentionTab(customers) :
-    window._customerActiveTab === 'new' ? renderNewClientsTab(customers) : `
-    <div id="customer-metrics-container">
-      ${renderCustomerMetrics(filtered)}
-    </div>
-
-    <div class="card" id="search-card" style="margin-bottom:16px; display: ${window._searchFieldExpanded ? 'block' : 'none'};">
-      <input class="form-input" placeholder="Search by name or phone..." id="customer-search" value="${window._searchQuery || ''}" oninput="window.filterCustomers(this.value)">
-    </div>
-
-    <div class="card" id="month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._monthFilterExpanded ? 'block' : 'none'};">
-      <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
-        <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter History by Month
+  ${window._customerActiveTab === 'analytics' ? renderCustomerAnalyticsDashboard(filtered, customers) : `
+    <!-- Inside Customer History: View Switcher -->
+    <div class="chip-group scrollbar-hide" style="display:flex; flex-wrap:nowrap; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:18px;">
+      <div class="chip ${window._customerHistoryView === 'all' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('all')">
+        <i class="ti ti-list"></i> All Customers (${filtered.length})
       </div>
-      <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
-        <div class="chip ${window._selectedMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth('all')" id="month-chip-all">All Months</div>
-        ${MONTHS.map((m, idx) => `
-          <div class="chip ${window._selectedMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth(${idx})" id="month-chip-${idx}">${m}</div>
-        `).join('')}
+      <div class="chip ${window._customerHistoryView === 'top_paid' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('top_paid')">
+        <i class="ti ti-crown"></i> Top Paid Clients (${filtered.length})
+      </div>
+      <div class="chip ${window._customerHistoryView === 'repeat' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('repeat')">
+        <i class="ti ti-refresh"></i> Repeat Customers (${repeatCount})
+      </div>
+      <div class="chip ${window._customerHistoryView === 'lapsed' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('lapsed')">
+        <i class="ti ti-alarm"></i> Inactive Clients (${lapsedCount})
+      </div>
+      <div class="chip ${window._customerHistoryView === 'new' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('new')">
+        <i class="ti ti-user-plus"></i> New Clients (${newCount})
       </div>
     </div>
 
-    <div id="customer-list">
-      ${renderCustomerList(filtered)}
-    </div>
+    ${window._customerHistoryView === 'top_paid' ? renderTopPaidClientsTab(filtered) :
+      window._customerHistoryView === 'repeat' ? renderRepeatCustomersTab(customers) :
+      window._customerHistoryView === 'lapsed' ? renderLapsedRetentionTab(customers) :
+      window._customerHistoryView === 'new' ? renderNewClientsTab(customers) : `
+      <div id="customer-metrics-container">
+        ${renderCustomerMetrics(filtered)}
+      </div>
+
+      <div class="card" id="search-card" style="margin-bottom:16px; display: ${window._searchFieldExpanded ? 'block' : 'none'};">
+        <input class="form-input" placeholder="Search by name or phone..." id="customer-search" value="${window._searchQuery || ''}" oninput="window.filterCustomers(this.value)">
+      </div>
+
+      <div class="card" id="month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._monthFilterExpanded ? 'block' : 'none'};">
+        <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
+          <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter History by Month
+        </div>
+        <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
+          <div class="chip ${window._selectedMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth('all')" id="month-chip-all">All Months</div>
+          ${MONTHS.map((m, idx) => `
+            <div class="chip ${window._selectedMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth(${idx})" id="month-chip-${idx}">${m}</div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div id="customer-list">
+        ${renderCustomerList(filtered)}
+      </div>
+    `}
   `}`;
 }
 
@@ -1625,11 +1651,25 @@ window.toggleMonthFilter = toggleMonthFilter;
 // ─────────────────────────────────────────────
 
 export function switchCustomerTab(tab) {
-  window._customerActiveTab = tab;
+  if (['top_paid', 'repeat', 'lapsed', 'new'].includes(tab)) {
+    window._customerActiveTab = 'history';
+    window._customerHistoryView = tab;
+  } else {
+    window._customerActiveTab = tab;
+    if (tab === 'history' && !window._customerHistoryView) {
+      window._customerHistoryView = 'all';
+    }
+  }
   if (typeof window.render === 'function') window.render();
 }
 
-export function renderCustomerAnalyticsDashboard(customers) {
+export function switchCustomerHistoryView(view) {
+  window._customerActiveTab = 'history';
+  window._customerHistoryView = view;
+  if (typeof window.render === 'function') window.render();
+}
+
+export function renderCustomerAnalyticsDashboard(customers, allCustomers = window._cachedCustomers || customers) {
   if (!customers || !customers.length) {
     return `<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-chart-pie" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No customer analytics available yet. Add customers to see detailed insights!</div>`;
   }
@@ -1643,15 +1683,39 @@ export function renderCustomerAnalyticsDashboard(customers) {
 
   // 1. Locations Breakdown ("most customer place came from")
   const locationMap = {};
+
+  function isUnspecifiedLocation(loc) {
+    if (!loc) return true;
+    const s = String(loc).trim().toLowerCase();
+    return !s || s === 'unspecified' || s === 'no location' || s === 'none' || s === 'n/a' || s === 'unknown' || s === 'not specified' || s === 'nil' || s === 'undefined' || s === 'null';
+  }
+
   customers.forEach(c => {
-    const loc = (c.location && c.location.trim()) ? c.location.trim() : 'Unspecified';
-    if (!locationMap[loc]) locationMap[loc] = { count: 0, revenue: 0 };
-    locationMap[loc].count += 1;
-    locationMap[loc].revenue += (c.total_spend || 0);
+    const rawLoc = (c.location || '').trim();
+    if (isUnspecifiedLocation(rawLoc)) {
+      if (!locationMap['unspecified']) {
+        locationMap['unspecified'] = { name: 'Unspecified', count: 0, revenue: 0 };
+      }
+      locationMap['unspecified'].count += 1;
+      locationMap['unspecified'].revenue += (c.total_spend || c.amount || 0);
+      return;
+    }
+    const key = rawLoc.toLowerCase().replace(/\s+/g, ' ');
+    if (!locationMap[key]) {
+      locationMap[key] = { name: rawLoc, count: 0, revenue: 0 };
+    } else {
+      if (rawLoc !== rawLoc.toLowerCase() && locationMap[key].name === locationMap[key].name.toLowerCase()) {
+        locationMap[key].name = rawLoc;
+      }
+    }
+    locationMap[key].count += 1;
+    locationMap[key].revenue += (c.total_spend || c.amount || 0);
   });
-  const sortedLocations = Object.entries(locationMap)
-    .map(([name, data]) => ({ name, ...data }))
-    .sort((a, b) => b.count - a.count);
+  const sortedLocations = Object.values(locationMap).sort((a, b) => b.count - a.count);
+  const specifiedLocations = sortedLocations.filter(l => l.name.toLowerCase() !== 'unspecified');
+  const topLocation = specifiedLocations.length > 0 
+    ? specifiedLocations[0] 
+    : { name: 'Not Specified', count: 0, revenue: 0 };
 
   // 2. Staff vs Owner Handling ("how customer handle employee and by owner")
   const staffMap = {};
@@ -1727,9 +1791,10 @@ export function renderCustomerAnalyticsDashboard(customers) {
 
   // 7. Monthly Breakdown & Peak Month Analysis ("which month is high")
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthMap = {};
+  const allList = (allCustomers && allCustomers.length) ? allCustomers : (window._cachedCustomers || customers);
 
-  customers.forEach(c => {
+  const allMonthMap = {};
+  allList.forEach(c => {
     const dStr = c.last_visit || c.created_at;
     if (!dStr) return;
     const parts = String(dStr).split('T')[0].split('-');
@@ -1739,15 +1804,55 @@ export function renderCustomerAnalyticsDashboard(customers) {
     if (mIdx >= 0 && mIdx < 12) {
       const key = `${yr}-${String(mIdx + 1).padStart(2, '0')}`;
       const label = `${MONTH_NAMES[mIdx]} ${yr}`;
-      if (!monthMap[key]) {
-        monthMap[key] = { key, label, count: 0, revenue: 0 };
+      if (!allMonthMap[key]) {
+        allMonthMap[key] = { key, label, year: parseInt(yr, 10), monthIndex: mIdx, count: 0, revenue: 0 };
       }
-      monthMap[key].count += 1;
-      monthMap[key].revenue += (c.total_spend || c.amount || 0);
+      allMonthMap[key].count += 1;
+      allMonthMap[key].revenue += (c.total_spend || c.amount || 0);
     }
   });
 
-  const sortedMonths = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
+  let sortedMonths = [];
+  let isMonthComparison = false;
+  let prevMonthData = null;
+  let currMonthData = null;
+  let diffVisits = 0;
+  let diffVisitsPct = 0;
+  let diffRev = 0;
+  let diffRevPct = 0;
+
+  if (window._selectedMonth !== undefined && window._selectedMonth !== 'all') {
+    const mTarget = parseInt(window._selectedMonth, 10);
+    let selectedYear = new Date().getFullYear();
+    Object.values(allMonthMap).forEach(m => {
+      if (m.monthIndex === mTarget) selectedYear = m.year;
+    });
+
+    const prevMonthIndex = (mTarget - 1 + 12) % 12;
+    const prevYear = mTarget === 0 ? selectedYear - 1 : selectedYear;
+    const prevKey = `${prevYear}-${String(prevMonthIndex + 1).padStart(2, '0')}`;
+    const prevLabel = `${MONTH_NAMES[prevMonthIndex]} ${prevYear}`;
+    const selectedKey = `${selectedYear}-${String(mTarget + 1).padStart(2, '0')}`;
+    const selectedLabel = `${MONTH_NAMES[mTarget]} ${selectedYear}`;
+
+    prevMonthData = allMonthMap[prevKey] || { key: prevKey, label: prevLabel, year: prevYear, monthIndex: prevMonthIndex, count: 0, revenue: 0 };
+    currMonthData = allMonthMap[selectedKey] || { key: selectedKey, label: selectedLabel, year: selectedYear, monthIndex: mTarget, count: 0, revenue: 0 };
+
+    sortedMonths = [prevMonthData, currMonthData];
+    isMonthComparison = true;
+
+    diffVisits = currMonthData.count - prevMonthData.count;
+    diffVisitsPct = prevMonthData.count > 0 
+      ? Math.round((diffVisits / prevMonthData.count) * 100) 
+      : (currMonthData.count > 0 ? 100 : 0);
+    diffRev = currMonthData.revenue - prevMonthData.revenue;
+    diffRevPct = prevMonthData.revenue > 0 
+      ? Math.round((diffRev / prevMonthData.revenue) * 100) 
+      : (currMonthData.revenue > 0 ? 100 : 0);
+  } else {
+    sortedMonths = Object.values(allMonthMap).sort((a, b) => a.key.localeCompare(b.key));
+  }
+
   const peakMonth = sortedMonths.length ? [...sortedMonths].sort((a, b) => b.count - a.count)[0] : null;
 
   // Store for Chart.js
@@ -1756,6 +1861,9 @@ export function renderCustomerAnalyticsDashboard(customers) {
     staff: sortedStaff,
     services: sortedServices,
     monthly: sortedMonths,
+    isMonthComparison,
+    currMonthData,
+    prevMonthData,
     peakMonth,
     cashRev, gpayRev, cashCount, gpayCount
   };
@@ -1783,8 +1891,8 @@ export function renderCustomerAnalyticsDashboard(customers) {
       </div>
       <div class="metric-card mc-rose">
         <div class="metric-label">Top Location</div>
-        <div class="metric-value" style="font-size:20px;text-transform:capitalize">${sortedLocations[0]?.name || 'N/A'}</div>
-        <div class="metric-sub">${sortedLocations[0]?.count || 0} customers from here</div>
+        <div class="metric-value" style="font-size:20px;text-transform:capitalize">${topLocation.name || 'N/A'}</div>
+        <div class="metric-sub">${topLocation.count || 0} customers from here</div>
         <i class="ti ti-map-pin metric-icon"></i>
       </div>
       <div class="metric-card mc-purple">
@@ -1800,19 +1908,41 @@ export function renderCustomerAnalyticsDashboard(customers) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
         <div>
           <div class="section-title" style="margin-bottom:2px">
-            <i class="ti ti-chart-bar" style="color:#d97706;font-size:18px"></i> Monthly Customer Visits & Revenue Trend (Peak Month Analysis)
+            <i class="ti ti-chart-bar" style="color:#d97706;font-size:18px"></i> 
+            ${isMonthComparison && currMonthData && prevMonthData 
+              ? `Monthly Trend: ${currMonthData.label} vs Previous Month (${prevMonthData.label})` 
+              : 'Monthly Customer Visits & Revenue Trend (Peak Month Analysis)'}
           </div>
-          <div style="font-size:12px;color:#888">Monthly breakdown showing which months generate peak salon visits & revenue</div>
+          <div style="font-size:12px;color:#888">
+            ${isMonthComparison && currMonthData && prevMonthData 
+              ? `Comparing ${currMonthData.label} performance against previous month (${prevMonthData.label}) to evaluate growth & customer traffic` 
+              : 'Monthly breakdown showing which months generate peak salon visits & revenue'}
+          </div>
         </div>
-        ${peakMonth ? `
-          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:6px 14px;display:flex;align-items:center;gap:10px">
-            <i class="ti ti-trophy" style="color:#d97706;font-size:22px"></i>
-            <div>
-              <div style="font-size:10px;color:#b45309;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Highest Peak Month</div>
-              <div style="font-size:14px;font-weight:700;color:#92400e">${peakMonth.label} — ${peakMonth.count} Visits <span style="font-size:12px;font-weight:600;color:#15803d">(₹${peakMonth.revenue.toLocaleString()})</span></div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          ${isMonthComparison && prevMonthData ? `
+            <div style="background:${diffVisits >= 0 ? '#f0fdf4' : '#fff1f2'};border:1px solid ${diffVisits >= 0 ? '#bbf7d0' : '#fecdd3'};border-radius:10px;padding:6px 14px;display:flex;align-items:center;gap:8px">
+              <i class="ti ${diffVisits >= 0 ? 'ti-trending-up' : 'ti-trending-down'}" style="color:${diffVisits >= 0 ? '#16a34a' : '#e11d48'};font-size:20px"></i>
+              <div>
+                <div style="font-size:10px;color:${diffVisits >= 0 ? '#15803d' : '#be123c'};font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">MoM vs ${prevMonthData.label}</div>
+                <div style="font-size:13px;font-weight:700;color:${diffVisits >= 0 ? '#166534' : '#9f1239'}">
+                  ${diffVisits >= 0 ? '+' : ''}${diffVisitsPct}% visits (${diffVisits >= 0 ? '+' : ''}${diffVisits}) · ${diffRev >= 0 ? '+' : ''}${diffRevPct}% rev
+                </div>
+              </div>
             </div>
-          </div>
-        ` : ''}
+          ` : ''}
+
+          ${peakMonth ? `
+            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:6px 14px;display:flex;align-items:center;gap:10px">
+              <i class="ti ti-trophy" style="color:#d97706;font-size:20px"></i>
+              <div>
+                <div style="font-size:10px;color:#b45309;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${isMonthComparison ? 'Higher Month' : 'Highest Peak Month'}</div>
+                <div style="font-size:14px;font-weight:700;color:#92400e">${peakMonth.label} — ${peakMonth.count} Visits <span style="font-size:12px;font-weight:600;color:#15803d">(₹${peakMonth.revenue.toLocaleString()})</span></div>
+              </div>
+            </div>
+          ` : ''}
+        </div>
       </div>
 
       <div style="position:relative;width:100%;height:220px;margin-bottom:16px">
@@ -1820,16 +1950,23 @@ export function renderCustomerAnalyticsDashboard(customers) {
       </div>
 
       <!-- Monthly Breakdown List -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:10px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px">
         ${sortedMonths.map(m => {
           const isPeak = peakMonth && m.key === peakMonth.key;
-          const pct = Math.round((m.count / totalCustomers) * 100);
+          const isSelected = isMonthComparison && currMonthData && m.key === currMonthData.key;
+          const isPrev = isMonthComparison && prevMonthData && m.key === prevMonthData.key;
+          const totalRef = isMonthComparison && prevMonthData && currMonthData ? (prevMonthData.count + currMonthData.count || 1) : totalCustomers;
+          const pct = Math.round((m.count / (totalRef || 1)) * 100);
           return `
-            <div style="padding:10px 12px;background:${isPeak ? '#fffbeb' : '#fafafa'};border:${isPeak ? '1.5px solid #f5c842' : '1px solid #f0f0f0'};border-radius:10px;position:relative;">
-              ${isPeak ? '<span class="badge badge-gold" style="position:absolute;top:-8px;right:8px;font-size:9px;padding:1px 6px">🏆 Highest</span>' : ''}
-              <div style="font-size:12px;font-weight:700;color:#1a1a1a">${m.label}</div>
-              <div style="font-size:18px;font-weight:700;color:${isPeak ? '#d97706' : '#333'};margin-top:2px">${m.count} <span style="font-size:11px;font-weight:normal;color:#888">cust (${pct}%)</span></div>
-              <div style="font-size:12px;font-weight:600;color:#15803d;margin-top:2px">₹${m.revenue.toLocaleString()}</div>
+            <div style="padding:12px 14px;background:${isSelected ? '#fffdf0' : (isPeak ? '#fffbeb' : '#fafafa')};border:${isSelected ? '2px solid #f5c842' : (isPeak ? '1.5px solid #fde68a' : '1px solid #f0f0f0')};border-radius:10px;position:relative;">
+              <div style="position:absolute;top:-9px;right:8px;display:flex;gap:4px">
+                ${isSelected ? '<span class="badge badge-amber" style="font-size:9px;padding:1px 6px">Selected Month</span>' : ''}
+                ${isPrev ? '<span class="badge badge-gray" style="font-size:9px;padding:1px 6px">Previous Month</span>' : ''}
+                ${isPeak && !isSelected ? '<span class="badge badge-gold" style="font-size:9px;padding:1px 6px">🏆 Higher</span>' : ''}
+              </div>
+              <div style="font-size:13px;font-weight:700;color:#1a1a1a">${m.label}</div>
+              <div style="font-size:20px;font-weight:700;color:${isPeak ? '#d97706' : '#333'};margin-top:4px">${m.count} <span style="font-size:12px;font-weight:normal;color:#888">cust (${pct}%)</span></div>
+              <div style="font-size:13px;font-weight:600;color:#15803d;margin-top:3px">₹${m.revenue.toLocaleString()}</div>
             </div>
           `;
         }).join('')}
@@ -1850,7 +1987,7 @@ export function renderCustomerAnalyticsDashboard(customers) {
         </div>
 
         <div style="display:flex;flex-direction:column;gap:8px">
-          ${sortedLocations.slice(0, 5).map(loc => {
+          ${sortedLocations.length ? sortedLocations.slice(0, 5).map(loc => {
             const pct = Math.round((loc.count / totalCustomers) * 100);
             return `
               <div>
@@ -1863,7 +2000,7 @@ export function renderCustomerAnalyticsDashboard(customers) {
                 </div>
               </div>
             `;
-          }).join('')}
+          }).join('') : '<div style="color:#888;font-size:12px;text-align:center;padding:12px">No customer location data recorded</div>'}
         </div>
       </div>
 
@@ -2020,22 +2157,26 @@ export function initCustomerAnalyticsCharts(customers) {
   // 1. Location Donut Chart
   const locCtx = document.getElementById('customerLocationChart');
   if (locCtx) {
-    const topLocs = dd.locations.slice(0, 5);
-    new Chart(locCtx, {
-      type: 'doughnut',
-      data: {
-        labels: topLocs.map(l => l.name),
-        datasets: [{
-          data: topLocs.map(l => l.count),
-          backgroundColor: ['#f5c842', '#14b8a6', '#fb7185', '#a78bfa', '#6366f1']
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } }
-      }
-    });
+    const topLocs = (dd.locations || []).slice(0, 5);
+    if (topLocs.length > 0) {
+      new Chart(locCtx, {
+        type: 'doughnut',
+        data: {
+          labels: topLocs.map(l => l.name),
+          datasets: [{
+            data: topLocs.map(l => l.count),
+            backgroundColor: ['#f5c842', '#14b8a6', '#fb7185', '#a78bfa', '#6366f1']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } }
+        }
+      });
+    } else {
+      locCtx.style.display = 'none';
+    }
   }
 
   // 2. Staff vs Owner Handling Bar Chart
@@ -2096,10 +2237,24 @@ export function initCustomerAnalyticsCharts(customers) {
           {
             label: 'Customer Visits',
             data: counts,
-            backgroundColor: dd.monthly.map(m => (dd.peakMonth && m.key === dd.peakMonth.key) ? '#f5c842' : 'rgba(245, 200, 66, 0.45)'),
-            borderColor: '#f5c842',
+            backgroundColor: dd.monthly.map(m => {
+              if (dd.isMonthComparison && dd.currMonthData && m.key === dd.currMonthData.key) {
+                return '#f5c842';
+              }
+              if (dd.peakMonth && m.key === dd.peakMonth.key) {
+                return '#f5c842';
+              }
+              return 'rgba(245, 200, 66, 0.45)';
+            }),
+            borderColor: dd.monthly.map(m => {
+              if (dd.isMonthComparison && dd.currMonthData && m.key === dd.currMonthData.key) {
+                return '#d97706';
+              }
+              return '#f5c842';
+            }),
             borderWidth: 1.5,
             borderRadius: 8,
+            maxBarThickness: 70,
             yAxisID: 'y'
           },
           {
@@ -2111,7 +2266,8 @@ export function initCustomerAnalyticsCharts(customers) {
             tension: 0.3,
             fill: true,
             pointBackgroundColor: '#10b981',
-            pointRadius: 4,
+            pointRadius: 5,
+            pointHoverRadius: 7,
             yAxisID: 'y1'
           }
         ]
@@ -2123,9 +2279,19 @@ export function initCustomerAnalyticsCharts(customers) {
           legend: { position: 'top', labels: { font: { size: 11 } } },
           tooltip: {
             callbacks: {
+              title: function(ctx) {
+                const idx = ctx[0]?.dataIndex;
+                const m = dd.monthly[idx];
+                if (!m) return '';
+                if (dd.isMonthComparison) {
+                  if (dd.currMonthData && m.key === dd.currMonthData.key) return `${m.label} (Selected Month)`;
+                  if (dd.prevMonthData && m.key === dd.prevMonthData.key) return `${m.label} (Previous Month)`;
+                }
+                return m.label;
+              },
               label: function(ctx) {
                 if (ctx.dataset.type === 'line') {
-                  return ` Revenue: ₹${ctx.raw.toLocaleString()}`;
+                  return ` Revenue: ₹${Number(ctx.raw).toLocaleString()}`;
                 }
                 return ` Customers: ${ctx.raw} visits`;
               }
@@ -2174,6 +2340,7 @@ window.updateClassesBothTotal = updateClassesBothTotal;
 window.filterCustomers = filterCustomers;
 window.filterByMonth = filterByMonth;
 window.switchCustomerTab = switchCustomerTab;
+window.switchCustomerHistoryView = switchCustomerHistoryView;
 window.toggleMonthFilter = toggleMonthFilter;
 window.toggleSearchField = toggleSearchField;
 window.applyFilters = applyFilters;
@@ -2369,7 +2536,7 @@ export function renderLapsedRetentionTab(customers) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:10px">
         <div>
           <div class="section-title" style="color:#dc2626;margin-bottom:2px">
-            <i class="ti ti-alarm" style="color:#dc2626;font-size:18px"></i> ⏰ Lapsed Retention Clients (${sortedLapsedClients.length})
+            <i class="ti ti-alarm" style="color:#dc2626;font-size:18px"></i> ⏰ Inactive Clients (${sortedLapsedClients.length})
           </div>
           <div style="font-size:12px;color:#888">Clients who haven't visited in over 40 days. Send personalized WhatsApp re-invites!</div>
         </div>
@@ -2398,7 +2565,7 @@ export function renderLapsedRetentionTab(customers) {
               </div>
             </div>
           `;
-        }).join('') : '<div style="font-size:12px;color:#15803d;padding:20px 0;text-align:center">🎉 All clients are up to date with salon visits! No lapsed retention needed right now.</div>'}
+        }).join('') : '<div style="font-size:12px;color:#15803d;padding:20px 0;text-align:center">🎉 All clients are active and up to date with salon visits! No inactive clients right now.</div>'}
       </div>
     </div>
   `;

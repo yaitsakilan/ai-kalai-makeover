@@ -1,18 +1,19 @@
 // billl/js/pages/events.js
 import { state } from '../state.js';
-import { fetchEvents, addEvent, deleteEvent, updateEvent } from '../db.js';
+import { fetchEvents, fetchCustomers, addEvent, deleteEvent, updateEvent } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone, getSelectedChips, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
-import { calculateModuleStreak, renderModuleStreakWidget } from '../streak.js';
+import { renderMuhurthamWidget, bookMuhurthamEvent } from '../muhurtham.js';
 
 export async function renderEvents() {
-  const events = await fetchEvents();
+  const [events, customers] = await Promise.all([fetchEvents(), fetchCustomers()]);
   window._cachedEvents = events;
-  const streakData = calculateModuleStreak(events, 'date');
+  window._cachedCustomers = customers;
 
   const currentMonthIndex = new Date().getMonth();
-  if (window._eventActiveTab === undefined) window._eventActiveTab = 'analytics';
+  if (window._eventActiveTab === undefined || window._eventActiveTab === 'directory') window._eventActiveTab = 'history';
+  if (window._eventHistorySubTab === undefined) window._eventHistorySubTab = 'all';
   if (window._selectedEventMonth === undefined) {
     const hasCurrentMonthData = events.some(e => {
       if (!e.date) return false;
@@ -47,9 +48,9 @@ export async function renderEvents() {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  // Apply filters initially for directory & analytics
+  // Apply filters for history & analytics
   let filtered = [...events];
-  if (window._eventSearchQuery && window._eventActiveTab === 'directory') {
+  if (window._eventSearchQuery && (window._eventActiveTab === 'history' || window._eventActiveTab === 'directory')) {
     const q = window._eventSearchQuery.toLowerCase();
     filtered = filtered.filter(e =>
       (e.customer || '').toLowerCase().includes(q) ||
@@ -68,8 +69,17 @@ export async function renderEvents() {
       return m === mTarget;
     });
   }
-  if (window._eventStatusFilter !== 'all' && window._eventActiveTab === 'directory') {
-    filtered = filtered.filter(e => e.status === window._eventStatusFilter);
+  if (window._eventStatusFilter !== 'all' && (window._eventActiveTab === 'history' || window._eventActiveTab === 'directory')) {
+    if (window._eventStatusFilter === 'Upcoming') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      filtered = filtered.filter(e => e.date && e.date >= todayStr);
+    } else if (window._eventStatusFilter === 'top_paid') {
+      filtered = [...filtered].sort((a, b) => (b.total || 0) - (a.total || 0));
+    } else if (window._eventStatusFilter === 'crossover') {
+      // Handled in event-list
+    } else {
+      filtered = filtered.filter(e => e.status === window._eventStatusFilter);
+    }
   }
 
   const activeBtnStyle = window._eventMonthFilterExpanded
@@ -80,17 +90,17 @@ export async function renderEvents() {
     ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
     : '';
 
-  // Trigger chart initialization if analytics tab active
-  if (window._eventActiveTab === 'analytics') {
+  // Trigger chart initialization if analytics tab active and on overview subtab
+  window._cachedFilteredEvents = filtered;
+  if (window._eventActiveTab === 'analytics' && (window._eventAnalyticsSubTab === 'overview' || !window._eventAnalyticsSubTab)) {
     setTimeout(() => initEventAnalyticsCharts(filtered), 60);
   }
 
-  const selectedMonthLabel = window._selectedEventMonth === 'all' 
-    ? 'All Months' 
-    : MONTHS[parseInt(window._selectedEventMonth, 10)];
-
   const todayStr = new Date().toISOString().split('T')[0];
   const upcomingEvents = events.filter(e => e.date && e.date >= todayStr);
+  const completedEvents = events.filter(e => e.status === 'Completed');
+  const crossoverClients = getCrossOverCustomers(events, customers);
+  window._cachedCrossoverClients = crossoverClients;
 
   return `
   <div class="top-bar">
@@ -105,8 +115,8 @@ export async function renderEvents() {
         `).join('')}
       </select>
 
-      ${window._eventActiveTab === 'directory' ? `
-        <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Events">
+      ${(window._eventActiveTab === 'history' || window._eventActiveTab === 'directory') ? `
+        <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Event History">
           <i class="ti ti-search" style="color:#d97706"></i>
         </button>
         <button class="btn btn-outline" onclick="window.toggleEventMonthFilter()" id="toggle-evt-filter-btn" style="${activeBtnStyle}">
@@ -119,45 +129,39 @@ export async function renderEvents() {
     </div>
   </div>
 
-  ${renderModuleStreakWidget('Event Bookings', streakData, '#7c3aed')}
+  ${renderMuhurthamWidget(events, window._selectedEventMonth)}
 
-  <!-- Navigation Tabs -->
+  <!-- Navigation Tabs: Event History 1st and Analytics & Insights only -->
   <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">
-    <div class="tab ${window._eventActiveTab === 'analytics' ? 'active' : ''}" onclick="window.switchEventTab('analytics')">
-      <i class="ti ti-chart-pie" style="margin-right:6px"></i> Analytics & Insights (${filtered.length})
+    <div class="tab ${window._eventActiveTab === 'history' ? 'active' : ''}" onclick="window.switchEventTab('history')" id="tab-evt-history">
+      <i class="ti ti-history" style="margin-right:6px"></i> Event History (${filtered.length})
     </div>
-    <div class="tab ${window._eventActiveTab === 'upcoming' ? 'active' : ''}" onclick="window.switchEventTab('upcoming')">
-      <i class="ti ti-calendar-event" style="margin-right:6px"></i> Upcoming Events (${upcomingEvents.length})
-    </div>
-    <div class="tab ${window._eventActiveTab === 'top_paid' ? 'active' : ''}" onclick="window.switchEventTab('top_paid')">
-      <i class="ti ti-crown" style="margin-right:6px"></i> Top Paid Weddings (${events.length})
-    </div>
-    <div class="tab ${window._eventActiveTab === 'completed' ? 'active' : ''}" onclick="window.switchEventTab('completed')">
-      <i class="ti ti-circle-check" style="margin-right:6px"></i> Completed Events
-    </div>
-    <div class="tab ${window._eventActiveTab === 'directory' ? 'active' : ''}" onclick="window.switchEventTab('directory')">
-      <i class="ti ti-history" style="margin-right:6px"></i> Event Directory (${filtered.length})
+    <div class="tab ${window._eventActiveTab === 'analytics' ? 'active' : ''}" onclick="window.switchEventTab('analytics')" id="tab-evt-analytics">
+      <i class="ti ti-chart-pie" style="margin-right:6px"></i> Analytics & Insights
     </div>
   </div>
 
-  ${window._eventActiveTab === 'analytics' ? renderEventAnalyticsDashboard(filtered) :
-    window._eventActiveTab === 'upcoming' ? renderUpcomingEventsTab(events) :
-    window._eventActiveTab === 'top_paid' ? renderTopPaidEventsTab(events) :
-    window._eventActiveTab === 'completed' ? renderCompletedEventsTab(events) : `
+  ${window._eventActiveTab === 'analytics' ? renderEventAnalyticsDashboard(filtered, events, customers) : `
     <div id="event-metrics-container">
       ${renderEventMetrics(filtered)}
     </div>
 
-    <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
-      <div class="card" style="padding: 6px 12px; display:flex; gap:8px;">
-        <span class="chip ${window._eventStatusFilter === 'all' ? 'selected' : ''}" onclick="window.filterEventsStatus('all')" style="padding: 4px 10px; font-size:11px;">All</span>
-        <span class="chip ${window._eventStatusFilter === 'Completed' ? 'selected' : ''}" onclick="window.filterEventsStatus('Completed')" style="padding: 4px 10px; font-size:11px;">Completed</span>
-        <span class="chip ${window._eventStatusFilter === 'Booked' ? 'selected' : ''}" onclick="window.filterEventsStatus('Booked')" style="padding: 4px 10px; font-size:11px;">Pending</span>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+      <div style="font-size:13px; font-weight:600; color:#d97706; display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-history" style="font-size:16px;"></i> Event History Records (${filtered.length})
+      </div>
+      <div class="card" style="padding: 6px 12px; display:flex; gap:8px; margin-bottom:0; overflow-x:auto; max-width:100%; white-space:nowrap;" class="scrollbar-hide">
+        <span class="chip ${window._eventStatusFilter === 'all' ? 'selected' : ''}" onclick="window.filterEventsStatus('all')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">All (${events.length})</span>
+        <span class="chip ${window._eventStatusFilter === 'Upcoming' ? 'selected' : ''}" onclick="window.filterEventsStatus('Upcoming')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">🗓️ Upcoming (${upcomingEvents.length})</span>
+        <span class="chip ${window._eventStatusFilter === 'Completed' ? 'selected' : ''}" onclick="window.filterEventsStatus('Completed')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">✅ Completed (${completedEvents.length})</span>
+        <span class="chip ${window._eventStatusFilter === 'Booked' ? 'selected' : ''}" onclick="window.filterEventsStatus('Booked')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">⏳ Pending (${events.filter(e => e.status === 'Booked').length})</span>
+        <span class="chip ${window._eventStatusFilter === 'top_paid' ? 'selected' : ''}" onclick="window.filterEventsStatus('top_paid')" style="padding: 4px 10px; font-size:11px; cursor:pointer;"><i class="ti ti-crown" style="color:#d97706;margin-right:3px;"></i> Top Paid Weddings (${events.length})</span>
+        <span class="chip ${window._eventStatusFilter === 'crossover' ? 'selected' : ''}" onclick="window.filterEventsStatus('crossover')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">🤝 Event & Shop Customers (${crossoverClients.length})</span>
       </div>
     </div>
 
     <div class="card" id="event-search-card" style="margin-bottom:16px; display: ${window._eventSearchFieldExpanded ? 'block' : 'none'};">
-      <input class="form-input" placeholder="Search by name, phone, or event type..." id="event-search-input" value="${window._eventSearchQuery || ''}" oninput="window.filterEventCustomers(this.value)">
+      <input class="form-input" placeholder="Search event history by name, phone, or event type..." id="event-search-input" value="${window._eventSearchQuery || ''}" oninput="window.filterEventCustomers(this.value)">
     </div>
 
     <div class="card" id="event-month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._eventMonthFilterExpanded ? 'block' : 'none'};">
@@ -173,7 +177,11 @@ export async function renderEvents() {
     </div>
 
     <div id="event-list">
-      ${renderEventList(filtered)}
+      ${window._eventStatusFilter === 'crossover' 
+        ? renderCrossoverClientsTab(crossoverClients) 
+        : (window._eventStatusFilter === 'top_paid' 
+          ? renderTopPaidEventsTab(filtered) 
+          : renderEventList(filtered))}
     </div>
   `}`;
 }
@@ -232,13 +240,28 @@ export function applyEventFilters() {
   }
 
   if (window._eventStatusFilter !== undefined && window._eventStatusFilter !== 'all') {
-    events = events.filter(e => e.status === window._eventStatusFilter);
+    if (window._eventStatusFilter === 'Upcoming') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      events = events.filter(e => e.date && e.date >= todayStr);
+    } else if (window._eventStatusFilter === 'top_paid') {
+      events = [...events].sort((a, b) => (b.total || 0) - (a.total || 0));
+    } else if (window._eventStatusFilter === 'crossover') {
+      // Handled in listEl below
+    } else {
+      events = events.filter(e => e.status === window._eventStatusFilter);
+    }
   }
 
   // Update List HTML
   const listEl = document.getElementById('event-list');
   if (listEl) {
-    listEl.innerHTML = renderEventList(events);
+    if (window._eventStatusFilter === 'crossover') {
+      listEl.innerHTML = renderCrossoverClientsTab(window._cachedCrossoverClients || []);
+    } else if (window._eventStatusFilter === 'top_paid') {
+      listEl.innerHTML = renderTopPaidEventsTab(events);
+    } else {
+      listEl.innerHTML = renderEventList(events);
+    }
   }
 
   // Update Metrics HTML
@@ -624,7 +647,7 @@ Make it concise, insightful, and formatted beautifully.`
   }
 }
 
-export function openEventCustomerForm(eventId = null) {
+export function openEventCustomerForm(eventId = null, prefillDate = null, defaultFunction = 'Muhurtham', prefillCustomer = null, prefillPhone = null) {
   window._initializingForm = true;
   const today = new Date().toISOString().split('T')[0];
   const isEdit = !!eventId;
@@ -671,12 +694,12 @@ export function openEventCustomerForm(eventId = null) {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
               <label class="form-label">Customer Name *</label>
-              <input class="form-input" id="ef-name" value="${isEdit && event ? event.customer : ''}" placeholder="Enter name">
+              <input class="form-input" id="ef-name" value="${isEdit && event ? event.customer : (prefillCustomer || '')}" placeholder="Enter name">
             </div>
             <div class="form-group">
               <label class="form-label">Customer Number *</label>
               <div style="position:relative; display:flex; align-items:center;">
-                <input class="form-input" id="ef-phone" value="${isEdit && event ? event.phone : ''}" placeholder="10-digit number" maxlength="10" style="padding-right:38px;">
+                <input class="form-input" id="ef-phone" value="${isEdit && event ? event.phone : (prefillPhone || '')}" placeholder="10-digit number" maxlength="10" style="padding-right:38px;">
                 <button type="button" onclick="window.pickContact('ef-phone', 'ef-name')" title="Pick from contacts" style="position:absolute; right:6px; background:none; border:none; color:#d97706; cursor:pointer; padding:5px 7px; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:17px; transition:all 0.15s;" onmouseover="this.style.background='rgba(217,119,6,0.12)'" onmouseout="this.style.background='transparent'">
                   <i class="ti ti-address-book"></i>
                 </button>
@@ -690,7 +713,7 @@ export function openEventCustomerForm(eventId = null) {
             </div>
             <div class="form-group" id="ef-main-date-group">
               <label class="form-label">Event Date *</label>
-              <input class="form-input" id="ef-date" type="date" value="${isEdit && event ? event.date : today}">
+              <input class="form-input" id="ef-date" type="date" value="${isEdit && event ? event.date : (prefillDate || today)}">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1.2fr 1.5fr;gap:12px;margin-bottom:14px;align-items:center;">
@@ -944,6 +967,16 @@ export function openEventCustomerForm(eventId = null) {
             wages.forEach(w => window.addStaffWageRow(w.name, w.amount));
           }
         } catch(e) {}
+      }
+    } else if (!isEdit && defaultFunction) {
+      // Auto-select Muhurtham / default function chip if booking from auspicious calendar
+      const funcChips = document.querySelectorAll('#ef-function-chips .chip');
+      const match = Array.from(funcChips).find(c => c.textContent.trim().toLowerCase() === defaultFunction.toLowerCase());
+      if (match) {
+        match.classList.add('selected');
+        if (typeof window.updateEventFunctionDates === 'function') {
+          window.updateEventFunctionDates();
+        }
       }
     }
     window._initializingForm = false;
@@ -1889,7 +1922,13 @@ export function updateEventFunctionDates() {
 // ─────────────────────────────────────────────
 
 export function switchEventTab(tab) {
+  if (tab === 'directory') tab = 'history';
   window._eventActiveTab = tab;
+  if (tab === 'analytics' && (window._eventAnalyticsSubTab === 'overview' || !window._eventAnalyticsSubTab)) {
+    setTimeout(() => {
+      initEventAnalyticsCharts(window._cachedFilteredEvents || window._cachedEvents || []);
+    }, 60);
+  }
   if (typeof window.render === 'function') window.render();
 }
 
@@ -1898,9 +1937,332 @@ export function filterEventByMonthSelect(val) {
   if (typeof window.render === 'function') window.render();
 }
 
-export function renderEventAnalyticsDashboard(events) {
+export function switchEventAnalyticsSubTab(subTab) {
+  window._eventAnalyticsSubTab = subTab;
+  if (subTab === 'overview') {
+    setTimeout(() => {
+      initEventAnalyticsCharts(window._cachedFilteredEvents || window._cachedEvents || []);
+    }, 60);
+  }
+  if (typeof window.render === 'function') window.render();
+}
+
+export function switchEventHistorySubTab(subTab) {
+  window._eventHistorySubTab = subTab;
+  if (typeof window.render === 'function') window.render();
+}
+
+export function filterCrossoverSearch(q) {
+  window._crossoverSearchQuery = q;
+  const container = document.getElementById('crossover-client-list-container');
+  if (container) {
+    const clients = window._cachedCrossoverClients || [];
+    container.innerHTML = renderCrossoverClientCards(clients, q);
+  }
+}
+
+// Algorithm to identify clients who have booked both an event and visited as a customer in the shop
+export function getCrossOverCustomers(events = window._cachedEvents || [], customers = window._cachedCustomers || []) {
+  if (!events || !events.length || !customers || !customers.length) return [];
+
+  function normalizePhone(p) {
+    if (!p) return '';
+    const digits = String(p).replace(/\D/g, '');
+    return digits.length >= 10 ? digits.slice(-10) : digits;
+  }
+
+  function normalizeName(n) {
+    if (!n) return '';
+    return String(n).toLowerCase().replace(/^(mrs\.|ms\.|mr\.|dr\.)\s*/i, '').replace(/[^a-z0-9]/g, '').trim();
+  }
+
+  const customerByPhone = new Map();
+  const customerByName = new Map();
+
+  customers.forEach(c => {
+    const ph = normalizePhone(c.phone);
+    if (ph && ph.length >= 7) {
+      if (!customerByPhone.has(ph)) customerByPhone.set(ph, []);
+      customerByPhone.get(ph).push(c);
+    }
+    const nm = normalizeName(c.name);
+    if (nm && nm.length >= 3) {
+      if (!customerByName.has(nm)) customerByName.set(nm, []);
+      customerByName.get(nm).push(c);
+    }
+  });
+
+  const crossoverMap = new Map();
+
+  events.forEach(e => {
+    const ePhone = normalizePhone(e.phone);
+    const eName = normalizeName(e.customer);
+
+    let matched = [];
+    if (ePhone && customerByPhone.has(ePhone)) {
+      matched = customerByPhone.get(ePhone);
+    } else if (eName && customerByName.has(eName)) {
+      matched = customerByName.get(eName);
+    }
+
+    if (matched.length > 0) {
+      const key = (ePhone && ePhone.length >= 7) ? ePhone : (eName || e.customer);
+      if (!crossoverMap.has(key)) {
+        crossoverMap.set(key, {
+          name: e.customer || matched[0].name,
+          phone: e.phone || matched[0].phone,
+          location: e.location || matched[0].location || 'Chennai',
+          events: [],
+          shopVisits: [],
+          totalEventSpend: 0,
+          totalShopSpend: 0
+        });
+      }
+      const item = crossoverMap.get(key);
+      if (!item.events.some(x => x.id === e.id)) {
+        item.events.push(e);
+        item.totalEventSpend += (e.total || 0);
+      }
+      matched.forEach(sc => {
+        if (!item.shopVisits.some(v => v.id === sc.id)) {
+          item.shopVisits.push(sc);
+          item.totalShopSpend += (sc.amount || sc.total_spend || 0);
+        }
+      });
+    }
+  });
+
+  const results = Array.from(crossoverMap.values());
+  results.sort((a, b) => (b.totalEventSpend + b.totalShopSpend) - (a.totalEventSpend + a.totalShopSpend));
+  return results;
+}
+
+export function renderCrossoverClientsTab(crossoverClients) {
+  const totalClients = crossoverClients.length;
+  const totalCombinedSpend = crossoverClients.reduce((sum, c) => sum + (c.totalEventSpend + c.totalShopSpend), 0);
+  const totalEventSpend = crossoverClients.reduce((sum, c) => sum + c.totalEventSpend, 0);
+  const totalShopSpend = crossoverClients.reduce((sum, c) => sum + c.totalShopSpend, 0);
+  const avgClientSpend = totalClients > 0 ? Math.round(totalCombinedSpend / totalClients) : 0;
+
+  return `
+    <!-- Crossover Metrics Cards -->
+    <div class="metric-grid" style="margin-bottom: 20px;">
+      <div class="metric-card mc-gold">
+        <div class="metric-label">Dual-Channel VIPs</div>
+        <div class="metric-value">${totalClients}</div>
+        <div class="metric-sub">Booked both Wedding & Salon Visits</div>
+        <div class="metric-icon"><i class="ti ti-users"></i></div>
+      </div>
+      <div class="metric-card mc-teal">
+        <div class="metric-label">Combined Lifetime Value</div>
+        <div class="metric-value">₹${totalCombinedSpend.toLocaleString('en-IN')}</div>
+        <div class="metric-sub">Event + In-Shop Total Spend</div>
+        <div class="metric-icon"><i class="ti ti-currency-rupee"></i></div>
+      </div>
+      <div class="metric-card mc-rose">
+        <div class="metric-label">Event Packages Revenue</div>
+        <div class="metric-value">₹${totalEventSpend.toLocaleString('en-IN')}</div>
+        <div class="metric-sub">${totalCombinedSpend ? Math.round((totalEventSpend/totalCombinedSpend)*100) : 0}% of dual-channel revenue</div>
+        <div class="metric-icon"><i class="ti ti-calendar-event"></i></div>
+      </div>
+      <div class="metric-card mc-purple">
+        <div class="metric-label">Salon Shop Revenue</div>
+        <div class="metric-value">₹${totalShopSpend.toLocaleString('en-IN')}</div>
+        <div class="metric-sub">Avg Lifetime: ₹${avgClientSpend.toLocaleString('en-IN')} / client</div>
+        <div class="metric-icon"><i class="ti ti-scissors"></i></div>
+      </div>
+    </div>
+
+    <!-- Search & Filter Card -->
+    <div class="card" style="padding: 14px 18px; margin-bottom: 16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:280px; position:relative;">
+          <i class="ti ti-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#d97706; font-size:16px;"></i>
+          <input class="form-input" placeholder="Search dual clients by name, phone, event type, or salon service..." value="${window._crossoverSearchQuery || ''}" oninput="window.filterCrossoverSearch(this.value)" style="padding-left:36px; height:38px;">
+        </div>
+        <div style="font-size:12px; color:#888;">
+          Showing <strong id="crossover-count-label">${crossoverClients.length}</strong> dual-channel VIP clients
+        </div>
+      </div>
+    </div>
+
+    <!-- Crossover Clients List -->
+    <div id="crossover-client-list-container">
+      ${renderCrossoverClientCards(crossoverClients, window._crossoverSearchQuery || '')}
+    </div>
+  `;
+}
+
+export function renderCrossoverClientCards(crossoverClients, query = '') {
+  let list = crossoverClients;
+  const q = (query || '').toLowerCase().trim();
+  if (q) {
+    list = list.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      c.phone.includes(q) ||
+      (c.location || '').toLowerCase().includes(q) ||
+      c.events.some(e => (e.type || '').toLowerCase().includes(q) || (e.location || '').toLowerCase().includes(q)) ||
+      c.shopVisits.some(v => {
+        const s = Array.isArray(v.services) ? v.services.join(' ') : String(v.services || '');
+        return s.toLowerCase().includes(q);
+      })
+    );
+  }
+
+  const countLabel = document.getElementById('crossover-count-label');
+  if (countLabel) countLabel.textContent = list.length;
+
+  if (!list.length) {
+    return `<div class="card" style="text-align:center; padding:40px; color:#888;">
+      <i class="ti ti-search" style="font-size:32px; opacity:0.3; display:block; margin-bottom:8px;"></i>
+      No cross-over clients matching "${query}".
+    </div>`;
+  }
+
+  return list.map((c, idx) => {
+    let topBadge = '';
+    if (idx === 0) topBadge = '<span class="badge badge-gold">👑 #1 Top Dual Client</span>';
+    else if (idx === 1) topBadge = '<span class="badge badge-amber">🥈 #2 Dual Client</span>';
+    else if (idx === 2) topBadge = '<span class="badge badge-blue">🥉 #3 Dual Client</span>';
+    else topBadge = '<span class="badge badge-gold" style="opacity:0.85;">✨ Event + Salon VIP</span>';
+
+    const waText = encodeURIComponent(`Vanakkam ${c.name}! ✨ Thank you for being a valued client for both bridal events and salon services at Kalai Makeover.`);
+
+    return `
+    <div class="card crossover-client-card" style="margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; align-items:flex-start; gap:12px;">
+          <div style="font-size:15px; font-weight:700; color:#d97706; background:rgba(245,200,66,0.12); width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(245,200,66,0.28); flex-shrink:0;">
+            #${idx + 1}
+          </div>
+          <div>
+            <div style="font-size:16px; font-weight:700; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span>${c.name}</span>
+              ${topBadge}
+              <span class="badge badge-purple" style="font-size:10px; padding:2px 7px;">
+                🎉 ${c.events.length} Event${c.events.length > 1 ? 's' : ''}
+              </span>
+              <span class="badge badge-green" style="font-size:10px; padding:2px 7px;">
+                💇‍♀️ ${c.shopVisits.length} Salon Visit${c.shopVisits.length > 1 ? 's' : ''}
+              </span>
+            </div>
+            <div style="font-size:12.5px; color:#888; margin-top:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span><i class="ti ti-phone" style="color:#d97706;"></i> ${c.phone || 'No phone'}</span>
+              <span>·</span>
+              <span><i class="ti ti-map-pin" style="color:#d97706;"></i> ${c.location || 'Chennai'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align:right;">
+          <div style="font-size:10.5px; color:#999; text-transform:uppercase; letter-spacing:0.06em;">Total Lifetime Value</div>
+          <div style="font-size:18px; font-weight:700; color:#d97706;">₹${(c.totalEventSpend + c.totalShopSpend).toLocaleString('en-IN')}</div>
+          <div style="font-size:11px; color:#888; margin-top:2px;">
+            Events: <strong style="color:#4f46e5;">₹${c.totalEventSpend.toLocaleString()}</strong> + Shop: <strong style="color:#10b981;">₹${c.totalShopSpend.toLocaleString()}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Split details: Events vs Salon visits -->
+      <div class="crossover-split-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:12px; border-radius:12px; border:1px solid rgba(245,200,66,0.14);">
+        <!-- Left: Event Bookings -->
+        <div>
+          <div style="font-size:11.5px; font-weight:700; color:#4f46e5; margin-bottom:8px; display:flex; align-items:center; gap:5px; text-transform:uppercase; letter-spacing:0.04em;">
+            <i class="ti ti-calendar-event"></i> Event Bookings (${c.events.length})
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${c.events.map(ev => `
+              <div class="crossover-subitem" style="padding:8px 10px; border-radius:8px; font-size:11.5px; display:flex; justify-content:space-between; align-items:center; border:0.5px solid rgba(245,200,66,0.12);">
+                <div>
+                  <div style="font-weight:600;">${ev.type || 'Wedding Event'}</div>
+                  <div style="color:#888; font-size:10.5px;">📅 ${ev.date || 'Date N/A'} · ${ev.location || 'Chennai'}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-weight:700; color:#d97706;">₹${(ev.total || 0).toLocaleString()}</div>
+                  <span class="badge ${ev.status === 'Completed' ? 'badge-green' : 'badge-blue'}" style="font-size:9.5px; padding:1px 5px;">${ev.status}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Right: Salon Shop Visits -->
+        <div>
+          <div style="font-size:11.5px; font-weight:700; color:#10b981; margin-bottom:8px; display:flex; align-items:center; gap:5px; text-transform:uppercase; letter-spacing:0.04em;">
+            <i class="ti ti-scissors"></i> In-Shop Salon Visits (${c.shopVisits.length})
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${c.shopVisits.map(sv => {
+              const sList = Array.isArray(sv.services) ? sv.services : [sv.services || 'Salon Service'];
+              return `
+              <div class="crossover-subitem" style="padding:8px 10px; border-radius:8px; font-size:11.5px; display:flex; justify-content:space-between; align-items:center; border:0.5px solid rgba(245,200,66,0.12);">
+                <div style="flex:1; padding-right:8px;">
+                  <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:3px;">
+                    ${sList.map(s => `<span style="background:rgba(16,185,129,0.12); color:#10b981; padding:1px 5px; border-radius:4px; font-size:9.5px; font-weight:600;">${s}</span>`).join('')}
+                  </div>
+                  <div style="color:#888; font-size:10.5px;">Visit: ${sv.created_at ? new Date(sv.created_at).toLocaleDateString('en-IN') : 'Recent'}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-weight:700; color:#10b981;">₹${(sv.amount || sv.total_spend || 0).toLocaleString()}</div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px; align-items:center; flex-wrap:wrap;">
+        <a href="https://wa.me/91${c.phone}?text=${waText}" target="_blank" class="btn btn-outline" style="font-size:11.5px; padding:5px 12px; text-decoration:none; color:#25d366; border-color:rgba(37,211,102,0.3); display:inline-flex; align-items:center; gap:5px;">
+          <i class="ti ti-brand-whatsapp"></i> WhatsApp VIP
+        </a>
+        <a href="tel:${c.phone}" class="btn btn-outline" style="font-size:11.5px; padding:5px 12px; text-decoration:none; display:inline-flex; align-items:center; gap:5px;">
+          <i class="ti ti-phone"></i> Call
+        </a>
+        <button class="btn btn-gold" onclick="window.openEventCustomerForm(null, null, 'Muhurtham', '${c.name.replace(/'/g, "\\'")}', '${c.phone}')" style="font-size:11.5px; padding:5px 12px; border-radius:8px;">
+          <i class="ti ti-plus"></i> Book Next Event
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+export function renderEventAnalyticsDashboard(events, allEvents = window._cachedEvents || events, customers = window._cachedCustomers || []) {
   if (!events || !events.length) {
     return `<div class="card" style="text-align:center;padding:40px;color:#999"><i class="ti ti-chart-pie" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.3"></i>No event booking analytics available yet. Book events to see detailed insights!</div>`;
+  }
+
+  if (window._eventAnalyticsSubTab === undefined) window._eventAnalyticsSubTab = 'overview';
+
+  const crossoverClients = getCrossOverCustomers(allEvents, customers);
+  window._cachedCrossoverClients = crossoverClients;
+
+  const subnavHtml = `
+    <!-- Analytics & Insights Sub-Menu Navigation -->
+    <div class="card event-analytics-subnav-card" style="padding:10px 14px; margin-bottom:20px; display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; border:1px solid rgba(245,200,66,0.22);">
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button class="chip ${window._eventAnalyticsSubTab === 'overview' ? 'selected' : ''}" onclick="window.switchEventAnalyticsSubTab('overview')" style="font-size:12px; padding:6px 14px; cursor:pointer;">
+          <i class="ti ti-chart-pie" style="margin-right:5px;"></i> 📊 Analytics Overview
+        </button>
+        <button class="chip ${window._eventAnalyticsSubTab === 'top_weddings' ? 'selected' : ''}" onclick="window.switchEventAnalyticsSubTab('top_weddings')" style="font-size:12px; padding:6px 14px; cursor:pointer;">
+          <i class="ti ti-crown" style="margin-right:5px; color:#f5c842;"></i> 🏆 Top Weddings (${allEvents.length})
+        </button>
+        <button class="chip ${window._eventAnalyticsSubTab === 'crossover' ? 'selected' : ''}" onclick="window.switchEventAnalyticsSubTab('crossover')" style="font-size:12px; padding:6px 14px; cursor:pointer;">
+          <i class="ti ti-users" style="margin-right:5px; color:#10b981;"></i> 🤝 Event & Shop Customers (${crossoverClients.length})
+        </button>
+      </div>
+      <div style="font-size:11.5px; color:rgba(245,200,66,0.85); font-weight:500;">
+        ${window._eventAnalyticsSubTab === 'overview' ? '📈 Live Business Intelligence' : window._eventAnalyticsSubTab === 'top_weddings' ? '👑 Highest Revenue Packages' : '✨ Dual-Channel VIP Clients'}
+      </div>
+    </div>
+  `;
+
+  if (window._eventAnalyticsSubTab === 'top_weddings') {
+    return subnavHtml + renderTopPaidEventsTab(allEvents);
+  }
+
+  if (window._eventAnalyticsSubTab === 'crossover') {
+    return subnavHtml + renderCrossoverClientsTab(crossoverClients);
   }
 
   const totalBookings = events.length;
@@ -1912,10 +2274,10 @@ export function renderEventAnalyticsDashboard(events) {
   // 1. Makeup & Event Types Breakdown
   const typeMap = {};
   events.forEach(e => {
-    const typeName = (e.type || e.makeup_type || 'Bridal Makeup').trim();
-    if (!typeMap[typeName]) typeMap[typeName] = { count: 0, revenue: 0 };
-    typeMap[typeName].count += 1;
-    typeMap[typeName].revenue += (e.total || 0);
+    const type = (e.type && e.type.trim()) ? e.type.trim() : 'General Event';
+    if (!typeMap[type]) typeMap[type] = { count: 0, revenue: 0 };
+    typeMap[type].count += 1;
+    typeMap[type].revenue += (e.total || 0);
   });
   const sortedTypes = Object.entries(typeMap)
     .map(([name, data]) => ({ name, ...data }))
@@ -1923,20 +2285,40 @@ export function renderEventAnalyticsDashboard(events) {
 
   // 2. Locations / Destination Weddings Breakdown
   const locationMap = {};
+  let unspecifiedVenueCount = 0;
+  let unspecifiedVenueRev = 0;
+
+  function isUnspecifiedVenue(loc) {
+    if (!loc) return true;
+    const s = String(loc).trim().toLowerCase();
+    return !s || s === 'unspecified venue' || s === 'unspecified' || s === 'no location' || s === 'none' || s === 'n/a' || s === 'unknown' || s === 'nil';
+  }
+
   events.forEach(e => {
-    const loc = (e.location && e.location.trim()) ? e.location.trim() : 'Unspecified Venue';
-    if (!locationMap[loc]) locationMap[loc] = { count: 0, revenue: 0 };
-    locationMap[loc].count += 1;
-    locationMap[loc].revenue += (e.total || 0);
+    const rawLoc = (e.location || '').trim();
+    if (isUnspecifiedVenue(rawLoc)) {
+      unspecifiedVenueCount += 1;
+      unspecifiedVenueRev += (e.total || 0);
+      return;
+    }
+    const key = rawLoc.toLowerCase().replace(/\s+/g, ' ');
+    if (!locationMap[key]) {
+      locationMap[key] = { name: rawLoc, count: 0, revenue: 0 };
+    } else {
+      if (rawLoc !== rawLoc.toLowerCase() && locationMap[key].name === locationMap[key].name.toLowerCase()) {
+        locationMap[key].name = rawLoc;
+      }
+    }
+    locationMap[key].count += 1;
+    locationMap[key].revenue += (e.total || 0);
   });
-  const sortedLocations = Object.entries(locationMap)
-    .map(([name, data]) => ({ name, ...data }))
-    .sort((a, b) => b.count - a.count);
+  const sortedLocations = Object.values(locationMap).sort((a, b) => b.count - a.count);
 
   // 3. Monthly Trends & Peak Wedding Month
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthMap = {};
-  events.forEach(e => {
+  const allList = (allEvents && allEvents.length) ? allEvents : (window._cachedEvents || events);
+  const allMonthMap = {};
+  allList.forEach(e => {
     if (!e.date) return;
     const parts = String(e.date).split('T')[0].split('-');
     if (parts.length < 2) return;
@@ -1945,15 +2327,37 @@ export function renderEventAnalyticsDashboard(events) {
     if (mIdx >= 0 && mIdx < 12) {
       const key = `${yr}-${String(mIdx + 1).padStart(2, '0')}`;
       const label = `${MONTH_NAMES[mIdx]} ${yr}`;
-      if (!monthMap[key]) {
-        monthMap[key] = { key, label, count: 0, revenue: 0 };
+      if (!allMonthMap[key]) {
+        allMonthMap[key] = { key, label, year: parseInt(yr, 10), monthIndex: mIdx, count: 0, revenue: 0 };
       }
-      monthMap[key].count += 1;
-      monthMap[key].revenue += (e.total || 0);
+      allMonthMap[key].count += 1;
+      allMonthMap[key].revenue += (e.total || 0);
     }
   });
 
-  const sortedMonths = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
+  let sortedMonths = [];
+  if (window._selectedEventMonth !== undefined && window._selectedEventMonth !== 'all') {
+    const mTarget = parseInt(window._selectedEventMonth, 10);
+    let selectedYear = new Date().getFullYear();
+    Object.values(allMonthMap).forEach(m => {
+      if (m.monthIndex === mTarget) selectedYear = m.year;
+    });
+
+    const prevMonthIndex = (mTarget - 1 + 12) % 12;
+    const prevYear = mTarget === 0 ? selectedYear - 1 : selectedYear;
+    const prevKey = `${prevYear}-${String(prevMonthIndex + 1).padStart(2, '0')}`;
+    const prevLabel = `${MONTH_NAMES[prevMonthIndex]} ${prevYear}`;
+    const selectedKey = `${selectedYear}-${String(mTarget + 1).padStart(2, '0')}`;
+    const selectedLabel = `${MONTH_NAMES[mTarget]} ${selectedYear}`;
+
+    const prevMonthData = allMonthMap[prevKey] || { key: prevKey, label: prevLabel, year: prevYear, monthIndex: prevMonthIndex, count: 0, revenue: 0 };
+    const currMonthData = allMonthMap[selectedKey] || { key: selectedKey, label: selectedLabel, year: selectedYear, monthIndex: mTarget, count: 0, revenue: 0 };
+
+    sortedMonths = [prevMonthData, currMonthData];
+  } else {
+    sortedMonths = Object.values(allMonthMap).sort((a, b) => a.key.localeCompare(b.key));
+  }
+
   const peakMonth = sortedMonths.length ? [...sortedMonths].sort((a, b) => b.revenue - a.revenue)[0] : null;
 
   // Store data for Chart.js
@@ -1967,7 +2371,43 @@ export function renderEventAnalyticsDashboard(events) {
     totalRevenue
   };
 
-  return `
+  return subnavHtml + `
+  <!-- Teaser Banners: Top Weddings & Crossover Clients -->
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
+    <div class="card" style="padding:14px 18px; border:1px solid rgba(245,200,66,0.25); cursor:pointer; transition:all 0.2s;" onclick="window.switchEventAnalyticsSubTab('top_weddings')">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:36px; height:36px; border-radius:10px; background:rgba(245,200,66,0.15); display:flex; align-items:center; justify-content:center; color:#f5c842; font-size:18px;">
+            <i class="ti ti-crown"></i>
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:13.5px;">🏆 Top Paid Weddings & Events</div>
+            <div style="font-size:11px; color:#888;">Ranked by package billing · Top: ₹${(allEvents.length ? Math.max(...allEvents.map(e => e.total || 0)) : 0).toLocaleString()}</div>
+          </div>
+        </div>
+        <div style="font-size:12px; font-weight:600; color:#f5c842; display:flex; align-items:center; gap:4px;">
+          View List <i class="ti ti-arrow-right"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px 18px; border:1px solid rgba(16,185,129,0.3); cursor:pointer; transition:all 0.2s;" onclick="window.switchEventAnalyticsSubTab('crossover')">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:36px; height:36px; border-radius:10px; background:rgba(16,185,129,0.15); display:flex; align-items:center; justify-content:center; color:#10b981; font-size:18px;">
+            <i class="ti ti-users"></i>
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:13.5px;">🤝 Event & Shop Customers</div>
+            <div style="font-size:11px; color:#888;"><strong>${crossoverClients.length} clients</strong> taken both wedding & salon shop services</div>
+          </div>
+        </div>
+        <div style="font-size:12px; font-weight:600; color:#10b981; display:flex; align-items:center; gap:4px;">
+          View Clients <i class="ti ti-arrow-right"></i>
+        </div>
+      </div>
+    </div>
+  </div>
   <!-- Top Metrics Overview -->
   <div class="metric-grid" style="margin-bottom: 20px;">
     <div class="metric-card mc-gold">
@@ -2053,6 +2493,12 @@ export function renderEventAnalyticsDashboard(events) {
           </div>
         `).join('') : '<div style="font-size:12px; color:#888; text-align:center; padding:20px;">No location data found</div>'}
       </div>
+      ${unspecifiedVenueCount > 0 ? `
+        <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #eee;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#888">
+          <span><i class="ti ti-info-circle" style="color:#9ca3af"></i> ${unspecifiedVenueCount} events with venue unrecorded</span>
+          <span style="color:#aaa">₹${unspecifiedVenueRev.toLocaleString()}</span>
+        </div>
+      ` : ''}
     </div>
   </div>
 
@@ -2443,5 +2889,13 @@ window.initEventAnalyticsCharts = initEventAnalyticsCharts;
 window.renderUpcomingEventsTab = renderUpcomingEventsTab;
 window.renderTopPaidEventsTab = renderTopPaidEventsTab;
 window.renderCompletedEventsTab = renderCompletedEventsTab;
+window.bookMuhurthamEvent = bookMuhurthamEvent;
+window.renderMuhurthamWidget = renderMuhurthamWidget;
+window.switchEventAnalyticsSubTab = switchEventAnalyticsSubTab;
+window.filterCrossoverSearch = filterCrossoverSearch;
+window.getCrossOverCustomers = getCrossOverCustomers;
+window.renderCrossoverClientsTab = renderCrossoverClientsTab;
+window.renderCrossoverClientCards = renderCrossoverClientCards;
+window.switchEventHistorySubTab = switchEventHistorySubTab;
 
 

@@ -14,6 +14,7 @@ import {
   saveAttendance
 } from '../db.js';
 import { showToast, showModal, closeModal } from '../ui.js';
+import { handleWifiCheckIn } from '../wifi.js';
 const PINS = { owner: 'kalai1610', employee: 'emp123' };
 
 // ─────────────────────────────────────────────
@@ -699,6 +700,12 @@ window.updateEmpPortalStatus = function() {
 };
 
 window.handleEmpCheckIn = async function(empId) {
+  if (typeof handleWifiCheckIn === 'function') {
+    return await handleWifiCheckIn(empId);
+  } else if (typeof window.handleWifiCheckIn === 'function') {
+    return await window.handleWifiCheckIn(empId);
+  }
+
   const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
   
   // Calculate if check-in is Late
@@ -719,7 +726,8 @@ window.handleEmpCheckIn = async function(empId) {
     employee_id: empId,
     date: todayStr,
     check_in: new Date().toISOString(),
-    status: status
+    status: status,
+    notes: 'WiFi Verified'
   });
 
   if (result) {

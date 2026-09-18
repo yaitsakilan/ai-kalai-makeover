@@ -16,6 +16,13 @@ import {
   fetchJewels
 } from '../db.js';
 import { showToast, showModal, closeModal, showConfirmDelete } from '../ui.js';
+import { 
+  renderWifiAttendanceCard, 
+  initLiveWifiStatus, 
+  openCaptureWifiModal, 
+  openWifiSettingsModal, 
+  openQuickWifiPunchModal 
+} from '../wifi.js';
 
 export async function renderEmployees() {
   const employees = await fetchEmployees();
@@ -34,17 +41,24 @@ export async function renderEmployees() {
     window._payrollSelectedMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
+  if (window._employeesTab === 'attendance') {
+    initLiveWifiStatus();
+  }
+
   return `
   <div class="top-bar">
     <div>
       <h2>Employee Management</h2>
     </div>
-    <div style="display:flex; gap:10px;">
+    <div style="display:flex; gap:10px; align-items:center;">
       ${window._employeesTab === 'directory' ? `
         <button class="btn btn-gold" onclick="window.openAddEmployeeModal()">
           <i class="ti ti-user-plus"></i> Add Employee
         </button>
       ` : window._employeesTab === 'attendance' ? `
+        <button class="btn btn-outline" onclick="window.openCaptureWifiModal()" style="border-color:#d97706; color:#d97706; display:inline-flex; align-items:center; gap:6px;" title="Capture Salon WiFi Router">
+          <i class="ti ti-wifi"></i> Capture Shop WiFi
+        </button>
         <button class="btn btn-gold" onclick="window.openManualAttendanceModal()">
           <i class="ti ti-calendar-plus"></i> Log Manual Attendance
         </button>
@@ -133,13 +147,6 @@ function renderDirectoryTab(employees) {
 // ────────────────────────────────────────────────────────
 
 function renderAttendanceTab(employees, attendance) {
-  if (!attendance.length) {
-    return `<div class="card" style="text-align:center; padding:50px; color:#999;">
-      <i class="ti ti-calendar" style="font-size:42px; display:block; margin-bottom:10px; opacity:0.3;"></i>
-      No attendance logs found
-    </div>`;
-  }
-
   // Filter out invalid records
   const validAttendance = attendance.filter(a => {
     const emp = employees.find(e => e.id === a.employee_id);
@@ -147,9 +154,14 @@ function renderAttendanceTab(employees, attendance) {
   });
 
   return `
+  ${renderWifiAttendanceCard(employees)}
+
   <div class="card" style="padding:0; overflow:hidden;">
-    <div style="padding:16px; border-bottom:0.5px solid #f5f5f5; display:flex; justify-content:space-between; align-items:center;">
-      <h3 style="font-size:14px; font-weight:600; color:#1a1a1a;">Daily Check-In logs</h3>
+    <div style="padding:16px; border-bottom:0.5px solid #f5f5f5; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <h3 style="font-size:14px; font-weight:600; color:#1a1a1a; margin:0;">Daily Check-In logs</h3>
+      <div style="font-size:11.5px; color:#888;">
+        Showing ${validAttendance.length} attendance record${validAttendance.length === 1 ? '' : 's'}
+      </div>
     </div>
     <div style="overflow-x:auto;">
       <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
@@ -161,11 +173,19 @@ function renderAttendanceTab(employees, attendance) {
             <th style="padding:12px 16px; font-weight:500;">Check Out</th>
             <th style="padding:12px 16px; font-weight:500;">Hours Logged</th>
             <th style="padding:12px 16px; font-weight:500;">Status</th>
+            <th style="padding:12px 16px; font-weight:500;">WiFi / Network</th>
             <th style="padding:12px 16px; font-weight:500; text-align:right;">Action</th>
           </tr>
         </thead>
         <tbody>
-          ${validAttendance.map(a => {
+          ${!validAttendance.length ? `
+            <tr>
+              <td colspan="8" style="text-align:center; padding:36px; color:#999;">
+                <i class="ti ti-calendar" style="font-size:32px; display:block; margin-bottom:8px; opacity:0.3;"></i>
+                No attendance logs found yet. Tap "Punch Check-In" or "Log Manual Attendance" to add a log.
+              </td>
+            </tr>
+          ` : validAttendance.map(a => {
             const emp = employees.find(e => e.id === a.employee_id);
             const inTime = a.check_in ? new Date(a.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—';
             const outTime = a.check_out ? new Date(a.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—';
@@ -183,6 +203,11 @@ function renderAttendanceTab(employees, attendance) {
             if (a.status === 'Half-day') badgeClass = 'badge-blue';
             if (a.status === 'Absent') badgeClass = 'badge-red';
 
+            const isWifiVerified = a.notes && a.notes.toLowerCase().includes('wifi');
+            const wifiBadge = isWifiVerified
+              ? `<span class="badge badge-green" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;" title="${a.notes || 'Verified on salon WiFi router'}"><i class="ti ti-wifi"></i> WiFi Verified</span>`
+              : `<span class="badge badge-gray" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;" title="${a.notes || 'Manual Entry'}"><i class="ti ti-pencil"></i> Manual Entry</span>`;
+
             return `
             <tr style="border-bottom:0.5px solid #f5f5f5;">
               <td style="padding:12px 16px; font-weight:500;">${a.date}</td>
@@ -191,6 +216,7 @@ function renderAttendanceTab(employees, attendance) {
               <td style="padding:12px 16px; color:#555;">${outTime}</td>
               <td style="padding:12px 16px; color:#666; font-weight:500;">${hoursStr}</td>
               <td style="padding:12px 16px;"><span class="badge ${badgeClass}">${a.status}</span></td>
+              <td style="padding:12px 16px;">${wifiBadge}</td>
               <td style="padding:12px 16px; text-align:right;">
                 <button class="btn btn-danger btn-icon" onclick="window.handleDeleteAttendance('${a.id}')" style="width:28px; height:28px; padding:0; color:#dc2626;" title="Delete log">
                   <i class="ti ti-trash" style="font-size:12px;"></i>
@@ -670,12 +696,19 @@ window.openManualAttendanceModal = function() {
         <option value="Absent">Absent</option>
       </select>
     </div>
+    <div style="margin-top:10px; padding:10px 12px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.25); border-radius:8px;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; margin:0; font-weight:600; color:#15803d;">
+        <input type="checkbox" id="ma-wifi-check" checked style="width:16px; height:16px; accent-color:#15803d;">
+        <span><i class="ti ti-wifi"></i> Verified via Salon WiFi Router</span>
+      </label>
+    </div>
   `, async () => {
     const employee_id = document.getElementById('ma-emp-id').value;
     const date = document.getElementById('ma-date').value || today;
     const inTime = document.getElementById('ma-checkin').value;
     const outTime = document.getElementById('ma-checkout').value;
     const status = document.getElementById('ma-status').value;
+    const isWifi = document.getElementById('ma-wifi-check')?.checked ?? true;
 
     const check_in = inTime ? `${date}T${inTime}:00` : null;
     const check_out = outTime ? `${date}T${outTime}:00` : null;
@@ -685,7 +718,8 @@ window.openManualAttendanceModal = function() {
       date,
       check_in,
       check_out,
-      status
+      status,
+      notes: isWifi ? 'WiFi Verified (Manual / Salon Router)' : 'Manual Attendance Entry'
     });
 
     if (result) {

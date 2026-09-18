@@ -23,29 +23,30 @@ export function getYesterdayStr() {
   return d.toISOString().split('T')[0];
 }
 
-export function calculateModuleStreak(dataArray = [], dateField = 'date') {
+export function calculateModuleStreak(dataArray = [], dateField = 'date', selectedMonth = 'all') {
   const activeDateSet = new Set();
+  const dateCounts = {};
   dataArray.forEach(item => {
-    const raw = item[dateField] || item.created_at || item.scan_date || item.purchase_date;
+    const raw = item[dateField] || item.last_visit || item.date || item.created_at || item.scan_date || item.purchase_date;
     const norm = normalizeDate(raw);
-    if (norm) activeDateSet.add(norm);
+    if (norm) {
+      activeDateSet.add(norm);
+      dateCounts[norm] = (dateCounts[norm] || 0) + 1;
+    }
   });
 
+  const now = new Date();
   const todayStr = getTodayStr();
   const yesterdayStr = getYesterdayStr();
-
   const todayRecorded = activeDateSet.has(todayStr);
   const yesterdayRecorded = activeDateSet.has(yesterdayStr);
 
-  // Compute current streak
+  // Compute current streak overall
   let currentStreak = 0;
   let startDate = new Date();
-  
-  // If today is not recorded yet, start checking from yesterday
   if (!todayRecorded) {
     startDate.setDate(startDate.getDate() - 1);
   }
-
   while (true) {
     const checkStr = startDate.toISOString().split('T')[0];
     if (activeDateSet.has(checkStr)) {
@@ -82,25 +83,104 @@ export function calculateModuleStreak(dataArray = [], dateField = 'date') {
 
   const bestStreak = Math.max(currentStreak, maxStreak);
 
-  // Calculate 7-day breakdown (last 7 days including today)
-  const last7Days = [];
+  // Determine Target Month & Year
+  let targetYear = now.getFullYear();
+  let targetMonthIdx = now.getMonth(); // 0-11
+  const isAllMonths = (selectedMonth === 'all');
+
+  if (!isAllMonths && selectedMonth !== undefined && selectedMonth !== null) {
+    targetMonthIdx = parseInt(selectedMonth, 10);
+    // If dates in dataset have a different year for this month, match it
+    for (const dStr of activeDateSet) {
+      const parts = dStr.split('-');
+      if (parts.length >= 2 && (parseInt(parts[1], 10) - 1) === targetMonthIdx) {
+        targetYear = parseInt(parts[0], 10);
+        break;
+      }
+    }
+  } else {
+    // When "all months", use current month or latest month with data
+    if (activeDateSet.size > 0) {
+      const curMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const hasCurrentData = sortedDates.some(d => d.startsWith(curMonthPrefix));
+      if (!hasCurrentData) {
+        const latest = sortedDates[sortedDates.length - 1];
+        const parts = latest.split('-');
+        if (parts.length >= 2) {
+          targetYear = parseInt(parts[0], 10);
+          targetMonthIdx = parseInt(parts[1], 10) - 1;
+        }
+      }
+    }
+  }
+
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const targetMonthName = MONTH_NAMES[targetMonthIdx] || 'Month';
+  const targetMonthPrefix = `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}`;
+
+  // Calculate day-by-day for the entire target month
+  const daysInMonth = new Date(targetYear, targetMonthIdx + 1, 0).getDate();
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  
+
+  const monthDays = [];
+  let monthActiveDaysCount = 0;
+  let monthTotalEntries = 0;
+  let monthRunningStreak = 0;
+  let monthBestStreak = 0;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(targetYear, targetMonthIdx, day);
+    const dStr = `${targetMonthPrefix}-${String(day).padStart(2, '0')}`;
+    const dayName = daysOfWeek[d.getDay()];
+    const hasData = activeDateSet.has(dStr);
+    const count = dateCounts[dStr] || 0;
+    const isToday = (dStr === todayStr);
+    const isFuture = !isToday && (d > now);
+
+    if (hasData) {
+      monthActiveDaysCount++;
+      monthTotalEntries += count;
+      monthRunningStreak++;
+      if (monthRunningStreak > monthBestStreak) monthBestStreak = monthRunningStreak;
+    } else if (!isFuture) {
+      monthRunningStreak = 0;
+    }
+
+    monthDays.push({
+      dateStr: dStr,
+      dayNum: day,
+      dayName,
+      hasData,
+      count,
+      isToday,
+      isFuture
+    });
+  }
+
+  // Elapsed days in target month
+  const isCurrentMonth = (targetYear === now.getFullYear() && targetMonthIdx === now.getMonth());
+  const elapsedDaysInMonth = isCurrentMonth 
+    ? now.getDate() 
+    : (new Date(targetYear, targetMonthIdx, 1) > now ? 0 : daysInMonth);
+  const consistencyRate = elapsedDaysInMonth > 0 
+    ? Math.round((monthActiveDaysCount / elapsedDaysInMonth) * 100) 
+    : 0;
+
+  // Last 7 days breakdown for quick reference
+  const last7Days = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dStr = d.toISOString().split('T')[0];
-    const isToday = (dStr === todayStr);
-    const dayName = daysOfWeek[d.getDay()];
-    const dateNum = d.getDate();
-    const hasData = activeDateSet.has(dStr);
-
     last7Days.push({
       dateStr: dStr,
-      dayName,
-      dateNum,
-      isToday,
-      hasData
+      dayName: daysOfWeek[d.getDay()],
+      dateNum: d.getDate(),
+      isToday: (dStr === todayStr),
+      hasData: activeDateSet.has(dStr)
     });
   }
 
@@ -112,6 +192,17 @@ export function calculateModuleStreak(dataArray = [], dateField = 'date') {
     streakBroken,
     totalEntries: dataArray.length,
     activeDaysCount: activeDateSet.size,
+    targetMonthName,
+    targetYear,
+    isAllMonths,
+    isCurrentMonth,
+    monthActiveDaysCount,
+    monthTotalEntries,
+    monthBestStreak,
+    elapsedDaysInMonth,
+    daysInMonth,
+    consistencyRate,
+    monthDays,
     last7Days
   };
 }
@@ -217,45 +308,119 @@ export function calculateMonthlyGamification(allModulesData = {}) {
 }
 
 export function renderModuleStreakWidget(moduleTitle, streakData, themeColor = '#7c3aed') {
-  const { currentStreak, bestStreak, todayRecorded, streakBroken, last7Days } = streakData;
+  const {
+    currentStreak = 0,
+    bestStreak = 0,
+    todayRecorded = false,
+    streakBroken = false,
+    targetMonthName = 'Month',
+    targetYear = new Date().getFullYear(),
+    isAllMonths = true,
+    isCurrentMonth = true,
+    monthActiveDaysCount = 0,
+    monthTotalEntries = 0,
+    monthBestStreak = 0,
+    elapsedDaysInMonth = 30,
+    daysInMonth = 30,
+    consistencyRate = 0,
+    monthDays = [],
+    last7Days = []
+  } = streakData || {};
 
-  const statusText = todayRecorded 
-    ? `<span style="color:#16a34a; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-circle-check-filled"></i> Today Logged! Streak Safe</span>`
-    : (streakBroken 
-        ? `<span style="color:#dc2626; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-alert-circle"></i> Streak Missed — Log entry to start new streak</span>`
-        : `<span style="color:#d97706; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-clock"></i> Streak at Risk! Add entry today</span>`);
+  const statusText = isCurrentMonth 
+    ? (todayRecorded 
+        ? `<span style="color:#16a34a; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-circle-check-filled"></i> Today Logged! Streak Safe</span>`
+        : (streakBroken 
+            ? `<span style="color:#dc2626; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-alert-circle"></i> Streak Missed — Log entry today to restart</span>`
+            : `<span style="color:#d97706; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-clock"></i> Streak at Risk! Add entry today</span>`))
+    : `<span style="color:#4b5563; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-calendar-event"></i> Month View: ${targetMonthName} ${targetYear}</span>`;
 
+  // Auto-scroll to today or latest day
+  setTimeout(() => {
+    const todayEl = document.querySelector('#module-month-days-strip [data-today="true"]');
+    if (todayEl) {
+      todayEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, 120);
   return `
-  <div class="streak-widget-card" style="background:#ffffff; border:1px solid #e5e7eb; border-radius:14px; padding:16px 20px; margin-bottom:20px; box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+  <div class="streak-widget-card" style="background:linear-gradient(145deg, #1c1308, #130c04); border:1px solid rgba(245,200,66,0.25); border-radius:14px; padding:16px 20px; margin-bottom:20px; box-shadow:0 4px 24px rgba(0,0,0,0.35);">
+    <!-- Top Header: Streak Stats & Month Consistency -->
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
       <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,#fff7ed,#ffedd5); border:1px solid #fed7aa; display:flex; align-items:center; justify-content:center; font-size:22px; color:#ea580c; box-shadow:0 2px 8px rgba(234,88,12,0.15);">
+        <div style="width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,rgba(245,200,66,0.18),rgba(217,119,6,0.1)); border:1px solid rgba(245,200,66,0.3); display:flex; align-items:center; justify-content:center; font-size:22px; color:#f5c842; box-shadow:0 2px 10px rgba(245,200,66,0.15);">
           🔥
         </div>
         <div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:18px; font-weight:700; color:#1f2937;">${currentStreak} Day${currentStreak === 1 ? '' : 's'} Streak</span>
-            <span class="badge" style="background:#fff7ed; color:#ea580c; border:1px solid #ffedd5; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="font-size:17px; font-weight:700; color:#fffbeb;">
+              ${isCurrentMonth ? `${currentStreak} Day${currentStreak === 1 ? '' : 's'} Streak` : `${targetMonthName} ${targetYear}`}
+            </span>
+            <span class="badge" style="background:rgba(245,200,66,0.12); color:#fde68a; border:1px solid rgba(245,200,66,0.28); font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px;">
               🏆 Best: ${bestStreak} Days
             </span>
+            ${monthBestStreak > 0 ? `
+              <span class="badge" style="background:rgba(16,185,129,0.12); color:#6ee7b7; border:1px solid rgba(16,185,129,0.25); font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px;">
+                ⭐ ${targetMonthName} Best: ${monthBestStreak} Days
+              </span>
+            ` : ''}
+            ${isAllMonths ? `
+              <span class="badge" style="background:rgba(59,130,246,0.12); color:#93c5fd; border:1px solid rgba(59,130,246,0.25); font-size:11px; font-weight:500; padding:2px 8px; border-radius:20px;">
+                📅 All Months (Showing ${targetMonthName})
+              </span>
+            ` : ''}
           </div>
-          <div style="font-size:12px; margin-top:2px;">${statusText}</div>
+          <div style="font-size:12px; margin-top:2px; color:#94a3b8;">${statusText}</div>
         </div>
       </div>
-      <div style="font-size:11.5px; color:#6b7280; background:#f9fafb; padding:6px 12px; border-radius:8px; border:1px solid #f3f4f6;">
-        Daily Goal: Log at least 1 ${moduleTitle.toLowerCase()} record daily
+
+      <!-- Right summary metrics -->
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <div style="font-size:11.5px; color:#e2e8f0; background:#221609; padding:6px 12px; border-radius:8px; border:1px solid rgba(245,200,66,0.2); display:flex; align-items:center; gap:6px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:#10b981; display:inline-block;"></span>
+          <strong>${monthActiveDaysCount}</strong> / ${elapsedDaysInMonth || daysInMonth} Active Days (${consistencyRate}%)
+        </div>
+        <div style="font-size:11.5px; color:#e2e8f0; background:#221609; padding:6px 12px; border-radius:8px; border:1px solid rgba(245,200,66,0.2);">
+          <strong>${monthTotalEntries}</strong> entries in ${targetMonthName}
+        </div>
       </div>
     </div>
 
-    <!-- 7 Day Tracker Pills -->
-    <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:8px;">
-      ${last7Days.map(day => `
-        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:8px 4px; border-radius:10px; background:${day.isToday ? '#fefce8' : (day.hasData ? '#f0fdf4' : '#f9fafb')}; border:${day.isToday ? '1.5px solid #f59e0b' : (day.hasData ? '1px solid #bbf7d0' : '1px solid #e5e7eb')}; transition:all 0.2s;">
-          <span style="font-size:10px; font-weight:600; color:${day.isToday ? '#b45309' : '#6b7280'}; text-transform:uppercase;">${day.dayName}</span>
-          <span style="font-size:11px; font-weight:700; color:#1f2937; margin:2px 0;">${day.dateNum}</span>
-          <span style="font-size:14px;">${day.hasData ? '🔥' : '❌'}</span>
-        </div>
-      `).join('')}
+    <!-- Day-by-Day Month Tracker Header -->
+    <div style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+      <div style="font-size:11px; font-weight:600; color:#cbd5e1; text-transform:uppercase; letter-spacing:0.05em; display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-calendar"></i> ${targetMonthName} ${targetYear} — Daily Entries Calendar (${daysInMonth} Days)
+      </div>
+      <div style="font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:4px;">
+        <span>Swipe / Scroll &rarr;</span>
+      </div>
+    </div>
+
+    <!-- Scrollable Month Days Strip -->
+    <div class="scrollbar-hide" style="display:flex; gap:6px; overflow-x:auto; padding:4px 2px 8px; -webkit-overflow-scrolling:touch;" id="module-month-days-strip">
+      ${(monthDays && monthDays.length ? monthDays : last7Days).map(day => {
+        const isToday = !!day.isToday;
+        const hasData = !!day.hasData;
+        const isFuture = !!day.isFuture;
+        const bg = isToday 
+          ? (hasData ? '#2e1c08' : '#221508') 
+          : (hasData ? 'rgba(16,185,129,0.12)' : (isFuture ? '#170f06' : '#1a1207'));
+        const border = isToday 
+          ? '2px solid #f5c842' 
+          : (hasData ? '1px solid rgba(16,185,129,0.3)' : (isFuture ? '1px dashed rgba(245,200,66,0.12)' : '1px solid rgba(245,200,66,0.15)'));
+        const dayColor = isToday ? '#fde68a' : (hasData ? '#6ee7b7' : '#94a3b8');
+        const numColor = isToday ? '#fffbeb' : (hasData ? '#a7f3d0' : (isFuture ? '#64748b' : '#cbd5e1'));
+        const shadow = isToday ? '0 2px 8px rgba(245,200,66,0.25)' : (hasData ? '0 1px 4px rgba(16,185,129,0.2)' : 'none');
+
+        return `
+          <div data-today="${isToday ? 'true' : 'false'}" style="flex:0 0 46px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:7px 2px; border-radius:10px; background:${bg}; border:${border}; box-shadow:${shadow}; transition:all 0.15s;" title="${day.dateStr || ''} (${day.dayName}): ${hasData ? `${day.count || 1} ${moduleTitle.toLowerCase()} record(s)` : (isFuture ? 'Upcoming day' : 'No entry')}">
+            <span style="font-size:9.5px; font-weight:600; color:${dayColor}; text-transform:uppercase;">${day.dayName}</span>
+            <span style="font-size:12px; font-weight:700; color:${numColor}; margin:2px 0;">${day.dayNum || day.dateNum}</span>
+            <span style="font-size:13px; line-height:1;">${hasData ? '🔥' : (isFuture ? '·' : '❌')}</span>
+            ${day.count > 1 ? `<span style="font-size:9px; font-weight:700; color:#16a34a; background:rgba(22,163,74,0.15); border-radius:8px; padding:0 4px; margin-top:2px; line-height:1.3;">${day.count}</span>` : ''}
+            ${isToday ? `<span style="font-size:8px; font-weight:800; color:#f5c842; text-transform:uppercase; margin-top:2px;">Today</span>` : ''}
+          </div>
+        `;
+      }).join('')}
     </div>
   </div>`;
 }

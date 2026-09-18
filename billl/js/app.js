@@ -14,6 +14,117 @@ import { renderJewels } from './pages/jewels.js';
 import { renderEmployees } from './pages/employees.js';
 import { renderFinance, initFinanceCharts } from './pages/finance.js';
 
+// Global Chart.js luxury dark / light theme configuration
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.color = '#cbd5e1';
+  Chart.defaults.borderColor = 'rgba(245, 200, 66, 0.12)';
+  if (Chart.defaults.plugins && Chart.defaults.plugins.tooltip) {
+    Chart.defaults.plugins.tooltip.backgroundColor = '#1c1308';
+    Chart.defaults.plugins.tooltip.titleColor = '#f5c842';
+    Chart.defaults.plugins.tooltip.bodyColor = '#f8fafc';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(245, 200, 66, 0.3)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+  }
+}
+
+// ─────────────────────────────────────────────
+//  THEME MANAGEMENT (Luxury Dark vs Clean White)
+// ─────────────────────────────────────────────
+
+export function initTheme() {
+  const savedTheme = localStorage.getItem('theme') || 'dark';
+  applyTheme(savedTheme, false);
+}
+
+export function applyTheme(theme, showNotice = false) {
+  const isLight = theme === 'light';
+  if (isLight) {
+    document.body.classList.remove('theme-dark');
+    document.body.classList.add('theme-light');
+    document.documentElement.classList.remove('theme-dark');
+    document.documentElement.classList.add('theme-light');
+  } else {
+    document.body.classList.remove('theme-light');
+    document.body.classList.add('theme-dark');
+    document.documentElement.classList.remove('theme-light');
+    document.documentElement.classList.add('theme-dark');
+  }
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  state.theme = isLight ? 'light' : 'dark';
+
+  // Update meta theme-color
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) {
+    metaTheme.setAttribute('content', isLight ? '#faf9f7' : '#0d0904');
+  }
+
+  // Update Chart.js defaults
+  if (typeof Chart !== 'undefined') {
+    Chart.defaults.color = isLight ? '#475569' : '#cbd5e1';
+    Chart.defaults.borderColor = isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(245, 200, 66, 0.12)';
+    if (Chart.defaults.plugins && Chart.defaults.plugins.tooltip) {
+      Chart.defaults.plugins.tooltip.backgroundColor = isLight ? '#ffffff' : '#1c1308';
+      Chart.defaults.plugins.tooltip.titleColor = isLight ? '#b45309' : '#f5c842';
+      Chart.defaults.plugins.tooltip.bodyColor = isLight ? '#1e293b' : '#f8fafc';
+      Chart.defaults.plugins.tooltip.borderColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(245, 200, 66, 0.3)';
+      Chart.defaults.plugins.tooltip.borderWidth = 1;
+    }
+  }
+
+  updateThemeButtonsUI(isLight);
+
+  if (showNotice && typeof window.showToast === 'function') {
+    window.showToast(isLight ? 'Switched to White Theme ☀️' : 'Switched to Dark Theme 🌙', 'info');
+  }
+}
+
+export function toggleTheme() {
+  const currentTheme = localStorage.getItem('theme') || 'dark';
+  const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+  applyTheme(newTheme, true);
+
+  // If currently on a chart page, re-render to apply updated chart theme
+  if (['dashboard', 'analytics', 'finance'].includes(state.currentPage)) {
+    render();
+  }
+}
+
+export function updateThemeButtonsUI(isLight) {
+  // Floating quick button
+  const quickBtn = document.getElementById('theme-quick-btn');
+  const quickIcon = document.getElementById('theme-quick-icon');
+  const quickText = document.getElementById('theme-quick-text');
+  if (quickBtn) {
+    if (isLight) {
+      if (quickIcon) quickIcon.className = 'ti ti-moon';
+      if (quickText) quickText.textContent = 'Dark Theme';
+      quickBtn.setAttribute('title', 'Switch to Dark Theme');
+    } else {
+      if (quickIcon) quickIcon.className = 'ti ti-sun';
+      if (quickText) quickText.textContent = 'White Theme';
+      quickBtn.setAttribute('title', 'Switch to White Theme');
+    }
+  }
+
+  // Sidebar footer button
+  const sidebarBtn = document.getElementById('sidebar-theme-toggle-btn');
+  const sidebarIcon = document.getElementById('sidebar-theme-icon');
+  const sidebarText = document.getElementById('sidebar-theme-text');
+  const sidebarPill = document.getElementById('sidebar-theme-pill');
+  if (sidebarBtn) {
+    if (sidebarIcon) {
+      sidebarIcon.className = isLight ? 'ti ti-sun' : 'ti ti-moon';
+      sidebarIcon.style.color = isLight ? '#d97706' : '#f5c842';
+    }
+    if (sidebarText) {
+      sidebarText.textContent = isLight ? 'White Theme' : 'Dark Theme';
+    }
+    if (sidebarPill) {
+      sidebarPill.textContent = isLight ? '☀️ Light' : '🌙 Dark';
+    }
+  }
+}
+
 export function toggleSidebar() {
   const app = document.getElementById('app');
   if (!app) {
@@ -69,6 +180,7 @@ export function showPage(page) {
     window._eventMonthFilterExpanded = false;
     window._eventSearchFieldExpanded = false;
     window._eventStatusFilter = 'all';
+    window._eventActiveTab = 'history';
   }
   if (page === 'students') {
     window._studentSearchQuery = '';
@@ -165,19 +277,26 @@ export async function render() {
   }
 }
 
-// Bind layout functions to window for inline HTML onclick attributes
+// Bind layout & theme functions to window for inline HTML onclick attributes
 window.toggleSidebar = toggleSidebar;
 window.toggleMobileSidebar = toggleMobileSidebar;
 window.showPage = showPage;
 window.render = render;
+window.toggleTheme = toggleTheme;
+window.applyTheme = applyTheme;
 
 // Sidebar "Switch to Employee" button
 window.openSwitchRoleModal = function() {
   openSwitchModal('employee');
 };
 
+// Immediately initialize theme
+initTheme();
+
 // Bootstrap application on load
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+
   if (localStorage.getItem('sidebar-collapsed') === 'true') {
     const app = document.getElementById('app');
     if (app) app.classList.add('sidebar-collapsed');

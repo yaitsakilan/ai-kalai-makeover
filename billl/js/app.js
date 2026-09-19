@@ -310,3 +310,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   render();
 });
+
+// ─────────────────────────────────────────────
+// 📅 UNIVERSAL DATE PICKER HANDLER
+// Automatically triggers the native calendar picker popup whenever
+// ANY date input anywhere across the website is clicked or tapped.
+// Uses capture phase (true) so it works even inside modals with stopPropagation.
+// ─────────────────────────────────────────────
+document.addEventListener('click', (e) => {
+  const dateInput = e.target && e.target.closest ? e.target.closest('input[type="date"]') : (e.target && e.target.matches && e.target.matches('input[type="date"]') ? e.target : null);
+  if (dateInput && typeof dateInput.showPicker === 'function') {
+    try {
+      dateInput.showPicker();
+    } catch (err) {
+      // Ignored if already open or not supported
+    }
+  }
+}, true);
+

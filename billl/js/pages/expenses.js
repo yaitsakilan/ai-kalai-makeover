@@ -262,7 +262,7 @@ export function showAddExpenseModal() {
       </div>
       <div class="form-group">
         <label class="form-label">Date</label>
-        <input class="form-input" id="m-exp-date" type="date" value="${new Date().toISOString().split('T')[0]}">
+        <input class="form-input" id="m-exp-date" type="date" value="${new Date().toISOString().split('T')[0]}" onclick="try{this.showPicker()}catch(e){}">
       </div>
     </div>
     <div class="form-group">
@@ -358,7 +358,7 @@ export function addBulkExpenseRow() {
       <input class="form-input" type="number" placeholder="Amount (₹)" style="padding:6px 8px; font-size:12px; height:32px; text-align:right;" name="amount" oninput="window.updateBulkExpenseTotal()">
     </div>
     <div>
-      <input class="form-input" type="date" value="${today}" style="padding:6px 8px; font-size:12px; height:32px;" name="date">
+      <input class="form-input" type="date" value="${today}" style="padding:6px 8px; font-size:12px; height:32px;" name="date" onclick="try{this.showPicker()}catch(e){}">
     </div>
     <div>
       <input class="form-input" placeholder="Note (e.g. shampoo)" style="padding:6px 8px; font-size:12px; height:32px;" name="note">
@@ -560,7 +560,7 @@ export function openProductExpenseForm() {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
               <label class="form-label">Expense Date</label>
-              <input class="form-input" id="pe-date" type="date" value="${today}">
+              <input class="form-input" id="pe-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
             </div>
             <div class="form-group">
               <label class="form-label">Shop Name</label>

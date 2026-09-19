@@ -268,7 +268,7 @@ export function openAddJewelModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Purchase Date</label>
-      <input class="form-input" id="mj-date" type="date" value="${today}">
+      <input class="form-input" id="mj-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
     </div>
     <div class="form-group">
       <label class="form-label">Description / Notes</label>
@@ -336,11 +336,11 @@ export function openRentJewelModal(jewelId) {
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
       <div class="form-group">
         <label class="form-label">Rental Date</label>
-        <input class="form-input" id="mr-rent-date" type="date" value="${today}">
+        <input class="form-input" id="mr-rent-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
       </div>
       <div class="form-group">
         <label class="form-label">Est. Return Date</label>
-        <input class="form-input" id="mr-return-date" type="date" value="${today}">
+        <input class="form-input" id="mr-return-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
       </div>
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
@@ -428,7 +428,7 @@ export async function openReturnJewelModal(jewelId) {
     </div>
     <div class="form-group">
       <label class="form-label">Return Date</label>
-      <input class="form-input" id="mrt-date" type="date" value="${today}">
+      <input class="form-input" id="mrt-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
     </div>
     <div class="form-group" style="display:flex; align-items:center; gap:6px; margin-top:14px;">
       <input type="checkbox" id="mrt-deposit-returned" checked style="width:16px; height:16px; cursor:pointer;">

@@ -241,7 +241,7 @@ export async function openRecordPaymentModal(studentId) {
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
       <div class="form-group">
         <label class="form-label">Payment Date</label>
-        <input class="form-input" id="m-pay-date" type="date" value="${today}">
+        <input class="form-input" id="m-pay-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
       </div>
       <div class="form-group">
         <label class="form-label">Method</label>

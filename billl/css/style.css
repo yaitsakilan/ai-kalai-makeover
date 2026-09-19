@@ -101,6 +101,11 @@
 .form-label{font-size:12px;font-weight:500;color:#555;margin-bottom:5px;display:block}
 .form-input{width:100%;border:0.5px solid #ddd;border-radius:9px;padding:9px 12px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;color:#1a1a1a;background:#fff}
 .form-input:focus{border-color:#f5c842;box-shadow:0 0 0 2px rgba(245,200,66,0.12)}
+input[type="date"]{cursor:pointer !important;font-family:'DM Sans',sans-serif !important;position:relative;min-height:38px}
+input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer !important;display:inline-block !important;opacity:0.85 !important;font-size:16px !important;padding:4px 6px !important;border-radius:6px !important;background-color:transparent !important;transition:all 0.15s ease !important}
+input[type="date"]::-webkit-calendar-picker-indicator:hover{opacity:1 !important;transform:scale(1.15) !important;background-color:rgba(245,200,66,0.15) !important}
+body.theme-light input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(35%) sepia(85%) saturate(850%) hue-rotate(20deg) !important}
+body.theme-dark input[type="date"]::-webkit-calendar-picker-indicator,body:not(.theme-light) input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(1.2) drop-shadow(0 0 2px rgba(245,200,66,0.6)) !important}
 .form-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
 .reminder-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:0.5px solid #f5f5f5}
 .reminder-item:last-child{border-bottom:none}
@@ -186,6 +191,11 @@
 .chip.selected:hover{background:#e8a020;border-color:#e8a020}
 .chip-other-input{margin-top:8px;display:none}
 .chip-other-input.show{display:block}
+.chip-add-custom{border-style:dashed;border-color:#d97706;color:#b45309;background:#fffdf5;font-weight:600}
+.chip-add-custom:hover{background:#fef3c7;border-color:#b45309;color:#92400e}
+.chip-add-custom.selected{background:#f5c842;border-style:solid;border-color:#f5c842;color:#1a1005}
+.chip-del{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;margin-left:5px;font-size:12px;line-height:1;opacity:0.6;transition:all 0.15s ease}
+.chip-del:hover{opacity:1;background:rgba(0,0,0,0.12);color:#dc2626}
 
 /* ——— Star Rating ——— */
 .star-rating{display:flex;gap:4px;margin-top:6px}
@@ -1409,6 +1419,18 @@ input[type=number] {
   border: 1.5px solid rgba(239, 68, 68, 0.12);
   animation: confirmScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+body.theme-dark .confirm-modal, body:not(.theme-light) .confirm-modal {
+  background: #191208 !important;
+  border: 1px solid rgba(245, 200, 66, 0.25) !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6) !important;
+}
+body.theme-dark .confirm-modal h3, body:not(.theme-light) .confirm-modal h3 {
+  color: #f8fafc !important;
+}
+body.theme-dark .confirm-modal p, body:not(.theme-light) .confirm-modal p {
+  color: #cbd5e1 !important;
+}
 @keyframes confirmFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -2063,7 +2085,52 @@ body.theme-light .streak-widget-card {
   box-shadow: 0 2px 10px rgba(0,0,0,0.03) !important;
 }
 body.theme-light .streak-widget-card span[style*="color:#fffbeb"] { color: #1f2937 !important; }
+body.theme-light .streak-widget-card div[style*="color:#94a3b8"] { color: #64748b !important; }
+body.theme-light .streak-widget-card .missed-pill-danger { color: #dc2626 !important; background: #fee2e2 !important; border-color: #fecaca !important; }
+body.theme-light .streak-widget-card .missed-pill-success { color: #15803d !important; background: #dcfce7 !important; border-color: #bbf7d0 !important; }
 body.theme-light .streak-widget-card div[style*="background:#221609"] { background: #f9fafb !important; border-color: #e5e7eb !important; color: #374151 !important; }
+
+/* Streak Widget Day Boxes */
+body.theme-dark .streak-widget-card [data-day-box], body:not(.theme-light) .streak-widget-card [data-day-box] {
+  background: #191208 !important;
+  border-color: rgba(245, 200, 66, 0.16) !important;
+}
+body.theme-dark .streak-widget-card [data-day-box][data-has-data="true"], body:not(.theme-light) .streak-widget-card [data-day-box][data-has-data="true"] {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+body.theme-dark .streak-widget-card [data-day-box][data-missed="true"], body:not(.theme-light) .streak-widget-card [data-day-box][data-missed="true"] {
+  background: rgba(239, 68, 68, 0.08) !important;
+  border-color: rgba(239, 68, 68, 0.22) !important;
+}
+body.theme-dark .streak-widget-card [data-day-box][data-today="true"], body:not(.theme-light) .streak-widget-card [data-day-box][data-today="true"] {
+  border: 2px solid #f5c842 !important;
+  box-shadow: 0 2px 10px rgba(245, 200, 66, 0.25) !important;
+}
+
+body.theme-light .streak-widget-card [data-day-box] {
+  background: #f9fafb !important;
+  border-color: #e5e7eb !important;
+}
+body.theme-light .streak-widget-card [data-day-box][data-has-data="true"] {
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+}
+body.theme-light .streak-widget-card [data-day-box][data-missed="true"] {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+}
+body.theme-light .streak-widget-card [data-day-box][data-today="true"] {
+  border: 2px solid #f59e0b !important;
+  background: #fefce8 !important;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2) !important;
+}
+body.theme-light .streak-widget-card .day-name-label { color: #64748b !important; }
+body.theme-light .streak-widget-card .day-num-label { color: #1e293b !important; }
+body.theme-light .streak-widget-card [data-today="true"] .day-name-label { color: #b45309 !important; }
+body.theme-light .streak-widget-card [data-today="true"] .day-num-label { color: #92400e !important; }
+body.theme-light .streak-widget-card [data-has-data="true"] .day-name-label { color: #166534 !important; }
+body.theme-light .streak-widget-card [data-has-data="true"] .day-num-label { color: #14532d !important; }
 
 body.theme-light .muhurtham-widget-card {
   background: linear-gradient(145deg, #ffffff, #fffdf8) !important;

@@ -255,7 +255,7 @@ export function renderOcrResult() {
       </div>
       <div>
         <div class="form-label">Bill Date</div>
-        <input class="form-input" id="ocr-date" type="date" value="${displayDate}" oninput="window._lastOcrResult.date = this.value">
+        <input class="form-input" id="ocr-date" type="date" value="${displayDate}" oninput="window._lastOcrResult.date = this.value" onclick="try{this.showPicker()}catch(e){}">
         ${dateWarning}
       </div>
     </div>

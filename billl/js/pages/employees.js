@@ -675,7 +675,7 @@ window.openManualAttendanceModal = function() {
     </div>
     <div class="form-group">
       <label class="form-label">Date</label>
-      <input type="date" class="form-input" id="ma-date" value="${today}">
+      <input type="date" class="form-input" id="ma-date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
       <div class="form-group">
@@ -1492,7 +1492,7 @@ window.toggleEditProfile = function(empId) {
 
       <div class="form-group">
         <label class="form-label" style="font-weight:600;">Date of Birth</label>
-        <input type="date" class="form-input" id="edit-emp-dob" value="${emp.dob || ''}">
+        <input type="date" class="form-input" id="edit-emp-dob" value="${emp.dob || ''}" onclick="try{this.showPicker()}catch(e){}">
       </div>
 
       <div class="form-group">

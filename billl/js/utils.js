@@ -98,8 +98,16 @@ export function getUniqueCustomersMap(customers) {
     const cleanName = c.name ? c.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
     const key = cleanPhone ? `phone:${cleanPhone}` : (cleanName.length > 2 ? `name:${cleanName}` : `id:${c.id || Math.random()}`);
 
-    const itemVisits = (c.visits && typeof c.visits === 'number' && c.visits > 0) ? c.visits : 1;
-    const itemSpend = c.total_spend !== undefined && c.total_spend > 0 ? (Number(c.total_spend) || 0) : (Number(c.amount) || 0);
+    let itemVisits = (c.visits && typeof c.visits === 'number' && c.visits > 0) ? c.visits : 1;
+    let itemSpend = c.total_spend !== undefined && c.total_spend > 0 ? (Number(c.total_spend) || 0) : (Number(c.amount) || 0);
+
+    if (Array.isArray(c.visit_history) && c.visit_history.length > 0) {
+      itemVisits = Math.max(itemVisits, c.visit_history.length);
+      const vSum = c.visit_history.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+      if (vSum > 0) {
+        itemSpend = Math.max(itemSpend, vSum);
+      }
+    }
 
     if (!map.has(key)) {
       map.set(key, {
@@ -183,9 +191,16 @@ export function sortCustomersList(customerList, sortOption = 'most_visited', ref
     } else if (sortOption === 'date_asc') {
       return String(dateA).localeCompare(String(dateB));
     } else if (sortOption === 'spend_desc') {
-      const spendA = a.total_spend || a.amount || 0;
-      const spendB = b.total_spend || b.amount || 0;
-      return spendB - spendA;
+      const listA = getCustomerVisits(a, refAllCustomers);
+      const sumA = listA.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+      const spendA = sumA > 0 ? sumA : (Number(a.total_spend) || Number(a.amount) || 0);
+
+      const listB = getCustomerVisits(b, refAllCustomers);
+      const sumB = listB.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+      const spendB = sumB > 0 ? sumB : (Number(b.total_spend) || Number(b.amount) || 0);
+
+      if (spendB !== spendA) return spendB - spendA;
+      return String(dateB).localeCompare(String(dateA));
     }
     return 0;
   });

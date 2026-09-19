@@ -122,9 +122,6 @@ export async function renderCustomers() {
         <button class="btn btn-outline btn-icon" onclick="window.toggleSearchField()" id="toggle-search-btn" style="${activeSearchBtnStyle}" title="Search Customers">
           <i class="ti ti-search" style="color:#d97706"></i>
         </button>
-        <button class="btn btn-outline" onclick="window.toggleMonthFilter()" id="toggle-filter-btn" style="${activeBtnStyle}">
-          <i class="ti ti-filter" style="color:#d97706"></i> Chips
-        </button>
       ` : ''}
       <button class="btn btn-gold" onclick="window.openShopCustomerForm()">
         <i class="ti ti-plus"></i> Add Customer
@@ -151,7 +148,7 @@ export async function renderCustomers() {
         <i class="ti ti-list"></i> All Customers (${filtered.length})
       </div>
       <div class="chip ${window._customerHistoryView === 'top_paid' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('top_paid')">
-        <i class="ti ti-crown"></i> Top Paid Clients (${filtered.length})
+        <i class="ti ti-crown"></i> Top Paid Clients (${uniqueMap.size})
       </div>
       <div class="chip ${window._customerHistoryView === 'repeat' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('repeat')">
         <i class="ti ti-refresh"></i> Repeat Customers (${repeatCount})
@@ -174,18 +171,6 @@ export async function renderCustomers() {
 
       <div class="card" id="search-card" style="margin-bottom:16px; display: ${window._searchFieldExpanded ? 'block' : 'none'};">
         <input class="form-input" placeholder="Search by name or phone..." id="customer-search" value="${window._searchQuery || ''}" oninput="window.filterCustomers(this.value)">
-      </div>
-
-      <div class="card" id="month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._monthFilterExpanded ? 'block' : 'none'};">
-        <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
-          <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter History by Month
-        </div>
-        <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
-          <div class="chip ${window._selectedMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth('all')" id="month-chip-all">All Months</div>
-          ${MONTHS.map((m, idx) => `
-            <div class="chip ${window._selectedMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterByMonth(${idx})" id="month-chip-${idx}">${m}</div>
-          `).join('')}
-        </div>
       </div>
 
       <div id="customer-list">
@@ -349,6 +334,8 @@ export function renderCustomerList(customers) {
     const visitsList = getCustomerVisits(c, window._cachedCustomers || customers);
     const displayVisitsCount = Math.max(effVisits, visitsList.length);
     const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
+    const visitsSum = visitsList.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+    const displaySpend = visitsSum > 0 ? visitsSum : (c.total_spend || c.amount || 0);
     return `
     <div class="card" style="margin-bottom:10px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer history & details">
       <div style="display:flex;align-items:center;gap:14px">
@@ -357,7 +344,7 @@ export function renderCustomerList(customers) {
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
             <span style="font-size:14px;font-weight:600">${cleanName}</span>
             ${empBadge}
-            ${displayVisitsCount >= 5 ? '<span class="badge badge-blue">⭐ Regular</span>' : ''}
+            ${displayVisitsCount >= 5 ? '<span class="badge badge-blue">⭐ Regular</span>' : (displayVisitsCount >= 3 ? '<span class="badge badge-amber">💖 Valued</span>' : '')}
             ${c.rating ? `<span style="color:#d97706;font-size:11px;margin-left:6px;letter-spacing:1px;" title="Owner rating: ${c.rating}/5">${'★'.repeat(c.rating)}${'☆'.repeat(5 - c.rating)}</span>` : ''}
             ${c.referred_by ? `<span class="badge badge-amber" title="Referred by: ${c.referred_by}">📢 Ref: ${c.referred_by}</span>` : ''}
           </div>
@@ -380,7 +367,7 @@ export function renderCustomerList(customers) {
           `}
         </div>
         <div style="text-align:right">
-          <div style="font-size:14px;font-weight:700;color:#d97706">₹${(c.total_spend || c.amount || 0).toLocaleString()}</div>
+          <div style="font-size:14px;font-weight:700;color:#d97706">₹${displaySpend.toLocaleString()}</div>
           <div style="font-size:11px;color:#bbb">${displayVisitsCount} visits</div>
         </div>
         ${cleanP ? `
@@ -532,13 +519,13 @@ export async function handleDeleteCustomerVisit(customerId, visitNum) {
 
   const targetVisit = visitsList.find(v => Number(v.visit_num) === Number(visitNum));
   const ordinalName = getOrdinalVisit(visitNum);
+  const svcsText = Array.isArray(targetVisit?.services) ? targetVisit.services.join(', ') : (targetVisit?.services || 'Service');
 
   const confirmed = await showConfirmDelete(
-    `Delete ${ordinalName}`,
-    `Are you sure you want to delete ${ordinalName} (${Array.isArray(targetVisit?.services) ? targetVisit.services.join(', ') : (targetVisit?.services || 'Service')})? Total spend and visit count will be updated automatically.`
+    `Delete ${ordinalName}?`,
+    `Are you sure you want to delete ${ordinalName} (${svcsText})? Total spend and visit count will be updated automatically.`
   );
   if (!confirmed) {
-    showCustomerDetailsModal(target.id);
     return;
   }
 
@@ -755,7 +742,7 @@ export function openShopCustomerForm() {
             </div>
             <div class="form-group">
               <label class="form-label">Date</label>
-              <input class="form-input" id="sf-date" type="date" value="${today}">
+              <input class="form-input" id="sf-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1.2fr 1.5fr;gap:12px;margin-bottom:14px;align-items:center;">
@@ -1320,7 +1307,7 @@ export function openClassesForm() {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
               <label class="form-label">Enrollment Date</label>
-              <input class="form-input" id="cf-date" type="date" value="${today}">
+              <input class="form-input" id="cf-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
             </div>
             <div class="form-group">
               <label class="form-label">Payment Method</label>
@@ -2125,9 +2112,22 @@ export function renderCustomerAnalyticsDashboard(customers, allCustomers = windo
         <div style="font-size:12px;color:#888;margin-bottom:12px">Highest spending & most frequent salon clients</div>
 
         <div style="display:flex;flex-direction:column;gap:8px">
-          ${customers.sort((a, b) => (b.total_spend || b.amount || 0) - (a.total_spend || a.amount || 0)).slice(0, 5).map((c, i) => {
+          ${customers.slice().sort((a, b) => {
+            const listA = getCustomerVisits(a, customers);
+            const sumA = listA.reduce((s, v) => s + (Number(v.amount) || 0), 0);
+            const spendA = sumA > 0 ? sumA : (a.total_spend || a.amount || 0);
+
+            const listB = getCustomerVisits(b, customers);
+            const sumB = listB.reduce((s, v) => s + (Number(v.amount) || 0), 0);
+            const spendB = sumB > 0 ? sumB : (b.total_spend || b.amount || 0);
+
+            return spendB - spendA;
+          }).slice(0, 5).map((c, i) => {
             const { cleanText } = formatEmpTag(c.name);
             const effVisits = getEffectiveVisits(c, customers);
+            const visitsList = getCustomerVisits(c, customers);
+            const visitsSum = visitsList.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+            const displaySpend = visitsSum > 0 ? visitsSum : (c.total_spend || c.amount || 0);
             return `
               <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border:1px solid #f0f0f0;border-radius:10px">
                 <div style="display:flex;align-items:center;gap:10px">
@@ -2138,7 +2138,7 @@ export function renderCustomerAnalyticsDashboard(customers, allCustomers = windo
                   </div>
                 </div>
                 <div style="text-align:right">
-                  <div style="font-size:13px;font-weight:700;color:#d97706">₹${(c.total_spend || 0).toLocaleString()}</div>
+                  <div style="font-size:13px;font-weight:700;color:#d97706">₹${displaySpend.toLocaleString()}</div>
                   <span class="badge badge-green" style="font-size:10px">VIP Client</span>
                 </div>
               </div>
@@ -2357,8 +2357,100 @@ window.filterByMonthSelect = function(val) {
 };
 
 // ─────────────────────────────────────────────
-// 📲 SERVICE-BASED WHATSAPP INVITE HANDLER
 // ─────────────────────────────────────────────
+// 📲 SERVICE-BASED WHATSAPP INVITE TRACKER & HANDLER
+// ─────────────────────────────────────────────
+
+export function getInviteSentInfo(customer) {
+  if (!customer) return null;
+  try {
+    const raw = localStorage.getItem('kalai_customer_invites');
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const cleanPhone = customer.phone ? validateAndCleanPhone(customer.phone) : null;
+    const cleanName = customer.name ? customer.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+
+    const entry = (cleanPhone && data[cleanPhone]) ||
+                  (customer.id && data[customer.id]) ||
+                  (cleanName && data[`name:${cleanName}`]);
+    if (!entry) return null;
+
+    const sentDateStr = typeof entry === 'string' ? entry : entry.sent_at;
+    if (!sentDateStr) return null;
+
+    const sentDate = new Date(sentDateStr);
+    if (isNaN(sentDate.getTime())) return null;
+
+    const now = new Date();
+    const dSent = new Date(sentDate.getFullYear(), sentDate.getMonth(), sentDate.getDate());
+    const dNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffDays = Math.max(0, Math.floor((dNow.getTime() - dSent.getTime()) / (1000 * 60 * 60 * 24)));
+
+    let daysText = 'Today';
+    if (diffDays === 1) {
+      daysText = '1 day ago';
+    } else if (diffDays > 1) {
+      daysText = `${diffDays} days ago`;
+    }
+
+    return {
+      sentAt: sentDateStr,
+      diffDays,
+      daysText,
+      label: `Sent ${daysText}`
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+export function recordInviteSent(customer, inviteType = 'general') {
+  if (!customer) return;
+  try {
+    const raw = localStorage.getItem('kalai_customer_invites');
+    const data = raw ? JSON.parse(raw) : {};
+    const nowIso = new Date().toISOString();
+    const entry = {
+      sent_at: nowIso,
+      type: inviteType
+    };
+
+    const cleanPhone = customer.phone ? validateAndCleanPhone(customer.phone) : null;
+    const cleanName = customer.name ? customer.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim().toLowerCase() : '';
+
+    if (cleanPhone) data[cleanPhone] = entry;
+    if (customer.id) data[customer.id] = entry;
+    if (cleanName) data[`name:${cleanName}`] = entry;
+
+    localStorage.setItem('kalai_customer_invites', JSON.stringify(data));
+  } catch (e) {
+    console.error('Error recording invite sent:', e);
+  }
+}
+
+export function renderCustomerInviteBtn(c, inviteType = 'top_paid', defaultText = 'Send Invite') {
+  const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
+  if (!cleanP) return '';
+
+  const invite = getInviteSentInfo(c);
+  if (invite) {
+    return `
+      <button class="btn btn-invite-sent" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;padding:6px 11px;font-size:11px;font-weight:600;border-radius:8px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer;transition:all 0.15s;" 
+              onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', '${inviteType}')" 
+              title="Invite sent ${invite.daysText} (${new Date(invite.sentAt).toLocaleDateString()}). Click to send again">
+        <i class="ti ti-circle-check" style="font-size:13px;color:#16a34a"></i> ${invite.label}
+      </button>
+    `;
+  }
+
+  return `
+    <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:6px 12px;font-size:11px;border-radius:8px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer;transition:all 0.15s;" 
+            onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', '${inviteType}')" 
+            title="Send WhatsApp Invite">
+      <i class="ti ti-brand-whatsapp" style="font-size:13px"></i> ${defaultText}
+    </button>
+  `;
+}
 
 export function sendWhatsAppServiceInvite(id, inviteType) {
   const customers = window._cachedCustomers || [];
@@ -2367,6 +2459,9 @@ export function sendWhatsAppServiceInvite(id, inviteType) {
     if (typeof window.showToast === 'function') window.showToast('No valid phone number for WhatsApp', 'error');
     return;
   }
+
+  // Record invite timestamp
+  recordInviteSent(c, inviteType);
 
   const { cleanText: cleanName } = formatEmpTag(c.name || 'Customer');
   let firstService = 'salon makeover';
@@ -2393,6 +2488,15 @@ export function sendWhatsAppServiceInvite(id, inviteType) {
   const encoded = encodeURIComponent(msg);
   const waUrl = `https://wa.me/91${cleanPhone}?text=${encoded}`;
   window.open(waUrl, '_blank');
+
+  if (typeof window.showToast === 'function') {
+    window.showToast(`Invite opened for ${cleanName} & marked as Sent Today!`, 'success');
+  }
+
+  // Update UI immediately so button changes to Sent Today
+  if (typeof window.render === 'function') {
+    window.render();
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -2400,7 +2504,27 @@ export function sendWhatsAppServiceInvite(id, inviteType) {
 // ─────────────────────────────────────────────
 
 export function renderTopPaidClientsTab(customers) {
-  const sorted = sortCustomersList(customers, 'spend_desc', window._cachedCustomers || customers);
+  const allRef = window._cachedCustomers || customers;
+  const uniqueMap = getUniqueCustomersMap(customers);
+  const uniqueClients = Array.from(uniqueMap.values()).map(g => {
+    const visitsList = getCustomerVisits(g.primary, allRef);
+    const visitsSum = visitsList.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+    const totalSpend = visitsSum > 0 ? visitsSum : Math.max(g.totalSpend, Number(g.primary.total_spend) || 0, Number(g.primary.amount) || 0);
+    return {
+      ...g.primary,
+      visits: Math.max(g.totalVisits, visitsList.length),
+      total_spend: totalSpend
+    };
+  });
+
+  // Strictly sort descending by total_spend (highest amount first)
+  uniqueClients.sort((a, b) => {
+    const diff = (Number(b.total_spend) || 0) - (Number(a.total_spend) || 0);
+    if (diff !== 0) return diff;
+    const dateA = a.last_visit || a.created_at || '';
+    const dateB = b.last_visit || b.created_at || '';
+    return String(dateB).localeCompare(String(dateA));
+  });
 
   return `
     <div class="card">
@@ -2412,11 +2536,20 @@ export function renderTopPaidClientsTab(customers) {
       <div style="font-size:12px;color:#888;margin-bottom:16px">Clients ranked strictly by total revenue spend across all visits</div>
 
       <div style="display:flex;flex-direction:column;gap:10px">
-          ${sorted.map((c, i) => {
+        ${uniqueClients.map((c, i) => {
           const { cleanText, tagHtml } = formatEmpTag(c.name);
-          const servicesText = Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'General Services');
-          const effVisits = getEffectiveVisits(c, customers);
           const cleanP = c.phone ? validateAndCleanPhone(c.phone) : null;
+          const visitsList = getCustomerVisits(c, allRef);
+          const allServices = [];
+          visitsList.forEach(v => {
+            const svcs = Array.isArray(v.services) ? v.services : (v.services || '').split(',');
+            svcs.forEach(s => {
+              const tr = s.trim();
+              if (tr && !allServices.includes(tr)) allServices.push(tr);
+            });
+          });
+          const servicesText = allServices.length ? allServices.join(', ') : (Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'General Services'));
+          const displaySpend = Number(c.total_spend) || 0;
           return `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#fff;border:1px solid #ebebeb;border-radius:12px;cursor:pointer;" onclick="window.showCustomerDetailsModal('${c.id}')" title="Click to view full customer details & history">
               <div style="display:flex;align-items:center;gap:12px">
@@ -2426,22 +2559,18 @@ export function renderTopPaidClientsTab(customers) {
                     ${cleanText} ${tagHtml}
                     ${i === 0 ? '<span class="badge badge-gold" style="margin-left:6px">👑 Top #1 Spender</span>' : ''}
                   </div>
-                  <div style="font-size:12px;color:#888;margin-top:2px">${cleanP || 'No phone'} · ${c.location || 'Chennai'} · ${effVisits} visits · 📅 Visited: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
+                  <div style="font-size:12px;color:#888;margin-top:2px">${cleanP || 'No phone'} · ${c.location || 'Chennai'} · ${c.visits} visits · 📅 Visited: ${formatVisitedDate(c.last_visit || c.created_at)}</div>
                   <div style="font-size:11px;color:#aaa;margin-top:2px">Services: ${servicesText}</div>
                 </div>
               </div>
 
-              <div style="display:flex;align-items:center;gap:14px">
-                <div style="text-align:right">
-                  <div style="font-size:16px;font-weight:700;color:#d97706">₹${(c.total_spend || c.amount || 0).toLocaleString()}</div>
-                  <span class="badge badge-green" style="font-size:10px">Paid Client</span>
+                <div style="display:flex;align-items:center;gap:14px">
+                  <div style="text-align:right">
+                    <div style="font-size:16px;font-weight:700;color:#d97706">₹${displaySpend.toLocaleString()}</div>
+                    <span class="badge badge-green" style="font-size:10px">Paid Client</span>
+                  </div>
+                  ${renderCustomerInviteBtn(c, 'top_paid', 'Send Invite')}
                 </div>
-                ${cleanP ? `
-                  <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:6px 12px;font-size:11px" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'top_paid')" title="Send WhatsApp Invite">
-                    <i class="ti ti-brand-whatsapp"></i> Send Invite
-                  </button>
-                ` : ''}
-              </div>
             </div>
           `;
         }).join('')}
@@ -2499,11 +2628,9 @@ export function renderRepeatCustomersTab(customers) {
                   ` : ''}
                 </div>
               </div>
-              ${cleanP ? `
-                <button class="btn btn-outline" style="color:#25d366;border-color:#25d366;padding:6px 12px;font-size:11px" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'repeat')">
-                  <i class="ti ti-brand-whatsapp"></i> Invite Again
-                </button>
-              ` : ''}
+              <div style="display:flex;align-items:center;gap:10px">
+                ${renderCustomerInviteBtn(c, 'repeat', 'Invite Again')}
+              </div>
             </div>
           `;
         }).join('') : '<div style="font-size:12px;color:#888;padding:20px 0;text-align:center">No repeat customers found in selected range.</div>'}
@@ -2557,11 +2684,9 @@ export function renderLapsedRetentionTab(customers) {
                   <div style="font-size:12px;color:#888;margin-top:2px">${cleanP || 'No phone'} · 📅 Last Visit: ${formatVisitedDate(dStr)}</div>
                   <div style="font-size:11px;color:#b91c1c;margin-top:2px">Last Service: ${serviceName}</div>
                 </div>
-                ${cleanP ? `
-                  <button class="btn btn-gold" style="padding:6px 12px;font-size:11px;background:#25d366;color:#fff;border:none" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'lapsed')">
-                    <i class="ti ti-brand-whatsapp"></i> Send Re-invite
-                  </button>
-                ` : ''}
+                <div style="display:flex;align-items:center;gap:10px">
+                  ${renderCustomerInviteBtn(c, 'lapsed', 'Send Re-invite')}
+                </div>
               </div>
             </div>
           `;
@@ -2604,11 +2729,7 @@ export function renderNewClientsTab(customers) {
               </div>
 
               <div>
-                ${cleanP ? `
-                  <button class="btn btn-gold" style="background:#25d366;color:#fff;border:none;padding:6px 12px;font-size:11px" onclick="event.stopPropagation(); window.sendWhatsAppServiceInvite('${c.id}', 'new')">
-                    <i class="ti ti-brand-whatsapp"></i> Send Welcome & Return Invite
-                  </button>
-                ` : ''}
+                ${renderCustomerInviteBtn(c, 'new', 'Send Welcome & Return Invite')}
               </div>
             </div>
           `;
@@ -2664,9 +2785,15 @@ export function showCustomerDetailsModal(idOrPhone) {
 
   const visitsList = getCustomerVisits(target, allCustomers);
   const totalVisitsCount = Math.max(target.visits || 1, visitsList.length);
-  const totalSpend = Number(target.total_spend) > 0 
-    ? Number(target.total_spend) 
-    : visitsList.reduce((sum, v) => sum + (Number(v.amount) || 0), 0) || Number(target.amount) || 0;
+  const visitsSum = visitsList.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+  const totalSpend = visitsSum > 0 ? visitsSum : (Number(target.total_spend) || Number(target.amount) || 0);
+
+  // Auto-sync total_spend and visits to Supabase if they are out of sync
+  if (visitsSum > 0 && (visitsSum !== Number(target.total_spend) || totalVisitsCount !== Number(target.visits))) {
+    target.total_spend = totalSpend;
+    target.visits = totalVisitsCount;
+    updateCustomer(target.id, { total_spend: totalSpend, visits: totalVisitsCount }).catch(console.error);
+  }
 
   // All unique services taken
   const allServicesSet = new Set();
@@ -2688,6 +2815,7 @@ export function showCustomerDetailsModal(idOrPhone) {
 
   const { cleanText, tagHtml } = formatEmpTag(target.name);
   const validPhone = target.phone ? validateAndCleanPhone(target.phone) : null;
+  const modalInvite = getInviteSentInfo(target);
 
   const modalHtml = `
     <div style="font-family: inherit; max-width: 100%;">
@@ -2696,7 +2824,7 @@ export function showCustomerDetailsModal(idOrPhone) {
         <div style="flex:1;min-width:200px;">
           <div style="font-size:16px;font-weight:700;color:#1a1a1a;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             ${cleanText} ${tagHtml}
-            ${totalVisitsCount >= 5 ? '<span class="badge badge-blue" style="font-size:10px;padding:2px 6px;">⭐ Regular Client</span>' : '<span class="badge badge-amber" style="font-size:10px;padding:2px 6px;">💖 Valued Client</span>'}
+            ${totalVisitsCount >= 5 ? '<span class="badge badge-blue" style="font-size:10px;padding:2px 6px;">⭐ Regular Client</span>' : (totalVisitsCount >= 3 ? '<span class="badge badge-amber" style="font-size:10px;padding:2px 6px;">💖 Valued Client</span>' : (totalVisitsCount === 1 ? '<span class="badge badge-gray" style="font-size:10px;padding:2px 6px;">🆕 New Client</span>' : ''))}
           </div>
           <div style="font-size:12px;color:#555;margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <span><i class="ti ti-phone" style="color:#d97706"></i> ${validPhone || 'No phone'}</span>
@@ -2705,8 +2833,8 @@ export function showCustomerDetailsModal(idOrPhone) {
           </div>
         </div>
         ${validPhone ? `
-          <button class="btn btn-gold" style="background:#25d366;color:#fff;border:none;padding:6px 12px;font-size:11px;border-radius:8px;" onclick="window.sendWhatsAppServiceInvite('${target.id}', 'repeat')">
-            <i class="ti ti-brand-whatsapp" style="font-size:14px"></i> WhatsApp
+          <button class="btn btn-gold" style="${modalInvite ? 'background:#15803d;' : 'background:#25d366;'}color:#fff;border:none;padding:6px 12px;font-size:11px;border-radius:8px;display:inline-flex;align-items:center;gap:5px;" onclick="window.sendWhatsAppServiceInvite('${target.id}', 'repeat')" title="${modalInvite ? `Invite sent ${modalInvite.daysText} (${new Date(modalInvite.sentAt).toLocaleDateString()}). Click to send again` : 'Open WhatsApp'}">
+            <i class="${modalInvite ? 'ti ti-circle-check' : 'ti ti-brand-whatsapp'}" style="font-size:14px"></i> ${modalInvite ? modalInvite.label : 'WhatsApp'}
           </button>
         ` : ''}
       </div>
@@ -2747,15 +2875,6 @@ export function showCustomerDetailsModal(idOrPhone) {
           <div class="section-title" style="font-size:12px;margin-bottom:0;">
             <i class="ti ti-calendar" style="color:#d97706"></i> Visit History & Records (${visitsList.length})
           </div>
-          ${visitsList.length > 1 ? `
-            <button type="button" class="btn" onclick="event.stopPropagation(); window.handleDeleteCustomerVisit('${target.id}', 'repeat_visits')" 
-                    style="cursor:pointer;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;font-family:inherit;transition:all 0.15s;" 
-                    onmouseover="this.style.background='#dc2626';this.style.color='#fff'" 
-                    onmouseout="this.style.background='#fee2e2';this.style.color='#dc2626'" 
-                    title="Delete all repeat visits and keep 1st Visit only">
-              <i class="ti ti-trash" style="font-size:12px"></i> Delete Repeat Visits (Visits 2 & 3)
-            </button>
-          ` : ''}
         </div>
         <div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px;" class="scrollbar-hide">
           ${[...visitsList].reverse().map((v) => {
@@ -2779,11 +2898,11 @@ export function showCustomerDetailsModal(idOrPhone) {
                     <span class="badge badge-gray" style="font-size:9px;padding:1px 5px;margin-top:2px;">${pm}</span>
                   </div>
                   <button type="button" onclick="event.stopPropagation(); window.handleDeleteCustomerVisit('${target.id}', ${v.visit_num})" 
-                          style="cursor:pointer;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:5px 9px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;transition:all 0.15s;font-family:inherit;" 
+                          style="cursor:pointer;width:30px;height:30px;min-width:30px;border-radius:8px;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:all 0.15s;font-family:inherit;" 
                           onmouseover="this.style.background='#dc2626';this.style.color='#fff'" 
                           onmouseout="this.style.background='#fee2e2';this.style.color='#dc2626'" 
                           title="Delete ${ordinal}">
-                    <i class="ti ti-trash" style="font-size:13px"></i> Delete
+                    <i class="ti ti-trash" style="font-size:15px"></i>
                   </button>
                 </div>
               </div>
@@ -2806,5 +2925,6 @@ export function showCustomerDetailsModal(idOrPhone) {
 }
 
 window.showCustomerDetailsModal = showCustomerDetailsModal;
-
-
+window.getInviteSentInfo = getInviteSentInfo;
+window.recordInviteSent = recordInviteSent;
+window.renderCustomerInviteBtn = renderCustomerInviteBtn;

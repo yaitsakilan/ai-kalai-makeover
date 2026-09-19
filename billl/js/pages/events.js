@@ -1,15 +1,20 @@
 // billl/js/pages/events.js
 import { state } from '../state.js';
-import { fetchEvents, fetchCustomers, addEvent, deleteEvent, updateEvent } from '../db.js';
+import { fetchEvents, fetchCustomers, fetchEmployees, addEvent, deleteEvent, updateEvent } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone, getSelectedChips, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 import { renderMuhurthamWidget, bookMuhurthamEvent } from '../muhurtham.js';
 
 export async function renderEvents() {
-  const [events, customers] = await Promise.all([fetchEvents(), fetchCustomers()]);
+  const [events, customers, employees] = await Promise.all([
+    fetchEvents(),
+    fetchCustomers(),
+    fetchEmployees().catch(() => [])
+  ]);
   window._cachedEvents = events;
   window._cachedCustomers = customers;
+  window._cachedEmployees = employees;
 
   const currentMonthIndex = new Date().getMonth();
   if (window._eventActiveTab === undefined || window._eventActiveTab === 'directory') window._eventActiveTab = 'history';
@@ -119,9 +124,6 @@ export async function renderEvents() {
         <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Event History">
           <i class="ti ti-search" style="color:#d97706"></i>
         </button>
-        <button class="btn btn-outline" onclick="window.toggleEventMonthFilter()" id="toggle-evt-filter-btn" style="${activeBtnStyle}">
-          <i class="ti ti-filter" style="color:#d97706"></i> Chips
-        </button>
       ` : ''}
       <button class="btn btn-gold" onclick="window.openEventCustomerForm()">
         <i class="ti ti-plus"></i> Book Event
@@ -164,17 +166,7 @@ export async function renderEvents() {
       <input class="form-input" placeholder="Search event history by name, phone, or event type..." id="event-search-input" value="${window._eventSearchQuery || ''}" oninput="window.filterEventCustomers(this.value)">
     </div>
 
-    <div class="card" id="event-month-filter-card" style="margin-bottom:16px; padding: 12px 18px; display: ${window._eventMonthFilterExpanded ? 'block' : 'none'};">
-      <div style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px;">
-        <i class="ti ti-filter" style="color:#d97706; font-size: 13px;"></i> Filter by Month
-      </div>
-      <div class="chip-group scrollbar-hide" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%;">
-        <div class="chip ${window._selectedEventMonth === 'all' ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterEventByMonth('all')" id="evt-month-chip-all">All Months</div>
-        ${MONTHS.map((m, idx) => `
-          <div class="chip ${window._selectedEventMonth === idx ? 'selected' : ''}" style="flex-shrink: 0;" onclick="window.filterEventByMonth(${idx})" id="evt-month-chip-${idx}">${m}</div>
-        `).join('')}
-      </div>
-    </div>
+
 
     <div id="event-list">
       ${window._eventStatusFilter === 'crossover' 
@@ -484,7 +476,7 @@ export function showAddEventModal() {
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
       <div class="form-group">
         <label class="form-label">Event Date *</label>
-        <input class="form-input" id="m-evt-date" type="date">
+        <input class="form-input" id="m-evt-date" type="date" onclick="try{this.showPicker()}catch(e){}">
       </div>
       <div class="form-group">
         <label class="form-label">Total (₹)</label>
@@ -656,6 +648,19 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
   const container = document.getElementById('form-overlay-container');
   if (!container) return;
 
+  if (!window._cachedEmployees || window._cachedEmployees.length === 0) {
+    fetchEmployees().then(emps => {
+      window._cachedEmployees = emps;
+      document.querySelectorAll('#ef-staff-wages-list .ef-staff-wage-row').forEach(row => {
+        const sel = row.querySelector('.ef-staff-name-input');
+        if (sel && sel.tagName === 'SELECT') {
+          const curVal = sel.value;
+          sel.innerHTML = buildEmployeeOptions(curVal);
+        }
+      });
+    }).catch(() => {});
+  }
+
   let baseFee = '';
   if (isEdit && event) {
     let addonTotal = 0;
@@ -713,7 +718,7 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
             </div>
             <div class="form-group" id="ef-main-date-group">
               <label class="form-label">Event Date *</label>
-              <input class="form-input" id="ef-date" type="date" value="${isEdit && event ? event.date : (prefillDate || today)}">
+              <input class="form-input" id="ef-date" type="date" value="${isEdit && event ? event.date : (prefillDate || today)}" onclick="try{this.showPicker()}catch(e){}">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1.2fr 1.5fr;gap:12px;margin-bottom:14px;align-items:center;">
@@ -762,10 +767,9 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
             </div>
             <div class="chip-other-input">
               <input class="form-input" id="ef-makeup-other" placeholder="Enter makeup type..." style="margin-top:8px">
-            </div>
             <div class="service-amount-list" id="ef-makeup-amounts" style="margin-top:8px"></div>
           </div>
- 
+
           <div class="form-section-title">
             <i class="ti ti-user-check"></i> Groom Add-on
             <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">Tap a chip to add Groom makeup detail</span>
@@ -773,12 +777,22 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
           <div class="form-group">
             <div class="chip-group" id="ef-groom-chips">
               ${['Face Makeup', 'Hair Set'].map(s =>
-                `<div class="chip" onclick="window.eventAddonChipToggle(this, 'groom', 2000)">${s}</div>`
+                `<div class="chip" data-chip-name="${s}" onclick="window.eventAddonChipToggle(this, 'groom', 2000)">${s}</div>`
               ).join('')}
+              ${getSavedCustomChips('groom').map(s =>
+                `<div class="chip" data-chip-name="${s}" onclick="window.eventAddonChipToggle(this, 'groom', 1500)">${s} <span class="chip-del" onclick="event.stopPropagation();window.removeCustomEventChip(this, 'groom', '${s.replace(/'/g, "\\'")}')" title="Delete chip">×</span></div>`
+              ).join('')}
+              <div class="chip chip-add-custom" onclick="window.toggleCustomChipInput(this, 'groom')"><i class="ti ti-plus" style="font-size:12px;"></i> Custom</div>
+            </div>
+            <div class="chip-other-input" id="ef-groom-custom-wrap">
+              <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                <input class="form-input" id="ef-groom-custom-input" placeholder="Enter custom groom service (e.g. Beard Grooming)..." style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();window.addCustomEventChip('groom');}">
+                <button type="button" class="btn btn-gold" onclick="window.addCustomEventChip('groom')" style="padding:7px 14px; font-size:12px; white-space:nowrap; display:flex; align-items:center; gap:5px;"><i class="ti ti-plus" style="font-size:13px"></i> Add Chip</button>
+              </div>
             </div>
             <div class="service-amount-list" id="ef-groom-amounts" style="margin-top:8px"></div>
           </div>
- 
+
           <div class="form-section-title">
             <i class="ti ti-users"></i> Bridesmaid Add-on
             <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">Tap a chip to add Bridesmaid makeup detail</span>
@@ -786,12 +800,22 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
           <div class="form-group">
             <div class="chip-group" id="ef-bridesmaid-chips">
               ${['Simple Makeup', 'Hair Style', 'Saree Draping'].map(s =>
-                `<div class="chip" onclick="window.eventAddonChipToggle(this, 'bridesmaid', 1500)">${s}</div>`
+                `<div class="chip" data-chip-name="${s}" onclick="window.eventAddonChipToggle(this, 'bridesmaid', 1500)">${s}</div>`
               ).join('')}
+              ${getSavedCustomChips('bridesmaid').map(s =>
+                `<div class="chip" data-chip-name="${s}" onclick="window.eventAddonChipToggle(this, 'bridesmaid', 1500)">${s} <span class="chip-del" onclick="event.stopPropagation();window.removeCustomEventChip(this, 'bridesmaid', '${s.replace(/'/g, "\\'")}')" title="Delete chip">×</span></div>`
+              ).join('')}
+              <div class="chip chip-add-custom" onclick="window.toggleCustomChipInput(this, 'bridesmaid')"><i class="ti ti-plus" style="font-size:12px;"></i> Custom</div>
+            </div>
+            <div class="chip-other-input" id="ef-bridesmaid-custom-wrap">
+              <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                <input class="form-input" id="ef-bridesmaid-custom-input" placeholder="Enter custom bridesmaid service (e.g. Flower Set)..." style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();window.addCustomEventChip('bridesmaid');}">
+                <button type="button" class="btn btn-gold" onclick="window.addCustomEventChip('bridesmaid')" style="padding:7px 14px; font-size:12px; white-space:nowrap; display:flex; align-items:center; gap:5px;"><i class="ti ti-plus" style="font-size:13px"></i> Add Chip</button>
+              </div>
             </div>
             <div class="service-amount-list" id="ef-bridesmaid-amounts" style="margin-top:8px"></div>
           </div>
- 
+
           <div class="form-section-title">
             <i class="ti ti-dots-circle-horizontal"></i> Miscellaneous
             <span style="margin-left:auto;font-size:10px;color:#bbb;text-transform:none;letter-spacing:0;font-weight:400">Tap a chip to add miscellaneous cost</span>
@@ -799,8 +823,18 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
           <div class="form-group">
             <div class="chip-group" id="ef-misc-chips">
               ${['Transport'].map(s =>
-                `<div class="chip" onclick="window.eventMiscChipToggle(this, '${s.toLowerCase()}', 200)">${s}</div>`
+                `<div class="chip" data-chip-name="${s}" onclick="window.eventMiscChipToggle(this, '${s.toLowerCase()}', 200)">${s}</div>`
               ).join('')}
+              ${getSavedCustomChips('misc').map(s =>
+                `<div class="chip" data-chip-name="${s}" onclick="window.eventMiscChipToggle(this, '${s.toLowerCase().replace(/[^a-z0-9]/g, '-')}', 500)">${s} <span class="chip-del" onclick="event.stopPropagation();window.removeCustomEventChip(this, 'misc', '${s.replace(/'/g, "\\'")}')" title="Delete chip">×</span></div>`
+              ).join('')}
+              <div class="chip chip-add-custom" onclick="window.toggleCustomChipInput(this, 'misc')"><i class="ti ti-plus" style="font-size:12px;"></i> Custom</div>
+            </div>
+            <div class="chip-other-input" id="ef-misc-custom-wrap">
+              <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                <input class="form-input" id="ef-misc-custom-input" placeholder="Enter miscellaneous cost (e.g. Hotel Stay, Food)..." style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();window.addCustomEventChip('misc');}">
+                <button type="button" class="btn btn-gold" onclick="window.addCustomEventChip('misc')" style="padding:7px 14px; font-size:12px; white-space:nowrap; display:flex; align-items:center; gap:5px;"><i class="ti ti-plus" style="font-size:13px"></i> Add Chip</button>
+              </div>
             </div>
             <div class="service-amount-list" id="ef-misc-amounts" style="margin-top:8px"></div>
           </div>
@@ -937,24 +971,62 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
               if (addon.name && addon.name.startsWith('Meta:')) return; // Skip metadata
               
               const isGroom = addon.name.startsWith('Groom:');
-              const category = isGroom ? 'groom' : 'bridesmaid';
-              const cleanName = addon.name.replace(/^(Groom:|Bridesmaid:)\s*/, '');
-              const chipContainerId = isGroom ? 'ef-groom-chips' : 'ef-bridesmaid-chips';
-              const chips = document.querySelectorAll(`#${chipContainerId} .chip`);
-              const match = Array.from(chips).find(c => c.textContent.trim().toLowerCase() === cleanName.toLowerCase());
+              const isMisc = addon.name.startsWith('Misc:');
+              const category = isGroom ? 'groom' : (isMisc ? 'misc' : 'bridesmaid');
+              const cleanName = addon.name.replace(/^(Groom:|Bridesmaid:|Misc:)\s*/, '');
+              const chipContainerId = isGroom ? 'ef-groom-chips' : (isMisc ? 'ef-misc-chips' : 'ef-bridesmaid-chips');
+              const chipContainer = document.getElementById(chipContainerId);
+              if (!chipContainer) return;
+
+              let chips = chipContainer.querySelectorAll('.chip');
+              let match = Array.from(chips).find(c => {
+                const cName = c.dataset.chipName || c.textContent.replace(/×$/, '').trim();
+                return cName.toLowerCase() === cleanName.toLowerCase();
+              });
+
+              if (!match) {
+                // Dynamically restore custom chip into group
+                const newChip = document.createElement('div');
+                newChip.className = 'chip';
+                newChip.dataset.chipName = cleanName;
+                const safeEscapedName = cleanName.replace(/'/g, "\\'");
+                if (category === 'misc') {
+                  const safeKey = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                  newChip.setAttribute('onclick', `window.eventMiscChipToggle(this, '${safeKey}', ${addon.amount})`);
+                } else {
+                  newChip.setAttribute('onclick', `window.eventAddonChipToggle(this, '${category}', ${addon.amount})`);
+                }
+                newChip.innerHTML = `${cleanName} <span class="chip-del" onclick="event.stopPropagation();window.removeCustomEventChip(this, '${category}', '${safeEscapedName}')" title="Delete chip">×</span>`;
+                const addCustomChip = chipContainer.querySelector('.chip-add-custom');
+                if (addCustomChip) {
+                  chipContainer.insertBefore(newChip, addCustomChip);
+                } else {
+                  chipContainer.appendChild(newChip);
+                }
+                match = newChip;
+              }
+
               if (match) {
-                window.eventAddonChipToggle(match, category, addon.amount);
+                if (category === 'misc') {
+                  const safeKey = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                  window.eventMiscChipToggle(match, safeKey, addon.amount);
+                } else {
+                  window.eventAddonChipToggle(match, category, addon.amount);
+                }
               }
             });
           }
         } catch(e) {}
       }
 
-      // Pre-fill transport chip if travel_allowance exists
+      // Pre-fill transport chip if travel_allowance exists and not already loaded from addons
       if (event.travel_allowance > 0) {
         const transportChips = document.querySelectorAll('#ef-misc-chips .chip');
-        const transportMatch = Array.from(transportChips).find(c => c.textContent.trim().toLowerCase() === 'transport');
-        if (transportMatch) {
+        const transportMatch = Array.from(transportChips).find(c => {
+          const cName = c.dataset.chipName || c.textContent.replace(/×$/, '').trim();
+          return cName.toLowerCase() === 'transport';
+        });
+        if (transportMatch && !transportMatch.classList.contains('selected')) {
           window.eventMiscChipToggle(transportMatch, 'transport', event.travel_allowance);
         }
       }
@@ -1072,24 +1144,39 @@ export async function submitEventCustomerForm(eventId = null) {
     }
   });
 
-  // Parse misc amounts (transport etc)
+  // Parse misc amounts (transport, hotel stay, custom, etc.)
   const miscRows = document.querySelectorAll('#ef-misc-amounts .service-amount-row');
   let travelAllowance = 0;
+  let miscTotal = 0;
   miscRows.forEach(r => {
-    travelAllowance += parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+    const nameInput = r.querySelector('.sa-name-input');
+    let nameLabel = nameInput ? nameInput.value.trim() : r.dataset.label;
+    const amt = parseInt(r.querySelector('.ef-addon-amount-input')?.value) || 0;
+    if (nameLabel) {
+      miscTotal += amt;
+      if (nameLabel.toLowerCase().includes('transport')) {
+        travelAllowance += amt;
+      }
+      addons.push({ name: 'Misc: ' + nameLabel.replace(/^Misc:\s*/i, ''), amount: amt });
+    }
   });
 
   // Parse staff wages (my expense)
   const staffWages = [];
   document.querySelectorAll('#ef-staff-wages-list .ef-staff-wage-row').forEach(r => {
-    const nameVal = r.querySelector('.ef-staff-name-input')?.value.trim();
+    const selectEl = r.querySelector('.ef-staff-name-input');
+    const customInput = r.querySelector('.ef-staff-custom-input');
+    let nameVal = selectEl ? selectEl.value.trim() : '';
+    if (nameVal === '__other__' && customInput) {
+      nameVal = customInput.value.trim();
+    }
     const amtVal = parseInt(r.querySelector('.ef-staff-amount-input')?.value) || 0;
-    if (nameVal && amtVal > 0) {
+    if (nameVal && nameVal !== '__other__' && amtVal > 0) {
       staffWages.push({ name: nameVal, amount: amtVal });
     }
   });
 
-  const grandTotal = total + addonTotal + travelAllowance;
+  const grandTotal = total + addonTotal + miscTotal;
 
   // Add meta entries for multiple functions and makeups to addons
   addons.push({ name: 'Meta:FunctionDates', dates: funcDates, amount: 0 });
@@ -1159,8 +1246,170 @@ export async function submitEventCustomerForm(eventId = null) {
   }
 }
 
+// ─── Event Custom Chips Helpers ──────────────────────────────────────────────
+
+export function getSavedCustomChips(category) {
+  try {
+    const raw = localStorage.getItem(`kalai_custom_${category}_chips`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter(s => typeof s === 'string' && s.trim());
+    }
+  } catch(e) {}
+  return [];
+}
+
+export function saveCustomChip(category, name) {
+  try {
+    const list = getSavedCustomChips(category);
+    if (!list.some(item => item.toLowerCase() === name.toLowerCase())) {
+      list.push(name.trim());
+      localStorage.setItem(`kalai_custom_${category}_chips`, JSON.stringify(list));
+    }
+  } catch(e) {}
+}
+
+export function deleteSavedCustomChip(category, name) {
+  try {
+    let list = getSavedCustomChips(category);
+    list = list.filter(item => item.toLowerCase() !== name.toLowerCase());
+    localStorage.setItem(`kalai_custom_${category}_chips`, JSON.stringify(list));
+  } catch(e) {}
+}
+
+export function toggleCustomChipInput(chipEl, category) {
+  const wrap = document.getElementById(`ef-${category}-custom-wrap`);
+  if (!wrap) return;
+  const isShown = wrap.classList.contains('show');
+  if (isShown) {
+    wrap.classList.remove('show');
+    chipEl.classList.remove('selected');
+  } else {
+    wrap.classList.add('show');
+    chipEl.classList.add('selected');
+    const input = document.getElementById(`ef-${category}-custom-input`);
+    if (input) {
+      setTimeout(() => input.focus(), 50);
+    }
+  }
+}
+
+export function addCustomEventChip(category) {
+  const input = document.getElementById(`ef-${category}-custom-input`);
+  if (!input) return;
+  const name = input.value.trim();
+  if (!name) {
+    showToast('Please enter a name for the custom chip', 'error');
+    input.focus();
+    return;
+  }
+
+  const chipContainerId = category === 'groom' ? 'ef-groom-chips' : (category === 'bridesmaid' ? 'ef-bridesmaid-chips' : 'ef-misc-chips');
+  const chipContainer = document.getElementById(chipContainerId);
+  if (!chipContainer) return;
+
+  const existingChips = chipContainer.querySelectorAll('.chip');
+  let match = Array.from(existingChips).find(c => {
+    const cName = c.dataset.chipName || c.textContent.replace(/×$/, '').trim();
+    return cName.toLowerCase() === name.toLowerCase();
+  });
+
+  const defaultAmt = category === 'groom' ? 2000 : (category === 'bridesmaid' ? 1500 : 500);
+
+  if (!match) {
+    saveCustomChip(category, name);
+
+    const newChip = document.createElement('div');
+    newChip.className = 'chip selected';
+    newChip.dataset.chipName = name;
+    
+    const safeEscapedName = name.replace(/'/g, "\\'");
+    if (category === 'misc') {
+      const safeKey = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      newChip.setAttribute('onclick', `window.eventMiscChipToggle(this, '${safeKey}', ${defaultAmt})`);
+    } else {
+      newChip.setAttribute('onclick', `window.eventAddonChipToggle(this, '${category}', ${defaultAmt})`);
+    }
+
+    newChip.innerHTML = `${name} <span class="chip-del" onclick="event.stopPropagation();window.removeCustomEventChip(this, '${category}', '${safeEscapedName}')" title="Delete chip">×</span>`;
+
+    const addCustomChip = chipContainer.querySelector('.chip-add-custom');
+    if (addCustomChip) {
+      chipContainer.insertBefore(newChip, addCustomChip);
+    } else {
+      chipContainer.appendChild(newChip);
+    }
+    match = newChip;
+  } else {
+    match.classList.add('selected');
+  }
+
+  // Create amount row
+  if (category === 'misc') {
+    const safeKey = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const rowId = 'ef-misc-row-' + safeKey;
+    const amountList = document.getElementById('ef-misc-amounts');
+    if (amountList && !document.getElementById(rowId)) {
+      const row = document.createElement('div');
+      row.className = 'service-amount-row';
+      row.id = rowId;
+      row.dataset.name = name;
+      row.dataset.category = 'misc';
+      row.dataset.label = name;
+      row.innerHTML = `
+        <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
+        <span style="font-size:12px;color:#888">₹</span>
+        <input type="number" class="ef-addon-amount-input" value="${defaultAmt}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+        <div class="sa-remove" onclick="window.removeMiscRow('${rowId}', '${name.replace(/'/g, "\\'")}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+      amountList.appendChild(row);
+    }
+  } else {
+    const rowId = 'ef-addon-row-' + category + '-' + name.replace(/\s+/g, '-').toLowerCase();
+    const amountList = document.getElementById(category === 'groom' ? 'ef-groom-amounts' : 'ef-bridesmaid-amounts');
+    if (amountList && !document.getElementById(rowId)) {
+      const row = document.createElement('div');
+      row.className = 'service-amount-row';
+      row.id = rowId;
+      row.dataset.name = name;
+      row.dataset.category = category;
+      row.dataset.label = (category === 'groom' ? 'Groom' : 'Bridesmaid') + ': ' + name;
+      row.innerHTML = `
+        <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
+        <span style="font-size:12px;color:#888">₹</span>
+        <input type="number" class="ef-addon-amount-input" value="${defaultAmt}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+        <div class="sa-remove" onclick="window.removeEventAddonRow('${rowId}', '${category}', '${name.replace(/'/g, "\\'")}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+      amountList.appendChild(row);
+    }
+  }
+
+  input.value = '';
+  updateEventTotalDisplay();
+  showToast(`Added custom chip "${name}"`, 'success');
+}
+
+export function removeCustomEventChip(delBtnEl, category, name) {
+  const chip = delBtnEl.closest('.chip');
+  if (chip) chip.remove();
+
+  deleteSavedCustomChip(category, name);
+
+  if (category === 'misc') {
+    const safeKey = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const rowId = 'ef-misc-row-' + safeKey;
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+  } else {
+    const rowId = 'ef-addon-row-' + category + '-' + name.replace(/\s+/g, '-').toLowerCase();
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+  }
+
+  updateEventTotalDisplay();
+  showToast(`Removed custom chip "${name}"`, 'info');
+}
+
 export function eventAddonChipToggle(chipEl, category, defaultAmount) {
-  const name = chipEl.textContent.trim();
+  const name = chipEl.dataset.chipName || chipEl.textContent.replace(/×$/, '').trim();
   chipEl.classList.toggle('selected');
   
   const containerId = category === 'groom' ? 'ef-groom-amounts' : 'ef-bridesmaid-amounts';
@@ -1182,7 +1431,7 @@ export function eventAddonChipToggle(chipEl, category, defaultAmount) {
         <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
         <span style="font-size:12px;color:#888">₹</span>
         <input type="number" class="ef-addon-amount-input" value="${defaultAmount}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
-        <div class="sa-remove" onclick="window.removeEventAddonRow('${rowId}', '${category}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+        <div class="sa-remove" onclick="window.removeEventAddonRow('${rowId}', '${category}', '${name.replace(/'/g, "\\'")}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
       amountList.appendChild(row);
     }
   } else {
@@ -1198,7 +1447,10 @@ export function removeEventAddonRow(rowId, category, name) {
   
   const chipContainerId = category === 'groom' ? 'ef-groom-chips' : 'ef-bridesmaid-chips';
   const chips = document.querySelectorAll(`#${chipContainerId} .chip`);
-  chips.forEach(c => { if (c.textContent.trim() === name) c.classList.remove('selected'); });
+  chips.forEach(c => { 
+    const cName = c.dataset.chipName || c.textContent.replace(/×$/, '').trim();
+    if (cName.toLowerCase() === name.toLowerCase()) c.classList.remove('selected'); 
+  });
   
   updateEventTotalDisplay();
 }
@@ -1464,7 +1716,7 @@ export async function openEventCollectPaymentModal(eventId) {
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
       <div class="form-group">
         <label class="form-label">Payment Date</label>
-        <input class="form-input" id="m-evt-pay-date" type="date" value="${today}">
+        <input class="form-input" id="m-evt-pay-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
       </div>
       <div class="form-group">
         <label class="form-label">Method</label>
@@ -1606,6 +1858,8 @@ window.eventMiscChipToggle = eventMiscChipToggle;
 window.removeMiscRow = removeMiscRow;
 window.addStaffWageRow = addStaffWageRow;
 window.removeStaffWageRow = removeStaffWageRow;
+window.buildEmployeeOptions = buildEmployeeOptions;
+window.handleStaffSelectChange = handleStaffSelectChange;
 window.quickEditTransport = quickEditTransport;
 window.filterEventsStatus = filterEventsStatus;
 
@@ -1615,10 +1869,11 @@ export function filterEventsStatus(status) {
 }
 
 export function eventMiscChipToggle(chipEl, type, defaultAmount) {
-  const name = chipEl.textContent.trim();
+  const name = chipEl.dataset.chipName || chipEl.textContent.replace(/×$/, '').trim();
   chipEl.classList.toggle('selected');
 
-  const rowId = 'ef-misc-row-' + type;
+  const safeType = (type || name).toLowerCase().replace(/[^a-z0-9]/g, '-');
+  const rowId = 'ef-misc-row-' + safeType;
   const amountList = document.getElementById('ef-misc-amounts');
   if (!amountList) return;
 
@@ -1635,7 +1890,7 @@ export function eventMiscChipToggle(chipEl, type, defaultAmount) {
         <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
         <span style="font-size:12px;color:#888">₹</span>
         <input type="number" class="ef-addon-amount-input" value="${defaultAmount}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
-        <div class="sa-remove" onclick="window.removeMiscRow('${rowId}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+        <div class="sa-remove" onclick="window.removeMiscRow('${rowId}', '${name.replace(/'/g, "\\'")}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
       amountList.appendChild(row);
     }
   } else {
@@ -1650,34 +1905,92 @@ export function removeMiscRow(rowId, name) {
   if (row) row.remove();
 
   const chips = document.querySelectorAll('#ef-misc-chips .chip');
-  chips.forEach(c => { if (c.textContent.trim() === name) c.classList.remove('selected'); });
+  chips.forEach(c => { 
+    const cName = c.dataset.chipName || c.textContent.replace(/×$/, '').trim();
+    if (cName.toLowerCase() === name.toLowerCase()) c.classList.remove('selected'); 
+  });
 
   updateEventTotalDisplay();
 }
 
 // ─── Staff Wages ──────────────────────────────────────────────────────────────
 
+export function buildEmployeeOptions(defaultName = '') {
+  const employees = window._cachedEmployees || [];
+  let optionsHtml = `<option value="" disabled ${!defaultName ? 'selected' : ''}>-- Select Employee --</option>`;
+  
+  let hasSelected = false;
+  employees.forEach(e => {
+    const isSelected = defaultName && defaultName.toLowerCase() === (e.name || '').toLowerCase();
+    if (isSelected) hasSelected = true;
+    const roleBadge = e.role ? ` (${e.role})` : '';
+    optionsHtml += `<option value="${e.name}" ${isSelected ? 'selected' : ''}>${e.name}${roleBadge}</option>`;
+  });
+
+  if (defaultName && !hasSelected && defaultName !== '__other__') {
+    optionsHtml += `<option value="${defaultName}" selected>${defaultName}</option>`;
+  }
+
+  optionsHtml += `<option value="__other__" ${defaultName === '__other__' ? 'selected' : ''}>✏️ Other / Custom Staff...</option>`;
+  return optionsHtml;
+}
+
+export function handleStaffSelectChange(selectEl) {
+  const row = selectEl.closest('.ef-staff-wage-row');
+  if (!row) return;
+  const customInput = row.querySelector('.ef-staff-custom-input');
+  if (selectEl.value === '__other__') {
+    if (customInput) {
+      customInput.style.display = 'block';
+      customInput.focus();
+    }
+  } else {
+    if (customInput) {
+      customInput.style.display = 'none';
+      customInput.value = '';
+    }
+  }
+}
+
 export function addStaffWageRow(defaultName = '', defaultAmount = 500) {
   const list = document.getElementById('ef-staff-wages-list');
   if (!list) return;
 
-  const rowId = 'ef-staff-wage-row-' + Date.now();
+  const rowId = 'ef-staff-wage-row-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
   const row = document.createElement('div');
   row.className = 'service-amount-row ef-staff-wage-row';
   row.id = rowId;
-  row.style.cssText = 'background:#fff5f5; border: 1px solid #fca5a5; border-radius:8px; padding:8px 10px;';
+  row.style.cssText = 'background:#fff5f5; border: 1px solid #fca5a5; border-radius:8px; padding:8px 10px; display:flex; align-items:center; gap:8px;';
+  
+  const optionsHtml = buildEmployeeOptions(defaultName);
+
   row.innerHTML = `
-    <div class="sa-name" style="color:#dc2626">
-      <i class="ti ti-user" style="color:#dc2626"></i>
-      <input type="text" class="sa-name-input ef-staff-name-input" value="${defaultName}" placeholder="Staff name" style="color:#1a1a1a;">
+    <div class="sa-name" style="color:#dc2626; flex:1; display:flex; align-items:center; gap:6px; min-width:0;">
+      <i class="ti ti-user" style="color:#dc2626; font-size:15px; flex-shrink:0;"></i>
+      <select class="form-input form-select sa-name-input ef-staff-name-input" onchange="window.handleStaffSelectChange(this)" style="flex:1; height:34px; font-size:12px; border:1px solid #fca5a5; border-radius:6px; padding:4px 8px; color:#1a1a1a; background:#fff; cursor:pointer; min-width:140px;">
+        ${optionsHtml}
+      </select>
+      <input type="text" class="form-input ef-staff-custom-input" placeholder="Enter staff name..." style="display:${defaultName === '__other__' ? 'block' : 'none'}; flex:1; height:34px; font-size:12px; border:1px solid #fca5a5; border-radius:6px; padding:4px 8px; color:#1a1a1a; background:#fff; min-width:110px;">
     </div>
-    <span style="font-size:12px;color:#dc2626">₹</span>
-    <input type="number" class="ef-staff-amount-input" value="${defaultAmount}" placeholder="Amount" style="width:80px; padding:4px 6px; font-size:12px; height:32px; border:1px solid #fca5a5; border-radius:6px;">
-    <div class="sa-remove" onclick="window.removeStaffWageRow('${rowId}')" title="Remove" style="color:#dc2626">
-      <i class="ti ti-x" style="font-size:14px"></i>
+    <span style="font-size:12px; color:#dc2626; font-weight:600;">₹</span>
+    <input type="number" class="ef-staff-amount-input" value="${defaultAmount}" placeholder="Amount" style="width:80px; padding:4px 6px; font-size:12px; height:34px; border:1px solid #fca5a5; border-radius:6px; background:#fff; flex-shrink:0;">
+    <div class="sa-remove" onclick="window.removeStaffWageRow('${rowId}')" title="Remove" style="color:#dc2626; cursor:pointer; padding:4px; display:flex; align-items:center; flex-shrink:0;">
+      <i class="ti ti-x" style="font-size:15px"></i>
     </div>
   `;
   list.appendChild(row);
+
+  // If employees cache not loaded yet, fetch and re-populate
+  if (!window._cachedEmployees || window._cachedEmployees.length === 0) {
+    fetchEmployees().then(emps => {
+      window._cachedEmployees = emps;
+      const sel = row.querySelector('.ef-staff-name-input');
+      if (sel) {
+        const cur = sel.value;
+        sel.innerHTML = buildEmployeeOptions(cur || defaultName);
+      }
+    }).catch(() => {});
+  }
 }
 
 export function removeStaffWageRow(rowId) {
@@ -1889,7 +2202,7 @@ export function updateEventFunctionDates() {
       html += `
         <div class="form-group ef-func-date-row" data-function="${func}" style="margin-bottom: 8px;">
           <label class="form-label" style="font-weight: 500; font-size:12px;">${func} Date *</label>
-          <input class="form-input" type="date" value="${dateValue}">
+          <input class="form-input" type="date" value="${dateValue}" onclick="try{this.showPicker()}catch(e){}">
         </div>
       `;
     });
@@ -2897,5 +3210,11 @@ window.getCrossOverCustomers = getCrossOverCustomers;
 window.renderCrossoverClientsTab = renderCrossoverClientsTab;
 window.renderCrossoverClientCards = renderCrossoverClientCards;
 window.switchEventHistorySubTab = switchEventHistorySubTab;
+window.toggleCustomChipInput = toggleCustomChipInput;
+window.addCustomEventChip = addCustomEventChip;
+window.removeCustomEventChip = removeCustomEventChip;
+window.getSavedCustomChips = getSavedCustomChips;
+window.saveCustomChip = saveCustomChip;
+window.deleteSavedCustomChip = deleteSavedCustomChip;
 
 

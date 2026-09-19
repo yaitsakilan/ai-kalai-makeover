@@ -169,6 +169,22 @@ export function calculateModuleStreak(dataArray = [], dateField = 'date', select
     ? Math.round((monthActiveDaysCount / elapsedDaysInMonth) * 100) 
     : 0;
 
+  const missedDaysCount = Math.max(0, elapsedDaysInMonth - monthActiveDaysCount);
+  const missedDaysList = [];
+  if (elapsedDaysInMonth > 0) {
+    for (let day = 1; day <= elapsedDaysInMonth; day++) {
+      const dStr = `${targetMonthPrefix}-${String(day).padStart(2, '0')}`;
+      if (!activeDateSet.has(dStr)) {
+        const d = new Date(targetYear, targetMonthIdx, day);
+        missedDaysList.push({
+          dayNum: day,
+          dayName: daysOfWeek[d.getDay()],
+          dateStr: dStr
+        });
+      }
+    }
+  }
+
   // Last 7 days breakdown for quick reference
   const last7Days = [];
   for (let i = 6; i >= 0; i--) {
@@ -202,6 +218,8 @@ export function calculateModuleStreak(dataArray = [], dateField = 'date', select
     elapsedDaysInMonth,
     daysInMonth,
     consistencyRate,
+    missedDaysCount,
+    missedDaysList,
     monthDays,
     last7Days
   };
@@ -309,114 +327,67 @@ export function calculateMonthlyGamification(allModulesData = {}) {
 
 export function renderModuleStreakWidget(moduleTitle, streakData, themeColor = '#7c3aed') {
   const {
-    currentStreak = 0,
-    bestStreak = 0,
-    todayRecorded = false,
-    streakBroken = false,
     targetMonthName = 'Month',
     targetYear = new Date().getFullYear(),
     isAllMonths = true,
     isCurrentMonth = true,
     monthActiveDaysCount = 0,
-    monthTotalEntries = 0,
-    monthBestStreak = 0,
-    elapsedDaysInMonth = 30,
-    daysInMonth = 30,
+    elapsedDaysInMonth = 0,
     consistencyRate = 0,
+    missedDaysCount = 0,
+    missedDaysList = [],
     monthDays = [],
     last7Days = []
   } = streakData || {};
 
-  const statusText = isCurrentMonth 
-    ? (todayRecorded 
-        ? `<span style="color:#16a34a; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-circle-check-filled"></i> Today Logged! Streak Safe</span>`
-        : (streakBroken 
-            ? `<span style="color:#dc2626; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-alert-circle"></i> Streak Missed — Log entry today to restart</span>`
-            : `<span style="color:#d97706; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-clock"></i> Streak at Risk! Add entry today</span>`))
-    : `<span style="color:#4b5563; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ti ti-calendar-event"></i> Month View: ${targetMonthName} ${targetYear}</span>`;
+  const targetMonthShort = (targetMonthName || 'Month').substring(0, 3);
+  const isFutureMonth = elapsedDaysInMonth === 0;
 
-  // Auto-scroll to today or latest day
+  // Auto-scroll to today or active day
   setTimeout(() => {
     const todayEl = document.querySelector('#module-month-days-strip [data-today="true"]');
     if (todayEl) {
       todayEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     }
-  }, 120);
+  }, 100);
+
+  const daysToRender = (monthDays && monthDays.length) ? monthDays : last7Days;
+
   return `
-  <div class="streak-widget-card" style="background:linear-gradient(145deg, #1c1308, #130c04); border:1px solid rgba(245,200,66,0.25); border-radius:14px; padding:16px 20px; margin-bottom:20px; box-shadow:0 4px 24px rgba(0,0,0,0.35);">
-    <!-- Top Header: Streak Stats & Month Consistency -->
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,rgba(245,200,66,0.18),rgba(217,119,6,0.1)); border:1px solid rgba(245,200,66,0.3); display:flex; align-items:center; justify-content:center; font-size:22px; color:#f5c842; box-shadow:0 2px 10px rgba(245,200,66,0.15);">
-          🔥
-        </div>
-        <div>
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="font-size:17px; font-weight:700; color:#fffbeb;">
-              ${isCurrentMonth ? `${currentStreak} Day${currentStreak === 1 ? '' : 's'} Streak` : `${targetMonthName} ${targetYear}`}
-            </span>
-            <span class="badge" style="background:rgba(245,200,66,0.12); color:#fde68a; border:1px solid rgba(245,200,66,0.28); font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px;">
-              🏆 Best: ${bestStreak} Days
-            </span>
-            ${monthBestStreak > 0 ? `
-              <span class="badge" style="background:rgba(16,185,129,0.12); color:#6ee7b7; border:1px solid rgba(16,185,129,0.25); font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px;">
-                ⭐ ${targetMonthName} Best: ${monthBestStreak} Days
-              </span>
-            ` : ''}
-            ${isAllMonths ? `
-              <span class="badge" style="background:rgba(59,130,246,0.12); color:#93c5fd; border:1px solid rgba(59,130,246,0.25); font-size:11px; font-weight:500; padding:2px 8px; border-radius:20px;">
-                📅 All Months (Showing ${targetMonthName})
-              </span>
-            ` : ''}
-          </div>
-          <div style="font-size:12px; margin-top:2px; color:#94a3b8;">${statusText}</div>
-        </div>
+  <div class="streak-widget-card" style="border-radius:14px; padding:12px 16px; margin-bottom:18px; border-left:4px solid ${missedDaysCount > 0 ? '#ef4444' : '#10b981'} !important;">
+    <!-- Minimal Text Header: 5 Days Missed , Missed dates: 8, 14, 17, 18, 19, at the end Sep Month -->
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:13.5px;">
+        <span style="font-weight:700; color:#fffbeb; font-size:15px;">
+          ${isFutureMonth ? 'Upcoming Month' : (missedDaysCount === 0 ? '0 Days Missed' : `${missedDaysCount} Days Missed`)}
+        </span>
+        <span style="color:#94a3b8;">,</span>
+        <span style="color:${missedDaysCount > 0 ? '#f87171' : '#34d399'}; font-weight:600;">
+          ${isFutureMonth 
+            ? 'No records yet' 
+            : (missedDaysCount > 0 
+                ? `Missed dates: ${missedDaysList.map(d => d.dayNum).join(', ')}` 
+                : 'All days active')}
+        </span>
       </div>
-
-      <!-- Right summary metrics -->
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <div style="font-size:11.5px; color:#e2e8f0; background:#221609; padding:6px 12px; border-radius:8px; border:1px solid rgba(245,200,66,0.2); display:flex; align-items:center; gap:6px;">
-          <span style="width:8px; height:8px; border-radius:50%; background:#10b981; display:inline-block;"></span>
-          <strong>${monthActiveDaysCount}</strong> / ${elapsedDaysInMonth || daysInMonth} Active Days (${consistencyRate}%)
-        </div>
-        <div style="font-size:11.5px; color:#e2e8f0; background:#221609; padding:6px 12px; border-radius:8px; border:1px solid rgba(245,200,66,0.2);">
-          <strong>${monthTotalEntries}</strong> entries in ${targetMonthName}
-        </div>
+      <div style="font-size:12px; font-weight:700; color:#fde68a; background:rgba(245,200,66,0.12); border:1px solid rgba(245,200,66,0.28); padding:3px 10px; border-radius:12px; text-transform:capitalize;">
+        ${targetMonthShort} Month
       </div>
     </div>
 
-    <!-- Day-by-Day Month Tracker Header -->
-    <div style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-      <div style="font-size:11px; font-weight:600; color:#cbd5e1; text-transform:uppercase; letter-spacing:0.05em; display:flex; align-items:center; gap:6px;">
-        <i class="ti ti-calendar"></i> ${targetMonthName} ${targetYear} — Daily Entries Calendar (${daysInMonth} Days)
-      </div>
-      <div style="font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:4px;">
-        <span>Swipe / Scroll &rarr;</span>
-      </div>
-    </div>
-
-    <!-- Scrollable Month Days Strip -->
-    <div class="scrollbar-hide" style="display:flex; gap:6px; overflow-x:auto; padding:4px 2px 8px; -webkit-overflow-scrolling:touch;" id="module-month-days-strip">
-      ${(monthDays && monthDays.length ? monthDays : last7Days).map(day => {
+    <!-- Month Date Strip (1 to 30 days) -->
+    <div class="scrollbar-hide" style="display:flex; gap:6px; overflow-x:auto; padding:2px 2px 6px; -webkit-overflow-scrolling:touch;" id="module-month-days-strip">
+      ${daysToRender.map(day => {
         const isToday = !!day.isToday;
         const hasData = !!day.hasData;
         const isFuture = !!day.isFuture;
-        const bg = isToday 
-          ? (hasData ? '#2e1c08' : '#221508') 
-          : (hasData ? 'rgba(16,185,129,0.12)' : (isFuture ? '#170f06' : '#1a1207'));
-        const border = isToday 
-          ? '2px solid #f5c842' 
-          : (hasData ? '1px solid rgba(16,185,129,0.3)' : (isFuture ? '1px dashed rgba(245,200,66,0.12)' : '1px solid rgba(245,200,66,0.15)'));
-        const dayColor = isToday ? '#fde68a' : (hasData ? '#6ee7b7' : '#94a3b8');
-        const numColor = isToday ? '#fffbeb' : (hasData ? '#a7f3d0' : (isFuture ? '#64748b' : '#cbd5e1'));
-        const shadow = isToday ? '0 2px 8px rgba(245,200,66,0.25)' : (hasData ? '0 1px 4px rgba(16,185,129,0.2)' : 'none');
+        const isMissed = !hasData && !isFuture;
 
         return `
-          <div data-today="${isToday ? 'true' : 'false'}" style="flex:0 0 46px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:7px 2px; border-radius:10px; background:${bg}; border:${border}; box-shadow:${shadow}; transition:all 0.15s;" title="${day.dateStr || ''} (${day.dayName}): ${hasData ? `${day.count || 1} ${moduleTitle.toLowerCase()} record(s)` : (isFuture ? 'Upcoming day' : 'No entry')}">
-            <span style="font-size:9.5px; font-weight:600; color:${dayColor}; text-transform:uppercase;">${day.dayName}</span>
-            <span style="font-size:12px; font-weight:700; color:${numColor}; margin:2px 0;">${day.dayNum || day.dateNum}</span>
+          <div data-day-box="true" data-today="${isToday}" data-has-data="${hasData}" data-missed="${isMissed}" style="flex:0 0 44px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:6px 2px; border-radius:10px; border:1px solid rgba(245,200,66,0.15); transition:all 0.15s;" title="${day.dateStr || ''} (${day.dayName}): ${hasData ? `${day.count || 1} entry record(s)` : (isFuture ? 'Upcoming day' : 'Missed day')}">
+            <span class="day-name-label" style="font-size:9px; font-weight:600; text-transform:uppercase;">${day.dayName}</span>
+            <span class="day-num-label" style="font-size:12px; font-weight:700; margin:2px 0;">${day.dayNum || day.dateNum}</span>
             <span style="font-size:13px; line-height:1;">${hasData ? '🔥' : (isFuture ? '·' : '❌')}</span>
-            ${day.count > 1 ? `<span style="font-size:9px; font-weight:700; color:#16a34a; background:rgba(22,163,74,0.15); border-radius:8px; padding:0 4px; margin-top:2px; line-height:1.3;">${day.count}</span>` : ''}
             ${isToday ? `<span style="font-size:8px; font-weight:800; color:#f5c842; text-transform:uppercase; margin-top:2px;">Today</span>` : ''}
           </div>
         `;

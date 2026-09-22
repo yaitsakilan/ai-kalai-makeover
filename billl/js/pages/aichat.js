@@ -585,7 +585,11 @@ Guidelines:
       }
     } else if (type === 'product_expense') {
       if (parsed.date) document.getElementById('pe-date').value = parsed.date;
+      if (parsed.shop_name && document.getElementById('pe-shop')) document.getElementById('pe-shop').value = parsed.shop_name;
       
+      const defaultDate = document.getElementById('pe-date')?.value || parsed.date || new Date().toISOString().split('T')[0];
+      const defaultMethod = document.getElementById('pe-payment-method')?.value || 'Cash';
+
       document.getElementById('pe-product-amounts').innerHTML = '';
       document.querySelectorAll('#pe-product-chips .chip').forEach(c => c.classList.remove('selected'));
       
@@ -602,11 +606,22 @@ Guidelines:
             row.id = rowId;
             row.dataset.name = chip.textContent.trim();
             row.dataset.category = 'product';
+            row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 12px; margin-bottom:8px; border-radius:10px;';
             row.innerHTML = `
-              <div class="sa-name" style="color:#6d28d9"><i class="ti ti-package"></i>${chip.textContent.trim()}</div>
-              <span style="font-size:12px;color:#888">₹</span>
-              <input type="number" placeholder="Amount" value="${prod.amount || 0}" oninput="window.updateProductExpenseTotal()">
-              <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', '${chip.textContent.trim()}', 'product')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+              <div class="sa-name" style="color:#6d28d9; min-width:110px; flex:1; font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px;">
+                <i class="ti ti-package"></i>
+                <input type="text" class="sa-name-input" value="${chip.textContent.trim()}" style="background:transparent; border:none; color:inherit; font-weight:600; font-size:13px; width:100%; outline:none; text-align:left;">
+              </div>
+              <input type="date" class="form-input pe-row-date" value="${defaultDate}" onclick="try{this.showPicker()}catch(e){}" title="Expense Date" style="flex:1; height:32px !important; min-height:32px !important; font-size:12px; padding:2px 8px; border-radius:6px; min-width:115px; max-width:145px; text-align:left !important;">
+              <select class="form-input form-select pe-row-pay" style="width:75px; height:32px; font-size:11px; padding:2px 18px 2px 6px; border-radius:6px;" title="Payment method">
+                <option value="Cash" ${defaultMethod === 'Cash' ? 'selected' : ''}>Cash</option>
+                <option value="GPay" ${defaultMethod === 'GPay' ? 'selected' : ''}>GPay</option>
+              </select>
+              <div style="display:flex; align-items:center; gap:3px;">
+                <span style="font-size:13px; color:#888; font-weight:600;">₹</span>
+                <input type="number" class="pe-amount-input" placeholder="Amount" value="${prod.amount || 0}" oninput="window.updateProductExpenseTotal()" style="width:85px; height:32px; font-size:13px; font-weight:600; text-align:right; padding:4px 8px; border-radius:6px;">
+              </div>
+              <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', '${chip.textContent.trim()}', 'product')" title="Remove" style="cursor:pointer; padding:4px; color:#999; display:flex; align-items:center;"><i class="ti ti-x" style="font-size:14px"></i></div>`;
             document.getElementById('pe-product-amounts').appendChild(row);
           } else {
             const otherChip = Array.from(document.querySelectorAll('#pe-product-chips .chip'))
@@ -622,11 +637,22 @@ Guidelines:
             row.id = rowId;
             row.dataset.name = prod.name;
             row.dataset.category = 'product';
+            row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 12px; margin-bottom:8px; border-radius:10px;';
             row.innerHTML = `
-              <div class="sa-name" style="color:#6d28d9"><i class="ti ti-package"></i>${prod.name}</div>
-              <span style="font-size:12px;color:#888">₹</span>
-              <input type="number" placeholder="Amount" value="${prod.amount || 0}" oninput="window.updateProductExpenseTotal()">
-              <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', null, 'product')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+              <div class="sa-name" style="color:#6d28d9; min-width:110px; flex:1; font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px;">
+                <i class="ti ti-package"></i>
+                <input type="text" class="sa-name-input" value="${prod.name}" style="background:transparent; border:none; color:inherit; font-weight:600; font-size:13px; width:100%; outline:none; text-align:left;">
+              </div>
+              <input type="date" class="form-input pe-row-date" value="${defaultDate}" onclick="try{this.showPicker()}catch(e){}" title="Expense Date" style="flex:1; height:32px !important; min-height:32px !important; font-size:12px; padding:2px 8px; border-radius:6px; min-width:115px; max-width:145px; text-align:left !important;">
+              <select class="form-input form-select pe-row-pay" style="width:75px; height:32px; font-size:11px; padding:2px 18px 2px 6px; border-radius:6px;" title="Payment method">
+                <option value="Cash" ${defaultMethod === 'Cash' ? 'selected' : ''}>Cash</option>
+                <option value="GPay" ${defaultMethod === 'GPay' ? 'selected' : ''}>GPay</option>
+              </select>
+              <div style="display:flex; align-items:center; gap:3px;">
+                <span style="font-size:13px; color:#888; font-weight:600;">₹</span>
+                <input type="number" class="pe-amount-input" placeholder="Amount" value="${prod.amount || 0}" oninput="window.updateProductExpenseTotal()" style="width:85px; height:32px; font-size:13px; font-weight:600; text-align:right; padding:4px 8px; border-radius:6px;">
+              </div>
+              <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', null, 'product')" title="Remove" style="cursor:pointer; padding:4px; color:#999; display:flex; align-items:center;"><i class="ti ti-x" style="font-size:14px"></i></div>`;
             document.getElementById('pe-product-amounts').appendChild(row);
           }
         });
@@ -648,11 +674,22 @@ Guidelines:
             row.id = rowId;
             row.dataset.name = chip.textContent.trim();
             row.dataset.category = 'makeup';
+            row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 12px; margin-bottom:8px; border-radius:10px;';
             row.innerHTML = `
-              <div class="sa-name" style="color:#be185d"><i class="ti ti-brush"></i>${chip.textContent.trim()}</div>
-              <span style="font-size:12px;color:#888">₹</span>
-              <input type="number" placeholder="Amount" value="${make.amount || 0}" oninput="window.updateProductExpenseTotal()">
-              <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', '${chip.textContent.trim()}', 'makeup')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+              <div class="sa-name" style="color:#be185d; min-width:110px; flex:1; font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px;">
+                <i class="ti ti-brush"></i>
+                <input type="text" class="sa-name-input" value="${chip.textContent.trim()}" style="background:transparent; border:none; color:inherit; font-weight:600; font-size:13px; width:100%; outline:none; text-align:left;">
+              </div>
+              <input type="date" class="form-input pe-row-date" value="${defaultDate}" onclick="try{this.showPicker()}catch(e){}" title="Expense Date" style="flex:1; height:32px !important; min-height:32px !important; font-size:12px; padding:2px 8px; border-radius:6px; min-width:115px; max-width:145px; text-align:left !important;">
+              <select class="form-input form-select pe-row-pay" style="width:75px; height:32px; font-size:11px; padding:2px 18px 2px 6px; border-radius:6px;" title="Payment method">
+                <option value="Cash" ${defaultMethod === 'Cash' ? 'selected' : ''}>Cash</option>
+                <option value="GPay" ${defaultMethod === 'GPay' ? 'selected' : ''}>GPay</option>
+              </select>
+              <div style="display:flex; align-items:center; gap:3px;">
+                <span style="font-size:13px; color:#888; font-weight:600;">₹</span>
+                <input type="number" class="pe-amount-input" placeholder="Amount" value="${make.amount || 0}" oninput="window.updateProductExpenseTotal()" style="width:85px; height:32px; font-size:13px; font-weight:600; text-align:right; padding:4px 8px; border-radius:6px;">
+              </div>
+              <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', '${chip.textContent.trim()}', 'makeup')" title="Remove" style="cursor:pointer; padding:4px; color:#999; display:flex; align-items:center;"><i class="ti ti-x" style="font-size:14px"></i></div>`;
             document.getElementById('pe-makeup-amounts').appendChild(row);
           } else {
             const otherChip = Array.from(document.querySelectorAll('#pe-makeup-chips .chip'))
@@ -668,11 +705,22 @@ Guidelines:
             row.id = rowId;
             row.dataset.name = make.name;
             row.dataset.category = 'makeup';
+            row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 12px; margin-bottom:8px; border-radius:10px;';
             row.innerHTML = `
-              <div class="sa-name" style="color:#be185d"><i class="ti ti-brush"></i>${make.name}</div>
-              <span style="font-size:12px;color:#888">₹</span>
-              <input type="number" placeholder="Amount" value="${make.amount || 0}" oninput="window.updateProductExpenseTotal()">
-              <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', null, 'makeup')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+              <div class="sa-name" style="color:#be185d; min-width:110px; flex:1; font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px;">
+                <i class="ti ti-brush"></i>
+                <input type="text" class="sa-name-input" value="${make.name}" style="background:transparent; border:none; color:inherit; font-weight:600; font-size:13px; width:100%; outline:none; text-align:left;">
+              </div>
+              <input type="date" class="form-input pe-row-date" value="${defaultDate}" onclick="try{this.showPicker()}catch(e){}" title="Expense Date" style="flex:1; height:32px !important; min-height:32px !important; font-size:12px; padding:2px 8px; border-radius:6px; min-width:115px; max-width:145px; text-align:left !important;">
+              <select class="form-input form-select pe-row-pay" style="width:75px; height:32px; font-size:11px; padding:2px 18px 2px 6px; border-radius:6px;" title="Payment method">
+                <option value="Cash" ${defaultMethod === 'Cash' ? 'selected' : ''}>Cash</option>
+                <option value="GPay" ${defaultMethod === 'GPay' ? 'selected' : ''}>GPay</option>
+              </select>
+              <div style="display:flex; align-items:center; gap:3px;">
+                <span style="font-size:13px; color:#888; font-weight:600;">₹</span>
+                <input type="number" class="pe-amount-input" placeholder="Amount" value="${make.amount || 0}" oninput="window.updateProductExpenseTotal()" style="width:85px; height:32px; font-size:13px; font-weight:600; text-align:right; padding:4px 8px; border-radius:6px;">
+              </div>
+              <div class="sa-remove" onclick="window.removeProductExpenseRow('${rowId}', null, 'makeup')" title="Remove" style="cursor:pointer; padding:4px; color:#999; display:flex; align-items:center;"><i class="ti ti-x" style="font-size:14px"></i></div>`;
             document.getElementById('pe-makeup-amounts').appendChild(row);
           }
         });

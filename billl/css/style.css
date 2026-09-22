@@ -61,6 +61,8 @@
 .mc-rose::before{background:linear-gradient(90deg,#fb7185,#e11d48)}
 .mc-purple::before{background:linear-gradient(90deg,#a78bfa,#7c3aed)}
 .mc-orange::before{background:linear-gradient(90deg,#fb923c,#ea580c)}
+.mc-green::before{background:linear-gradient(90deg,#10b981,#059669)}
+.mc-blue::before{background:linear-gradient(90deg,#3b82f6,#1d4ed8)}
 .metric-label{font-size:11px;color:#999;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
 .metric-value{font-size:26px;font-weight:600;color:#1a1a1a;font-family:'DM Sans',sans-serif}
 .metric-sub{font-size:11px;color:#bbb;margin-top:4px}
@@ -1474,46 +1476,879 @@ body.theme-dark .confirm-modal p, body:not(.theme-light) .confirm-modal p {
   box-shadow: 0 6px 16px rgba(124, 58, 237, 0.12);
 }
 
-/* Muhurtham & Vedic Panchangam Widget Styles */
+.pe-form-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 4px;
+  background: #f3f4f6;
+  border-radius: 10px;
+  width: fit-content;
+  border: 1px solid #e5e7eb;
+}
+.pe-form-tab-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  background: transparent;
+  color: #6b7280;
+}
+body.theme-dark .pe-form-tabs, body:not(.theme-light) .pe-form-tabs {
+  background: rgba(245, 200, 66, 0.08) !important;
+  border-color: rgba(245, 200, 66, 0.2) !important;
+}
+body.theme-dark .pe-form-tab-btn, body:not(.theme-light) .pe-form-tab-btn {
+  color: #cbd5e1 !important;
+}
+body.theme-dark .pe-form-tab-btn:hover, body:not(.theme-light) .pe-form-tab-btn:hover {
+  color: #f8fafc !important;
+}
+
+
+/* Muhurtham & Vedic Panchangam Widget Styles (Legacy compatibility) */
 .muhurtham-widget-card {
   position: relative;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.muhurtham-widget-card:hover {
-  border-color: #fde047;
-  box-shadow: 0 8px 30px rgba(217, 119, 6, 0.09);
+/* ======================================================
+   MONTH-WISE BOOKINGS DASHBOARD & OVERDUE STATUS TRACKER
+   ====================================================== */
+
+.month-overview-card {
+  background: linear-gradient(145deg, #181107, #110b04);
+  border: 1px solid rgba(245, 200, 66, 0.24);
+  border-radius: 16px;
+  padding: 20px 22px;
+  margin-bottom: 22px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.muhurtham-card-item {
-  user-select: none;
-  border: 1px solid #f1f5f9;
+.month-overview-card:hover {
+  border-color: rgba(245, 200, 66, 0.4);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 20px rgba(245, 200, 66, 0.08);
 }
 
-.muhurtham-card-item:hover {
-  border-color: #d97706 !important;
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 10px 22px rgba(217, 119, 6, 0.14) !important;
+.mob-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(245, 200, 66, 0.12);
 }
 
-.muhurtham-card-item:active {
-  transform: translateY(-1px) scale(0.99);
+.mob-title-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.muhurtham-pulse {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
+.mob-icon-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(245, 200, 66, 0.2), rgba(217, 119, 6, 0.1));
+  border: 1px solid rgba(245, 200, 66, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f5c842;
+  font-size: 22px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(245, 200, 66, 0.15);
+}
+
+.mob-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mob-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+
+.mob-tag-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fde68a;
+  background: rgba(245, 200, 66, 0.15);
+  border: 0.5px solid rgba(245, 200, 66, 0.3);
+  padding: 3px 9px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mob-live-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #10b981;
-  box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
-  animation: muhurthamPulse 2s infinite;
+  box-shadow: 0 0 6px #10b981;
 }
 
-@keyframes muhurthamPulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+.mob-subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.mob-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mob-nav-group {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(245, 200, 66, 0.2);
+  border-radius: 10px;
+  padding: 2px;
+}
+
+.mob-nav-btn {
+  background: none;
+  border: none;
+  color: #f5c842;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  transition: all 0.18s ease;
+}
+
+.mob-nav-btn:hover {
+  background: rgba(245, 200, 66, 0.18);
+  color: #fff;
+}
+
+.mob-month-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+}
+
+.mob-quick-book-btn {
+  font-size: 12px !important;
+  height: 34px !important;
+  padding: 0 14px !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+/* 6 Metrics Grid */
+.mob-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 1100px) {
+  .mob-metrics-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .mob-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.mob-metric-tile {
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.mob-metric-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.mc-tile-gold {
+  background: linear-gradient(135deg, rgba(245, 200, 66, 0.12), rgba(217, 119, 6, 0.06));
+  border-color: rgba(245, 200, 66, 0.22);
+}
+.mc-tile-gold .mob-metric-icon { color: #f5c842; }
+
+.mc-tile-amber {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(180, 83, 9, 0.06));
+  border-color: rgba(251, 191, 36, 0.22);
+}
+.mc-tile-amber .mob-metric-icon { color: #fbbf24; }
+
+.mc-tile-teal {
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(13, 148, 136, 0.06));
+  border-color: rgba(20, 184, 166, 0.22);
+}
+.mc-tile-teal .mob-metric-icon { color: #2dd4bf; }
+
+.mc-tile-rose {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.12), rgba(225, 29, 72, 0.06));
+  border-color: rgba(244, 63, 94, 0.22);
+}
+.mc-tile-rose .mob-metric-icon { color: #fb7185; }
+
+.mc-tile-green {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(21, 128, 61, 0.06));
+  border-color: rgba(34, 197, 94, 0.22);
+}
+.mc-tile-green .mob-metric-icon { color: #4ade80; }
+
+.mc-tile-purple {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.12), rgba(126, 34, 206, 0.06));
+  border-color: rgba(168, 85, 247, 0.22);
+}
+.mc-tile-purple .mob-metric-icon { color: #c084fc; }
+
+.mob-metric-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.mob-metric-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+
+.mob-metric-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.mob-metric-sub {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.mob-metric-icon {
+  font-size: 19px;
+  opacity: 0.85;
+}
+
+/* Up to Date Bar */
+.mob-up-to-date-bar {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 10px;
+  padding: 8px 14px;
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Overdue Un-updated Alert Section */
+.mob-overdue-alert-container {
+  background: linear-gradient(145deg, rgba(239, 68, 68, 0.12), rgba(245, 158, 11, 0.08));
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.15);
+  position: relative;
+}
+
+.mob-overdue-banner-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.mob-overdue-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mob-overdue-pulsing-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  font-size: 18px;
+  flex-shrink: 0;
+  animation: overduePulse 2s infinite;
+}
+
+@keyframes overduePulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.mob-overdue-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fca5a5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mob-overdue-desc {
+  font-size: 11.5px;
+  color: #cbd5e1;
+  margin-top: 1px;
+}
+
+.mob-overdue-count-badge {
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.mob-overdue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mob-overdue-item-card {
+  background: rgba(18, 11, 7, 0.7);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  transition: all 0.2s;
+}
+
+.mob-overdue-item-card:hover {
+  background: rgba(28, 17, 10, 0.85);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.mob-overdue-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 250px;
+}
+
+.mob-overdue-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mob-overdue-date-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mob-overdue-type-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #f5c842;
+  background: rgba(245, 200, 66, 0.1);
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.mob-overdue-makeup-badge {
+  font-size: 10.5px;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.mob-overdue-customer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mob-overdue-customer-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.mob-overdue-phone,
+.mob-overdue-location {
+  font-size: 11.5px;
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.mob-overdue-financials {
+  font-size: 11.5px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mob-overdue-pending-alert {
+  color: #ef4444;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.mob-overdue-paid-badge {
+  color: #10b981;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.mob-overdue-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mob-btn-finish {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  border: none !important;
+  color: #fff !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  padding: 6px 12px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mob-btn-finish:hover {
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+}
+
+.mob-btn-collect {
+  font-size: 11.5px !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+  border-radius: 8px !important;
+  color: #f5c842 !important;
+  border-color: rgba(245, 200, 66, 0.4) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.mob-btn-icon-edit {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #cbd5e1;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.18s;
+}
+
+.mob-btn-icon-edit:hover {
+  background: rgba(245, 200, 66, 0.15);
+  color: #f5c842;
+  border-color: #f5c842;
+}
+
+/* Month-wise Booking Dates Strip */
+.mob-dates-section {
+  position: relative;
+}
+
+.mob-dates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mob-dates-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mob-dates-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mob-clear-date-btn {
+  background: rgba(245, 200, 66, 0.15);
+  border: 1px solid rgba(245, 200, 66, 0.35);
+  color: #f5c842;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 20px;
+  padding: 3px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.18s;
+}
+
+.mob-clear-date-btn:hover {
+  background: rgba(245, 200, 66, 0.25);
+  color: #fff;
+}
+
+.mob-no-dates-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(245, 200, 66, 0.2);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.mob-no-dates-icon {
+  font-size: 28px;
+  color: rgba(245, 200, 66, 0.4);
+  margin-bottom: 6px;
+}
+
+.mob-no-dates-text {
+  font-size: 13px;
+}
+
+/* Horizontal Scroll Strip */
+.mob-dates-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 6px 2px 14px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mob-date-card {
+  flex: 0 0 160px;
+  background: #1c1308;
+  border: 1px solid rgba(245, 200, 66, 0.18);
+  border-radius: 12px;
+  padding: 12px 10px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.mob-date-card:hover {
+  transform: translateY(-4px);
+  border-color: #f5c842;
+  box-shadow: 0 8px 24px rgba(245, 200, 66, 0.2);
+}
+
+.mob-date-card.selected {
+  border: 2px solid #f5c842;
+  background: #271a0b;
+  box-shadow: 0 0 18px rgba(245, 200, 66, 0.35);
+  transform: translateY(-2px);
+}
+
+.mob-date-card.has-overdue {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: #1e110c;
+}
+
+.mob-selected-pill {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #f5c842;
+  color: #1c1308;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.mob-date-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.mob-day-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.mob-day-name.today-text {
+  color: #f5c842;
+}
+
+.mob-date-middle {
+  margin-bottom: 8px;
+}
+
+.mob-day-number {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  color: #f8fafc;
+  letter-spacing: -0.02em;
+}
+
+.mob-day-number.today-num {
+  color: #f5c842;
+  text-shadow: 0 0 10px rgba(245, 200, 66, 0.4);
+}
+
+.mob-month-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 1px;
+}
+
+.mob-date-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mob-date-count {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #f5c842;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.mob-date-clients {
+  font-size: 10px;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.mob-date-finance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.mob-date-revenue {
+  color: #10b981;
+}
+
+.mob-date-pending {
+  color: #ef4444;
+  font-size: 9.5px;
+}
+
+/* Status Badges */
+.badge-status-overdue {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.badge-status-finished {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.badge-status-today {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #f5c842;
+  background: rgba(245, 200, 66, 0.2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.badge-status-upcoming {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.15);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Light Theme Adaptations */
+.theme-light .month-overview-card {
+  background: linear-gradient(145deg, #ffffff, #fdf8ee);
+  border-color: rgba(217, 119, 6, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.theme-light .mob-title {
+  color: #1e293b;
+}
+
+.theme-light .mob-subtitle {
+  color: #64748b;
+}
+
+.theme-light .mob-metric-val {
+  color: #1e293b;
+}
+
+.theme-light .mob-date-card {
+  background: #ffffff;
+  border-color: rgba(217, 119, 6, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.theme-light .mob-day-number {
+  color: #1e293b;
+}
+
+.theme-light .mob-overdue-item-card {
+  background: #fff;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.theme-light .mob-overdue-customer-name {
+  color: #1e293b;
 }
 
 /* ======================================================

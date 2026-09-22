@@ -5,6 +5,7 @@ import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete }
 import { validateAndCleanPhone, getSelectedChips, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 import { renderMuhurthamWidget, bookMuhurthamEvent } from '../muhurtham.js';
+import { renderMonthBookingOverviewWidget, quickMarkEventFinished, filterEventByDate, clearEventDateFilter, navigateEventMonth } from '../monthBookings.js';
 
 export async function renderEvents() {
   const [events, customers, employees] = await Promise.all([
@@ -74,10 +75,16 @@ export async function renderEvents() {
       return m === mTarget;
     });
   }
+  if (window._selectedEventDate) {
+    filtered = filtered.filter(e => e.date && String(e.date).split('T')[0] === window._selectedEventDate);
+  }
   if (window._eventStatusFilter !== 'all' && (window._eventActiveTab === 'history' || window._eventActiveTab === 'directory')) {
     if (window._eventStatusFilter === 'Upcoming') {
       const todayStr = new Date().toISOString().split('T')[0];
       filtered = filtered.filter(e => e.date && e.date >= todayStr);
+    } else if (window._eventStatusFilter === 'needs_update') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      filtered = filtered.filter(e => e.date && e.date < todayStr && e.status !== 'Completed');
     } else if (window._eventStatusFilter === 'top_paid') {
       filtered = [...filtered].sort((a, b) => (b.total || 0) - (a.total || 0));
     } else if (window._eventStatusFilter === 'crossover') {
@@ -104,6 +111,7 @@ export async function renderEvents() {
   const todayStr = new Date().toISOString().split('T')[0];
   const upcomingEvents = events.filter(e => e.date && e.date >= todayStr);
   const completedEvents = events.filter(e => e.status === 'Completed');
+  const overdueEvents = events.filter(e => e.date && e.date < todayStr && e.status !== 'Completed');
   const crossoverClients = getCrossOverCustomers(events, customers);
   window._cachedCrossoverClients = crossoverClients;
 
@@ -131,7 +139,7 @@ export async function renderEvents() {
     </div>
   </div>
 
-  ${renderMuhurthamWidget(events, window._selectedEventMonth)}
+  ${renderMonthBookingOverviewWidget(events, window._selectedEventMonth)}
 
   <!-- Navigation Tabs: Event History 1st and Analytics & Insights only -->
   <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">
@@ -154,6 +162,11 @@ export async function renderEvents() {
       </div>
       <div class="card" style="padding: 6px 12px; display:flex; gap:8px; margin-bottom:0; overflow-x:auto; max-width:100%; white-space:nowrap;" class="scrollbar-hide">
         <span class="chip ${window._eventStatusFilter === 'all' ? 'selected' : ''}" onclick="window.filterEventsStatus('all')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">All (${events.length})</span>
+        ${overdueEvents.length > 0 ? `
+          <span class="chip ${window._eventStatusFilter === 'needs_update' ? 'selected' : ''}" onclick="window.filterEventsStatus('needs_update')" style="padding: 4px 10px; font-size:11px; cursor:pointer; color:#ef4444; border-color:rgba(239,68,68,0.4); background:rgba(239,68,68,0.08); font-weight:600;">
+            ⚠️ Needs Update (${overdueEvents.length})
+          </span>
+        ` : ''}
         <span class="chip ${window._eventStatusFilter === 'Upcoming' ? 'selected' : ''}" onclick="window.filterEventsStatus('Upcoming')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">🗓️ Upcoming (${upcomingEvents.length})</span>
         <span class="chip ${window._eventStatusFilter === 'Completed' ? 'selected' : ''}" onclick="window.filterEventsStatus('Completed')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">✅ Completed (${completedEvents.length})</span>
         <span class="chip ${window._eventStatusFilter === 'Booked' ? 'selected' : ''}" onclick="window.filterEventsStatus('Booked')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">⏳ Pending (${events.filter(e => e.status === 'Booked').length})</span>
@@ -231,10 +244,17 @@ export function applyEventFilters() {
     });
   }
 
+  if (window._selectedEventDate) {
+    events = events.filter(e => e.date && String(e.date).split('T')[0] === window._selectedEventDate);
+  }
+
   if (window._eventStatusFilter !== undefined && window._eventStatusFilter !== 'all') {
     if (window._eventStatusFilter === 'Upcoming') {
       const todayStr = new Date().toISOString().split('T')[0];
       events = events.filter(e => e.date && e.date >= todayStr);
+    } else if (window._eventStatusFilter === 'needs_update') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      events = events.filter(e => e.date && e.date < todayStr && e.status !== 'Completed');
     } else if (window._eventStatusFilter === 'top_paid') {
       events = [...events].sort((a, b) => (b.total || 0) - (a.total || 0));
     } else if (window._eventStatusFilter === 'crossover') {
@@ -3204,6 +3224,11 @@ window.renderTopPaidEventsTab = renderTopPaidEventsTab;
 window.renderCompletedEventsTab = renderCompletedEventsTab;
 window.bookMuhurthamEvent = bookMuhurthamEvent;
 window.renderMuhurthamWidget = renderMuhurthamWidget;
+window.renderMonthBookingOverviewWidget = renderMonthBookingOverviewWidget;
+window.quickMarkEventFinished = quickMarkEventFinished;
+window.filterEventByDate = filterEventByDate;
+window.clearEventDateFilter = clearEventDateFilter;
+window.navigateEventMonth = navigateEventMonth;
 window.switchEventAnalyticsSubTab = switchEventAnalyticsSubTab;
 window.filterCrossoverSearch = filterCrossoverSearch;
 window.getCrossOverCustomers = getCrossOverCustomers;

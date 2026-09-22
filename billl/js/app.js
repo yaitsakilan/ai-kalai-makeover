@@ -5,7 +5,7 @@ import { renderDashboard, initCharts } from './pages/dashboard.js';
 import { renderAIChat, scrollChatBottom } from './pages/aichat.js';
 import { renderCustomers } from './pages/customers.js';
 import { renderEvents } from './pages/events.js';
-import { renderExpenses } from './pages/expenses.js';
+import { renderExpenses, initExpenseAnalyticsCharts } from './pages/expenses.js';
 import { renderAnalytics, initAnalyticsCharts } from './pages/analytics.js';
 import { renderOCR } from './pages/ocr.js';
 import { renderEmployeePage, renderRoleSelector, applyRoleLayout, enterRole, openSwitchModal } from './pages/employee.js';
@@ -243,6 +243,7 @@ export async function render() {
       case 'expenses':
         main.innerHTML = loadingHtml();
         main.innerHTML = await renderExpenses();
+        initExpenseAnalyticsCharts();
         break;
       case 'analytics':
         main.innerHTML = loadingHtml();

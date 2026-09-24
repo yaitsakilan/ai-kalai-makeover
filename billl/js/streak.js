@@ -237,15 +237,14 @@ export function calculateMonthlyGamification(allModulesData = {}) {
   const currentDayNum = now.getDate(); // 1 to 31
 
   // Collect date sets for each module for current month
+  // Collect date sets for customers for current month
   const moduleDateSets = {
-    customers: new Set(),
-    expenses: new Set(),
-    events: new Set()
+    customers: new Set()
   };
 
   const processList = (list, key, dateField = 'date') => {
     (list || []).forEach(item => {
-      const raw = item[dateField] || item.created_at || item.scan_date || item.purchase_date;
+      const raw = item[dateField] || item.last_visit || item.date || item.created_at || item.scan_date || item.purchase_date;
       const norm = normalizeDate(raw);
       if (norm && norm.startsWith(currentMonthStr)) {
         moduleDateSets[key].add(norm);
@@ -253,9 +252,7 @@ export function calculateMonthlyGamification(allModulesData = {}) {
     });
   };
 
-  processList(customers, 'customers');
-  processList(expenses, 'expenses');
-  processList(events, 'events');
+  processList(customers, 'customers', 'last_visit');
 
   let totalPoints = 0;
   let activeDaysInMonth = new Set();
@@ -264,27 +261,18 @@ export function calculateMonthlyGamification(allModulesData = {}) {
   for (let day = 1; day <= currentDayNum; day++) {
     const dStr = `${currentMonthStr}-${String(day).padStart(2, '0')}`;
     const custActive = moduleDateSets.customers.has(dStr);
-    const expActive = moduleDateSets.expenses.has(dStr);
-    const evtActive = moduleDateSets.events.has(dStr);
 
-    const activeCount = (custActive?1:0) + (expActive?1:0) + (evtActive?1:0);
-
-    if (activeCount > 0) {
+    if (custActive) {
       activeDaysInMonth.add(dStr);
-      // 10 pts per active category
-      let pts = activeCount * 10;
-      // Bonus 30 pts if all 3 modules are active on the same day
-      if (activeCount === 3) pts += 30;
-      totalPoints += pts;
+      // 10 pts per active customer entry day
+      totalPoints += 10;
     }
 
     dayByDayDetails.push({
       dateStr: dStr,
       day,
-      activeCount,
-      custActive,
-      expActive,
-      evtActive
+      activeCount: custActive ? 1 : 0,
+      custActive
     });
   }
 
@@ -301,11 +289,9 @@ export function calculateMonthlyGamification(allModulesData = {}) {
 
   const todayStr = getTodayStr();
   const todayMatrix = {
-    customers: moduleDateSets.customers.has(todayStr),
-    expenses: moduleDateSets.expenses.has(todayStr),
-    events: moduleDateSets.events.has(todayStr)
+    customers: moduleDateSets.customers.has(todayStr)
   };
-  const todayCompletedCount = Object.values(todayMatrix).filter(Boolean).length;
+  const todayCompletedCount = todayMatrix.customers ? 1 : 0;
 
   return {
     currentMonthStr,

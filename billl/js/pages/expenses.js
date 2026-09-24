@@ -1,6 +1,6 @@
 // billl/js/pages/expenses.js
 import { state } from '../state.js';
-import { fetchExpenses, fetchCustomers, fetchEvents, fetchAllClassPayments, fetchAllJewelRentals, addExpense, deleteExpense, fetchMonthlyBalances, saveMonthlyBalance } from '../db.js';
+import { fetchExpenses, addExpense, deleteExpense, fetchMonthlyBalances, saveMonthlyBalance } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { callGroqAPI } from '../api.js';
 import { formatEmpTag } from '../utils.js';
@@ -12,12 +12,6 @@ export function setExpenseTab(tab) {
 
 export function filterExpenseByMonth(val) {
   window._selectedExpenseMonth = val === 'all' ? 'all' : parseInt(val, 10);
-  window._expenseTrendViewMode = (val === 'all' ? 'monthly' : 'daily');
-  if (typeof window.render === 'function') window.render();
-}
-
-export function setExpenseTrendView(mode) {
-  window._expenseTrendViewMode = mode;
   if (typeof window.render === 'function') window.render();
 }
 
@@ -83,13 +77,7 @@ export function openExpenseFormSelector() {
 }
 
 export async function renderExpenses() {
-  const [allExpenses, allCustomers, allEvents, studentPayments, jewelRentals] = await Promise.all([
-    fetchExpenses().catch(() => []),
-    fetchCustomers().catch(() => []),
-    fetchEvents().catch(() => []),
-    fetchAllClassPayments().catch(() => []),
-    fetchAllJewelRentals().catch(() => [])
-  ]);
+  const allExpenses = await fetchExpenses().catch(() => []);
 
   const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -159,128 +147,54 @@ export async function renderExpenses() {
   }
 
   // 2. Filter expenses based on active tab
+  const tabName = activeTab === 'product' ? 'Product Expenses' : activeTab === 'general' ? 'General Expenses' : 'All Expenses';
+
   let expenses = monthExpenses;
+  let tabAllExpenses = allExpenses;
   if (activeTab === 'product') {
     expenses = monthExpenses.filter(e => e.category === 'Products');
+    tabAllExpenses = allExpenses.filter(e => e.category === 'Products');
   } else if (activeTab === 'general') {
     expenses = monthExpenses.filter(e => e.category !== 'Products');
+    tabAllExpenses = allExpenses.filter(e => e.category !== 'Products');
   }
 
   const total = expenses.reduce((s,e)=>s+(e.amount||0),0);
   const totalAllExpenses = monthExpenses.reduce((s,e)=>s+(e.amount||0),0);
-  const totalGeneralExpenses = monthExpenses.filter(e => e.category !== 'Products').reduce((s,e)=>s+(e.amount||0),0);
-  const totalProductExpenses = monthExpenses.filter(e => e.category === 'Products').reduce((s,e)=>s+(e.amount||0),0);
 
+  // General vs Product expenses breakdown for the selected month
+  const generalExpensesList = monthExpenses.filter(e => e.category !== 'Products');
+  const productExpensesList = monthExpenses.filter(e => e.category === 'Products');
+
+  const totalGeneralExpenses = generalExpensesList.reduce((s,e)=>s+(e.amount||0),0);
+  const totalProductExpenses = productExpensesList.reduce((s,e)=>s+(e.amount||0),0);
+
+  const generalSpendPct = totalAllExpenses > 0 ? Math.round((totalGeneralExpenses / totalAllExpenses) * 100) : 0;
+  const productSpendPct = totalAllExpenses > 0 ? Math.round((totalProductExpenses / totalAllExpenses) * 100) : 0;
+
+  // Active tab payment totals
+  const cashSpent = expenses.filter(e => e.payment_method === 'Cash' || !e.payment_method).reduce((sum, e) => sum + (e.amount || 0), 0);
+  const gpaySpent = expenses.filter(e => e.payment_method === 'GPay').reduce((sum, e) => sum + (e.amount || 0), 0);
+
+  // Overall totals across all categories (for top card subtitles)
+  const totalCashSpent = monthExpenses.filter(e => e.payment_method === 'Cash' || !e.payment_method).reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalGpaySpent = monthExpenses.filter(e => e.payment_method === 'GPay').reduce((sum, e) => sum + (e.amount || 0), 0);
+
+  // Categories breakdown: if product tab, extract item name from note
   const cats = {};
-  expenses.forEach(e=>{ cats[e.category]=(cats[e.category]||0)+(e.amount||0); });
-
-  // 3. Inflow & Outflow Tracking (Orders + Events + Expenses)
-  const balanceMonthStr = isAllMonths ? `${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}` : selectedMonthStr;
-  const getMonthPrefix = (dStr) => dStr ? String(dStr).substring(0, 7) : '';
-
-  const monthCustomers = isAllMonths 
-    ? allCustomers 
-    : allCustomers.filter(c => getMonthPrefix(c.last_visit || c.created_at) === balanceMonthStr);
-
-  const monthEvents = isAllMonths 
-    ? allEvents 
-    : allEvents.filter(e => getMonthPrefix(e.date || e.created_at) === balanceMonthStr);
-
-  const monthStudents = isAllMonths
-    ? studentPayments
-    : studentPayments.filter(p => getMonthPrefix(p.date || p.created_at) === balanceMonthStr);
-
-  const monthJewels = isAllMonths
-    ? jewelRentals
-    : jewelRentals.filter(r => getMonthPrefix(r.start_date || r.created_at) === balanceMonthStr);
-
-  // Inflow from Customers (Orders / Shop Services)
-  let custCashIn = 0;
-  let custGPayIn = 0;
-  monthCustomers.forEach(c => {
-    if (c.payment_status === 'paid' || !c.payment_status) {
-      const svcs = (Array.isArray(c.services) ? c.services.join(' ') : (c.services || '')).toLowerCase();
-      const pm = (c.payment_method || '').toLowerCase();
-      
-      if (svcs.includes('both') || pm.includes('both')) {
-        let cashMatch = svcs.match(/cash:\s*₹?(\d+)/);
-        let gpayMatch = svcs.match(/gpay:\s*₹?(\d+)/);
-        if (cashMatch && gpayMatch) {
-          custCashIn += parseInt(cashMatch[1], 10);
-          custGPayIn += parseInt(gpayMatch[1], 10);
-        } else {
-          custCashIn += Math.round((c.amount || 0) / 2);
-          custGPayIn += Math.round((c.amount || 0) / 2);
-        }
-      } else if (svcs.includes('gpay') || svcs.includes('online') || svcs.includes('upi') || pm.includes('gpay') || pm.includes('online') || pm.includes('upi')) {
-        custGPayIn += (c.amount || 0);
-      } else {
-        custCashIn += (c.amount || 0);
-      }
+  expenses.forEach(e => {
+    let catName = e.category;
+    if (activeTab === 'product' && e.note) {
+      let clean = e.note.replace(/^(Products|Makeup):\s*/i, '');
+      clean = clean.replace(/\s*\([^)]*\)/g, '').trim();
+      if (clean) catName = clean;
     }
+    cats[catName] = (cats[catName] || 0) + (e.amount || 0);
   });
 
-  // Inflow from Events (Bookings & Advances)
-  let evtCashIn = 0;
-  let evtGPayIn = 0;
-  monthEvents.forEach(e => {
-    const paidAmt = (e.advance || 0);
-    const noteStr = ((e.additional_makeup || '') + ' ' + (e.review || '')).toLowerCase();
-    if (noteStr.includes('cash:') || noteStr.includes('gpay:')) {
-      let cashMatch = noteStr.match(/cash:\s*₹?(\d+)/);
-      let gpayMatch = noteStr.match(/gpay:\s*₹?(\d+)/);
-      if (cashMatch) evtCashIn += parseInt(cashMatch[1], 10);
-      if (gpayMatch) evtGPayIn += parseInt(gpayMatch[1], 10);
-      if (!cashMatch && !gpayMatch) evtGPayIn += paidAmt;
-    } else {
-      evtGPayIn += paidAmt;
-    }
-  });
-
-  // Inflow from Academy & Jewels
-  let otherCashIn = 0;
-  let otherGPayIn = 0;
-  monthStudents.forEach(p => {
-    if ((p.payment_method || '').toLowerCase().includes('cash')) otherCashIn += (p.amount || 0);
-    else otherGPayIn += (p.amount || 0);
-  });
-  monthJewels.forEach(r => {
-    if ((r.payment_method || '').toLowerCase().includes('cash')) otherCashIn += (r.rental_fee || 0);
-    else otherGPayIn += (r.rental_fee || 0);
-  });
-
-  const cashInflow = custCashIn + evtCashIn + otherCashIn;
-  const gpayInflow = custGPayIn + evtGPayIn + otherGPayIn;
-  const totalInflow = cashInflow + gpayInflow;
-
-  // Expenses Outflow
-  const balanceMonthExpenses = isAllMonths 
-    ? allExpenses 
-    : allExpenses.filter(e => (e.date || '').startsWith(balanceMonthStr));
-
-  const cashSpent = balanceMonthExpenses.filter(e => e.payment_method === 'Cash' || !e.payment_method).reduce((sum, e) => sum + (e.amount || 0), 0);
-  const gpaySpent = balanceMonthExpenses.filter(e => e.payment_method === 'GPay').reduce((sum, e) => sum + (e.amount || 0), 0);
-  const totalSpent = cashSpent + gpaySpent;
-
-  // Starting Balances
-  const balances = await fetchMonthlyBalances();
-  const currentBalance = balances.find(b => b.month === balanceMonthStr) || { cash_balance: 0, gpay_balance: 0 };
-  const cashStarting = currentBalance.cash_balance || 0;
-  const gpayStarting = currentBalance.gpay_balance || 0;
-  const totalStarting = cashStarting + gpayStarting;
-
-  // Real Remaining Balances: Starting + Inflow (Orders & Events) - Expenses Outflow
-  const cashRemaining = cashStarting + cashInflow - cashSpent;
-  const gpayRemaining = gpayStarting + gpayInflow - gpaySpent;
-  const totalRemaining = totalStarting + totalInflow - totalSpent;
-
-  const currentMonthName = isAllMonths ? `${MONTHS[currentMonthIndex]} ${currentYear}` : selectedMonthName;
-  const hasBalances = currentBalance.cash_balance !== undefined || currentBalance.gpay_balance !== undefined;
-  const showBanner = (!hasBalances || (cashStarting === 0 && gpayStarting === 0));
-
-  // 4. Comprehensive Business Analytics
+  // 4. Comprehensive Business Analytics (Based on active tab)
   const allMonthMap = {};
-  allExpenses.forEach(e => {
+  tabAllExpenses.forEach(e => {
     if (!e.date) return;
     const parts = String(e.date).split('T')[0].split('-');
     if (parts.length < 2) return;
@@ -309,10 +223,10 @@ export async function renderExpenses() {
   let currMonthExpense = null;
   let diffEntries = 0;
   let diffEntriesPct = 0;
-  let momDiff = 0;
-  let momDiffPct = 0;
+  let diffSpend = 0;
+  let diffSpendPct = 0;
 
-  if (!isAllMonths) {
+  if (!isAllMonths && window._selectedExpenseMonth !== undefined && window._selectedExpenseMonth !== 'all') {
     const mTarget = targetMonthIdx;
     let selectedYear = targetYear;
     Object.values(allMonthMap).forEach(m => {
@@ -336,41 +250,33 @@ export async function renderExpenses() {
     diffEntriesPct = prevMonthExpense.count > 0 
       ? Math.round((diffEntries / prevMonthExpense.count) * 100) 
       : (currMonthExpense.count > 0 ? 100 : 0);
-
-    momDiff = currMonthExpense.total - prevMonthExpense.total;
-    momDiffPct = prevMonthExpense.total > 0 
-      ? Math.round((momDiff / prevMonthExpense.total) * 100) 
+    diffSpend = currMonthExpense.total - prevMonthExpense.total;
+    diffSpendPct = prevMonthExpense.total > 0 
+      ? Math.round((diffSpend / prevMonthExpense.total) * 100) 
       : (currMonthExpense.total > 0 ? 100 : 0);
   } else {
     sortedMonths = Object.values(allMonthMap).sort((a, b) => a.key.localeCompare(b.key));
-    isMonthComparison = false;
   }
 
-  const peakExpenseMonth = sortedMonths.length ? [...sortedMonths].sort((a, b) => b.total - a.total)[0] : null;
+  const peakExpenseMonth = sortedMonths.length ? [...sortedMonths].sort((a, b) => (b.count !== a.count ? b.count - a.count : b.total - a.total))[0] : null;
 
-
-  // Profitability & Burn Rate
-  const netProfit = totalInflow - totalAllExpenses;
-  const profitMarginPct = totalInflow > 0 ? Math.round((netProfit / totalInflow) * 100) : 0;
+  // Daily Burn for the active tab
   const daysInMonth = isAllMonths ? 365 : new Date(targetYear, targetMonthIdx + 1, 0).getDate();
-  const dailyBurn = Math.round(totalAllExpenses / (daysInMonth || 1));
+  const dailyBurn = Math.round(total / (daysInMonth || 1));
 
-  // Product Inventory vs Shop Overheads Split
-  const productSpend = monthExpenses
-    .filter(e => e.category === 'Products' || (e.note && (e.note.includes('Products:') || e.note.includes('Makeup:'))))
-    .reduce((s, e) => s + (e.amount || 0), 0);
-  const overheadSpend = Math.max(0, totalAllExpenses - productSpend);
-  const productSpendPct = totalAllExpenses > 0 ? Math.round((productSpend / totalAllExpenses) * 100) : 0;
-  const overheadSpendPct = totalAllExpenses > 0 ? (100 - productSpendPct) : 0;
+  // Product Inventory vs General Overheads Split
+  const productSpend = totalProductExpenses;
+  const overheadSpend = totalGeneralExpenses;
+  const overheadSpendPct = generalSpendPct;
 
   // Sorted Categories
   const sortedCats = Object.entries(cats)
     .map(([name, amount]) => ({ name, amount }))
     .sort((a, b) => b.amount - a.amount);
 
-  // Top Vendors / Suppliers from Product Expense notes
+  // Top Vendors / Suppliers from notes
   const vendorMap = {};
-  monthExpenses.forEach(e => {
+  expenses.forEach(e => {
     if (e.note) {
       const match = e.note.match(/\(([^)]+)\)/);
       if (match && match[1]) {
@@ -386,82 +292,27 @@ export async function renderExpenses() {
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
 
-  // 5. Daily spending distribution for the selected month
-  const dayCount = isAllMonths ? 30 : new Date(targetYear, targetMonthIdx + 1, 0).getDate();
-  const dayMap = {};
-  for (let d = 1; d <= dayCount; d++) {
-    const dayStr = `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    dayMap[d] = {
-      day: d,
-      dateStr: dayStr,
-      label: `${MONTHS[targetMonthIdx].substring(0, 3)} ${d}`,
-      total: 0,
-      count: 0,
-      items: []
-    };
-  }
-
-  monthExpenses.forEach(e => {
-    if (!e.date) return;
-    const parts = String(e.date).split('T')[0].split('-');
-    if (parts.length >= 3) {
-      const d = parseInt(parts[2], 10);
-      if (dayMap[d]) {
-        dayMap[d].total += (e.amount || 0);
-        dayMap[d].count += 1;
-        dayMap[d].items.push(e);
-      }
-    }
-  });
-
-  const dailyData = Object.values(dayMap);
-  let peakDay = null;
-  dailyData.forEach(d => {
-    if (d.total > 0 && (!peakDay || d.total > peakDay.total)) {
-      peakDay = d;
-    }
-  });
-
-  const activeTrendView = window._expenseTrendViewMode || (!isAllMonths ? 'daily' : 'monthly');
-  const isDailyView = (!isAllMonths && activeTrendView === 'daily');
-
   // Cache data for Chart.js rendering
   window._expenseAnalyticsData = {
     isAllMonths,
     targetMonthIdx,
     targetYear,
     selectedMonthName,
-    dailyData,
-    peakDay,
-    activeTrendView,
-    isDailyView,
-    sortedMonths,
-    peakExpenseMonth,
+    activeTab,
+    tabName,
+    isMonthComparison,
     currMonthExpense,
     prevMonthExpense,
-    isMonthComparison,
+    sortedMonths,
+    peakExpenseMonth,
     sortedCats,
-    totalAllExpenses,
+    totalAllExpenses: total,
     cashSpent,
     gpaySpent,
     productSpend,
     overheadSpend,
     sortedVendors
   };
-
-  const bannerHtml = showBanner ? `
-    <div class="preview-box" style="margin-bottom:16px; border-color:#f59e0b; background:#fffbeb; padding: 14px 18px; border-radius: 12px;" id="starting-balance-banner">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-        <div>
-          <strong style="color:#b45309; font-size:13px; display:flex; align-items:center; gap:6px;"><i class="ti ti-alert-triangle" style="font-size:16px"></i> Start-of-Month Balances Not Set</strong>
-          <div style="font-size:11.5px; color:#666; margin-top:2px;">Please set your starting Cash in Hand and GPay balances for <strong>${currentMonthName}</strong> to track remaining funds.</div>
-        </div>
-        <button class="btn btn-gold" onclick="window.showStartingBalanceModal('${balanceMonthStr}', ${cashStarting}, ${gpayStarting})" style="padding: 6px 14px; font-size:12px; height:32px;">
-          <i class="ti ti-wallet"></i> Set Balances
-        </button>
-      </div>
-    </div>
-  ` : '';
 
   setTimeout(() => initExpenseAnalyticsCharts(), 60);
 
@@ -484,216 +335,37 @@ export async function renderExpenses() {
       <button class="btn btn-outline" onclick="window.showAddExpenseModal()">
         <i class="ti ti-plus"></i> General Expense
       </button>
-      <button class="btn btn-outline" onclick="window.analyzeExpenses()" style="border-color:#7c3aed; color:#7c3aed;" title="AI Expenses & Cost Insights">
-        <i class="ti ti-sparkles"></i> AI Analysis
-      </button>
       <button class="btn btn-outline" onclick="window.showPage('ocr')" style="border-color:#ea580c; color:#ea580c;">
         <i class="ti ti-scan"></i> Scan Bill
       </button>
     </div>
   </div>
 
-  ${bannerHtml}
-
-  <div class="metric-grid" style="margin-bottom: 20px;">
-    <div class="metric-card mc-orange">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div class="metric-label">Cash in Hand Balance (${isAllMonths ? 'All Time' : MONTHS[targetMonthIdx]})</div>
-        <button onclick="window.showStartingBalanceModal('${balanceMonthStr}', ${cashStarting}, ${gpayStarting})" style="background:none; border:none; color:#b45309; cursor:pointer; font-size:11px; padding:2px 6px; border-radius:6px; display:inline-flex; align-items:center; gap:3px;" title="Edit Starting Balances"><i class="ti ti-pencil"></i> Edit</button>
-      </div>
-      <div class="metric-value" style="color: ${cashRemaining >= 0 ? '#1a1a1a' : '#dc2626'}">₹${cashRemaining.toLocaleString()}</div>
-      <div class="metric-sub">Start: ₹${cashStarting.toLocaleString()} · Inflow: +₹${cashInflow.toLocaleString()} · Spent: -₹${cashSpent.toLocaleString()}</div>
-      <div class="metric-icon"><i class="ti ti-wallet"></i></div>
-    </div>
-    <div class="metric-card mc-purple">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div class="metric-label">GPay Balance (${isAllMonths ? 'All Time' : MONTHS[targetMonthIdx]})</div>
-        <button onclick="window.showStartingBalanceModal('${balanceMonthStr}', ${cashStarting}, ${gpayStarting})" style="background:none; border:none; color:#7c3aed; cursor:pointer; font-size:11px; padding:2px 6px; border-radius:6px; display:inline-flex; align-items:center; gap:3px;" title="Edit Starting Balances"><i class="ti ti-pencil"></i> Edit</button>
-      </div>
-      <div class="metric-value" style="color: ${gpayRemaining >= 0 ? '#1a1a1a' : '#dc2626'}">₹${gpayRemaining.toLocaleString()}</div>
-      <div class="metric-sub">Start: ₹${gpayStarting.toLocaleString()} · Inflow: +₹${gpayInflow.toLocaleString()} · Spent: -₹${gpaySpent.toLocaleString()}</div>
-      <div class="metric-icon"><i class="ti ti-credit-card"></i></div>
-    </div>
-    <div class="metric-card mc-teal">
-      <div class="metric-label">Total Remaining Funds (${isAllMonths ? 'All Time' : MONTHS[targetMonthIdx]})</div>
-      <div class="metric-value" style="color: ${totalRemaining >= 0 ? '#15803d' : '#dc2626'}">₹${totalRemaining.toLocaleString()}</div>
-      <div class="metric-sub">Total Funds: ₹${(totalStarting + totalInflow).toLocaleString()} (Start: ₹${totalStarting.toLocaleString()} + In: +₹${totalInflow.toLocaleString()}) · Spent: -₹${totalSpent.toLocaleString()}</div>
-      <div class="metric-icon"><i class="ti ti-cash"></i></div>
-    </div>
-  </div>
-
-  <!-- 1. Financial Inflow vs Outflow & Daily Burn Rate KPIs -->
-  <div class="metric-grid" style="margin-bottom: 20px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-    <div class="metric-card mc-green">
-      <div class="metric-label">Total Inflow (${selectedMonthLabel})</div>
-      <div class="metric-value" style="color:#15803d">₹${totalInflow.toLocaleString()}</div>
-      <div class="metric-sub">Shop + Events + Academy + Rentals</div>
-      <div class="metric-icon"><i class="ti ti-arrow-up-right"></i></div>
-    </div>
-    <div class="metric-card mc-rose">
+  <!-- 1. Pure Expenses Overview: Total Outflow, General vs Product Split & Daily Burn -->
+  <div class="metric-grid" style="margin-bottom: 20px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+    <div class="metric-card mc-rose" onclick="window.setExpenseTab('all')" style="cursor:pointer; ${activeTab === 'all' ? 'box-shadow: 0 0 0 2.5px #dc2626; border-color:#dc2626;' : ''}" title="Click to view all expenses combined">
       <div class="metric-label">Total Outflow (${selectedMonthLabel})</div>
       <div class="metric-value" style="color:#dc2626">₹${totalAllExpenses.toLocaleString()}</div>
-      <div class="metric-sub">${monthExpenses.length} transactions recorded</div>
+      <div class="metric-sub">${monthExpenses.length} transactions · Cash: ₹${totalCashSpent.toLocaleString()} · GPay: ₹${totalGpaySpent.toLocaleString()}</div>
       <div class="metric-icon"><i class="ti ti-arrow-down-left"></i></div>
     </div>
-    <div class="metric-card mc-gold">
-      <div class="metric-label">Net Operating Margin</div>
-      <div class="metric-value" style="color:${netProfit >= 0 ? '#166534' : '#dc2626'}">${netProfit >= 0 ? '+' : ''}₹${netProfit.toLocaleString()}</div>
-      <div class="metric-sub">${profitMarginPct}% Profit Margin ${netProfit >= 0 ? '📈' : '📉'}</div>
-      <div class="metric-icon"><i class="ti ti-chart-arrows"></i></div>
+    <div class="metric-card mc-gold" onclick="window.setExpenseTab('general')" style="cursor:pointer; ${activeTab === 'general' ? 'box-shadow: 0 0 0 2.5px #b45309; border-color:#b45309;' : ''}" title="Click to view General expenses only">
+      <div class="metric-label">General Expenses (${selectedMonthLabel})</div>
+      <div class="metric-value" style="color:#b45309">₹${totalGeneralExpenses.toLocaleString()}</div>
+      <div class="metric-sub">${generalExpensesList.length} entries (${generalSpendPct}%) · Rent, Salaries, Bills & Utilities</div>
+      <div class="metric-icon"><i class="ti ti-building"></i></div>
+    </div>
+    <div class="metric-card mc-purple" onclick="window.setExpenseTab('product')" style="cursor:pointer; ${activeTab === 'product' ? 'box-shadow: 0 0 0 2.5px #7c3aed; border-color:#7c3aed;' : ''}" title="Click to view Product expenses only">
+      <div class="metric-label">Product Expenses (${selectedMonthLabel})</div>
+      <div class="metric-value" style="color:#7c3aed">₹${totalProductExpenses.toLocaleString()}</div>
+      <div class="metric-sub">${productExpensesList.length} entries (${productSpendPct}%) · Salon Creams, Kits, Makeup & Stock</div>
+      <div class="metric-icon"><i class="ti ti-package"></i></div>
     </div>
     <div class="metric-card mc-blue">
-      <div class="metric-label">Daily Operating Burn</div>
+      <div class="metric-label">Daily ${activeTab === 'product' ? 'Product' : activeTab === 'general' ? 'General' : 'Operating'} Burn</div>
       <div class="metric-value" style="color:#2563eb">₹${dailyBurn.toLocaleString()}<span style="font-size:12px;font-weight:normal;color:#888;">/day</span></div>
-      <div class="metric-sub">Avg spend per calendar day</div>
+      <div class="metric-sub">${activeTab === 'product' ? 'Product purchases' : activeTab === 'general' ? 'General bills' : 'Total spend'} across ${daysInMonth} calendar days</div>
       <div class="metric-icon"><i class="ti ti-flame"></i></div>
-    </div>
-  </div>
-
-  <!-- 📅 Monthly Spending & Outflow Trends (Like Customers Page) -->
-  <div class="card" style="margin-bottom:20px; padding:20px">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px">
-      <div>
-        <div class="section-title" style="margin-bottom:2px">
-          <i class="ti ti-chart-bar" style="color:#d97706; font-size:18px"></i>
-          ${isMonthComparison && currMonthExpense && prevMonthExpense 
-            ? `Monthly Trend: ${currMonthExpense.label} vs Previous Month (${prevMonthExpense.label})` 
-            : 'Monthly Expense Outflow & Overhead Trend (Peak Month Analysis)'}
-        </div>
-        <div style="font-size:12px; color:#888">
-          ${isMonthComparison && currMonthExpense && prevMonthExpense 
-            ? `Comparing ${currMonthExpense.label} performance against previous month (${prevMonthExpense.label}) to evaluate spending growth & expense entries` 
-            : 'Monthly breakdown showing salon expenditure & overhead trends'}
-        </div>
-      </div>
-
-      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
-        ${isMonthComparison && prevMonthExpense ? `
-          <div style="background:${momDiff <= 0 ? '#f0fdf4' : '#fff1f2'}; border:1px solid ${momDiff <= 0 ? '#bbf7d0' : '#fecdd3'}; border-radius:10px; padding:6px 14px; display:flex; align-items:center; gap:8px">
-            <i class="ti ${momDiff <= 0 ? 'ti-trending-down' : 'ti-trending-up'}" style="color:${momDiff <= 0 ? '#16a34a' : '#e11d48'}; font-size:20px"></i>
-            <div>
-              <div style="font-size:10px; color:${momDiff <= 0 ? '#15803d' : '#be123c'}; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">MoM vs ${prevMonthExpense.label}</div>
-              <div style="font-size:13px; font-weight:700; color:${momDiff <= 0 ? '#166534' : '#9f1239'}">
-                ${diffEntries >= 0 ? '+' : ''}${diffEntriesPct}% entries (${diffEntries >= 0 ? '+' : ''}${diffEntries}) · ${momDiff > 0 ? '+' : ''}${momDiffPct}% spend
-              </div>
-            </div>
-          </div>
-        ` : ''}
-
-        ${peakExpenseMonth ? `
-          <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:6px 14px; display:flex; align-items:center; gap:10px">
-            <i class="ti ti-trophy" style="color:#d97706; font-size:20px"></i>
-            <div>
-              <div style="font-size:10px; color:#b45309; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">${isMonthComparison ? 'Higher Month' : 'Highest Peak Month'}</div>
-              <div style="font-size:14px; font-weight:700; color:#92400e">${peakExpenseMonth.label} — ${peakExpenseMonth.count} Entries <span style="font-size:12px; font-weight:600; color:#15803d">(₹${peakExpenseMonth.total.toLocaleString()})</span></div>
-            </div>
-          </div>
-        ` : ''}
-      </div>
-    </div>
-
-    <div style="position:relative; width:100%; height:220px; margin-bottom:16px">
-      <canvas id="expenseMonthlyTrendChart"></canvas>
-    </div>
-
-    <!-- Monthly Breakdown List -->
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px">
-      ${sortedMonths.map(m => {
-        const isPeak = peakExpenseMonth && m.key === peakExpenseMonth.key;
-        const isSelected = isMonthComparison && currMonthExpense && m.key === currMonthExpense.key;
-        const isPrev = isMonthComparison && prevMonthExpense && m.key === prevMonthExpense.key;
-        const totalRef = isMonthComparison && prevMonthExpense && currMonthExpense ? (prevMonthExpense.count + currMonthExpense.count || 1) : sortedMonths.reduce((s, x) => s + x.count, 0) || 1;
-        const pct = Math.round((m.count / (totalRef || 1)) * 100);
-        return `
-          <div style="padding:12px 14px; background:${isSelected ? '#fffdf0' : (isPeak ? '#fffbeb' : '#fafafa')}; border:${isSelected ? '2px solid #f5c842' : (isPeak ? '1.5px solid #fde68a' : '1px solid #f0f0f0')}; border-radius:10px; position:relative;">
-            <div style="position:absolute; top:-9px; right:8px; display:flex; gap:4px">
-              ${isSelected ? '<span class="badge badge-amber" style="font-size:9px; padding:1px 6px">Selected Month</span>' : ''}
-              ${isPrev ? '<span class="badge badge-gray" style="font-size:9px; padding:1px 6px">Previous Month</span>' : ''}
-              ${isPeak && !isSelected ? '<span class="badge badge-gold" style="font-size:9px; padding:1px 6px">🏆 Higher</span>' : ''}
-            </div>
-            <div style="font-size:13px; font-weight:700; color:#1a1a1a">${m.label}</div>
-            <div style="font-size:20px; font-weight:700; color:${isPeak ? '#d97706' : '#333'}; margin-top:4px">${m.count} <span style="font-size:12px; font-weight:normal; color:#888">entries (${pct}%)</span></div>
-            <div style="font-size:13px; font-weight:600; color:#15803d; margin-top:3px">₹${m.total.toLocaleString()}</div>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  </div>
-
-  <!-- 3. Category Breakdown & Products vs Overheads Split (Two-Column Grid) -->
-  <div class="grid-2" style="margin-bottom:20px;">
-    <!-- 🍩 Top Expense Categories & Cost Drivers -->
-    <div class="card">
-      <div class="section-title">
-        <i class="ti ti-chart-donut" style="color:#7c3aed;"></i> Top Expense Categories & Cost Drivers
-      </div>
-      <div style="font-size:12px; color:#888; margin-bottom:12px;">Category distribution of where money went (${selectedMonthLabel})</div>
-      
-      <div style="position:relative; width:100%; height:180px; margin-bottom:14px;">
-        <canvas id="expenseCategoryChart"></canvas>
-      </div>
-
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        ${sortedCats.slice(0, 5).map(cat => {
-          const pct = totalAllExpenses > 0 ? Math.round((cat.amount / totalAllExpenses) * 100) : 0;
-          return `
-            <div>
-              <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
-                <span style="font-weight:600; color:#1a1a1a; display:flex; align-items:center; gap:6px;">
-                  <i class="ti ${expenseIcon(cat.name)}" style="color:#7c3aed;"></i> ${cat.name}
-                </span>
-                <span style="color:#888; font-weight:500;">₹${cat.amount.toLocaleString()} (${pct}%)</span>
-              </div>
-              <div style="width:100%; height:6px; background:#f3f4f6; border-radius:10px; overflow:hidden;">
-                <div style="width:${pct}%; height:100%; background:linear-gradient(90deg, #7c3aed, #a78bfa); border-radius:10px;"></div>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
-
-    <!-- 📦 Products vs Overheads + Payment Mode Distribution -->
-    <div class="card">
-      <div class="section-title">
-        <i class="ti ti-scale" style="color:#d97706;"></i> Inventory vs Shop Overheads Split
-      </div>
-      <div style="font-size:12px; color:#888; margin-bottom:12px;">Re-usable product purchases vs fixed operating bills</div>
-
-      <!-- Split Ratio Bar -->
-      <div style="background:#fafafa; border:1px solid #f0f0f0; border-radius:10px; padding:12px; margin-bottom:16px;">
-        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; margin-bottom:6px;">
-          <span style="color:#7c3aed;"><i class="ti ti-package"></i> Products: ₹${productSpend.toLocaleString()} (${productSpendPct}%)</span>
-          <span style="color:#d97706;"><i class="ti ti-building"></i> Overheads: ₹${overheadSpend.toLocaleString()} (${overheadSpendPct}%)</span>
-        </div>
-        <div style="width:100%; height:10px; background:#fde68a; border-radius:6px; overflow:hidden; display:flex;">
-          <div style="width:${productSpendPct}%; height:100%; background:#7c3aed;" title="Products: ${productSpendPct}%"></div>
-          <div style="width:${overheadSpendPct}%; height:100%; background:#f59e0b;" title="Overheads: ${overheadSpendPct}%"></div>
-        </div>
-      </div>
-
-      <!-- Payment Method Distribution -->
-      <div class="section-title" style="font-size:12.5px; margin-bottom:8px;">
-        <i class="ti ti-credit-card" style="color:#2563eb;"></i> Payment Mode Distribution (${selectedMonthLabel})
-      </div>
-      <div style="position:relative; width:100%; height:160px; margin-bottom:12px;">
-        <canvas id="expensePaymentChart"></canvas>
-      </div>
-
-      <!-- Top Vendors / Suppliers -->
-      ${sortedVendors.length ? `
-        <div style="border-top:1px solid #f0f0f0; padding-top:12px; margin-top:10px;">
-          <div style="font-size:11.5px; font-weight:600; color:#555; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">Top Suppliers / Stores</div>
-          <div style="display:flex; flex-direction:column; gap:6px;">
-            ${sortedVendors.map(v => `
-              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:5px 8px; background:#f9fafb; border-radius:6px;">
-                <span style="font-weight:600; color:#333;"><i class="ti ti-building-store" style="color:#7c3aed; margin-right:4px;"></i> ${v.name}</span>
-                <span style="font-weight:600; color:#1a1a1a;">₹${v.amount.toLocaleString()}</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
     </div>
   </div>
 
@@ -735,7 +407,8 @@ export async function renderExpenses() {
       </div>
     `).join('')}
   </div>
-  <div class="card">
+
+  <div class="card" style="margin-bottom:20px;">
     <div class="section-title">Transaction History (${expenses.length} entries${isAllMonths ? '' : ` · ${selectedMonthName}`})</div>
     ${expenses.length === 0 ? `<div style="color:#999;font-size:13px;padding:20px;text-align:center;">No expense records found${isAllMonths ? '' : ` for ${selectedMonthName}`}.</div>` :
       expenses.map(e=>{
@@ -752,6 +425,182 @@ export async function renderExpenses() {
         </div>
       </div>
     `; }).join('')}
+  </div>
+
+  <!-- 3. 📅 Spending & Outflow Trends (MoM vs Previous Month or All Months overview) -->
+  <div class="card" style="margin-bottom:20px; padding:20px">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px">
+      <div>
+        <div class="section-title" style="margin-bottom:2px">
+          <i class="ti ti-chart-bar" style="color:#d97706; font-size:18px"></i>
+          ${isMonthComparison && currMonthExpense && prevMonthExpense 
+            ? `Monthly Trend (${tabName}): ${currMonthExpense.label} vs Previous Month (${prevMonthExpense.label})` 
+            : `Monthly Expense Outflow Trend: ${tabName} (${isAllMonths ? 'All Months' : selectedMonthName})`}
+        </div>
+        <div style="font-size:12px; color:#888">
+          ${isMonthComparison && currMonthExpense && prevMonthExpense 
+            ? `Comparing ${currMonthExpense.label} ${tabName.toLowerCase()} against previous month (${prevMonthExpense.label}) to evaluate spending growth & expense entries` 
+            : `Monthly breakdown showing ${tabName.toLowerCase()} expenditure trends`}
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+        ${isMonthComparison && prevMonthExpense ? `
+          <div style="background:${diffEntries >= 0 ? '#fff1f2' : '#f0fdf4'}; border:1px solid ${diffEntries >= 0 ? '#fecdd3' : '#bbf7d0'}; border-radius:10px; padding:6px 14px; display:flex; align-items:center; gap:8px">
+            <i class="ti ${diffEntries >= 0 ? 'ti-trending-up' : 'ti-trending-down'}" style="color:${diffEntries >= 0 ? '#e11d48' : '#16a34a'}; font-size:20px"></i>
+            <div>
+              <div style="font-size:10px; color:${diffEntries >= 0 ? '#be123c' : '#15803d'}; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">MoM vs ${prevMonthExpense.label} (${tabName})</div>
+              <div style="font-size:13px; font-weight:700; color:${diffEntries >= 0 ? '#9f1239' : '#166534'}">
+                ${diffEntries >= 0 ? '+' : ''}${diffEntriesPct}% entries (${diffEntries >= 0 ? '+' : ''}${diffEntries}) · ${diffSpend >= 0 ? '+' : ''}${diffSpendPct}% spend
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        ${peakExpenseMonth ? `
+          <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:6px 14px; display:flex; align-items:center; gap:10px">
+            <i class="ti ti-trophy" style="color:#d97706; font-size:20px"></i>
+            <div>
+              <div style="font-size:10px; color:#b45309; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">${isMonthComparison ? `Higher ${tabName} Month` : 'Highest Peak Month'}</div>
+              <div style="font-size:14px; font-weight:700; color:#92400e">${peakExpenseMonth.label} — ${peakExpenseMonth.count} Entries <span style="font-size:12px; font-weight:600; color:#15803d">(₹${peakExpenseMonth.total.toLocaleString()})</span></div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+
+    <div style="position:relative; width:100%; height:220px; margin-bottom:16px">
+      <canvas id="expenseMonthlyTrendChart"></canvas>
+    </div>
+
+    <!-- Monthly Breakdown List -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px">
+      ${sortedMonths.map(m => {
+        const isPeak = peakExpenseMonth && m.key === peakExpenseMonth.key;
+        const isSelected = isMonthComparison && currMonthExpense && m.key === currMonthExpense.key;
+        const isPrev = isMonthComparison && prevMonthExpense && m.key === prevMonthExpense.key;
+        const totalRef = isMonthComparison && prevMonthExpense && currMonthExpense ? (prevMonthExpense.count + currMonthExpense.count || 1) : (tabAllExpenses.length || 1);
+        const pct = Math.round((m.count / (totalRef || 1)) * 100);
+        return `
+          <div style="padding:12px 14px; background:${isSelected ? '#fffdf0' : (isPeak ? '#fffbeb' : '#fafafa')}; border:${isSelected ? '2px solid #f5c842' : (isPeak ? '1.5px solid #fde68a' : '1px solid #f0f0f0')}; border-radius:10px; position:relative;">
+            <div style="position:absolute; top:-9px; right:8px; display:flex; gap:4px">
+              ${isSelected ? '<span class="badge badge-amber" style="font-size:9px; padding:1px 6px">Selected Month</span>' : ''}
+              ${isPrev && isPeak ? '<span class="badge badge-gold" style="font-size:9px; padding:1px 6px">🏆 Higher</span>' : ''}
+              ${isPrev && !isPeak ? '<span class="badge badge-outline" style="font-size:9px; padding:1px 6px">Previous Month</span>' : ''}
+              ${!isMonthComparison && isPeak ? '<span class="badge badge-gold" style="font-size:9px; padding:1px 6px">🏆 Highest</span>' : ''}
+            </div>
+            <div style="font-size:13px; font-weight:700; color:#1a1a1a">${m.label}</div>
+            <div style="font-size:20px; font-weight:700; color:${isPeak ? '#d97706' : '#333'}; margin-top:4px">${m.count} <span style="font-size:12px; font-weight:normal; color:#888">entries (${pct}%)</span></div>
+            <div style="font-size:13px; font-weight:600; color:#15803d; margin-top:3px">₹${m.total.toLocaleString()}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  </div>
+
+  <!-- 4. Category Breakdown & Products vs General Expenses Split (Two-Column Grid) -->
+  <div class="grid-2" style="margin-bottom:20px;">
+    <!-- 🍩 Top Expense Categories & Cost Drivers -->
+    <div class="card">
+      <div class="section-title">
+        <i class="ti ${activeTab === 'product' ? 'ti-package' : activeTab === 'general' ? 'ti-building' : 'ti-chart-donut'}" style="color:${activeTab === 'product' ? '#7c3aed' : activeTab === 'general' ? '#d97706' : '#7c3aed'};"></i>
+        ${activeTab === 'product' ? 'Top Products Purchased & Costs' : activeTab === 'general' ? 'Top General Expense Categories & Bills' : 'Top Expense Categories & Cost Drivers'}
+      </div>
+      <div style="font-size:12px; color:#888; margin-bottom:12px;">Category distribution of ${tabName.toLowerCase()} (${selectedMonthLabel})</div>
+      
+      <div style="position:relative; width:100%; height:180px; margin-bottom:14px;">
+        <canvas id="expenseCategoryChart"></canvas>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        ${sortedCats.slice(0, 5).map(cat => {
+          const pct = total > 0 ? Math.round((cat.amount / total) * 100) : 0;
+          return `
+            <div>
+              <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
+                <span style="font-weight:600; color:#1a1a1a; display:flex; align-items:center; gap:6px;">
+                  <i class="ti ${expenseIcon(cat.name)}" style="color:#7c3aed;"></i> ${cat.name}
+                </span>
+                <span style="color:#888; font-weight:500;">₹${cat.amount.toLocaleString()} (${pct}%)</span>
+              </div>
+              <div style="width:100%; height:6px; background:#f3f4f6; border-radius:10px; overflow:hidden;">
+                <div style="width:${pct}%; height:100%; background:linear-gradient(90deg, #7c3aed, #a78bfa); border-radius:10px;"></div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- 📦 Products vs General Expenses Split / Overview + Payment Mode Distribution -->
+    <div class="card">
+      <div class="section-title">
+        <i class="ti ${activeTab === 'product' ? 'ti-building-store' : activeTab === 'general' ? 'ti-receipt' : 'ti-scale'}" style="color:#d97706;"></i>
+        ${activeTab === 'product' ? 'Product Expenses & Suppliers' : activeTab === 'general' ? 'General Expenses Overview' : 'Products vs General Expenses Split'}
+      </div>
+      <div style="font-size:12px; color:#888; margin-bottom:12px;">
+        ${activeTab === 'product' ? 'Salon & makeup product purchases by vendor & payment mode' : activeTab === 'general' ? 'Operating bills, salaries, rent & utilities payment mode' : 'Salon & makeup product purchases vs general operating bills'}
+      </div>
+
+      ${activeTab === 'all' ? `
+        <!-- Split Ratio Bar for All Expenses -->
+        <div style="background:#fafafa; border:1px solid #f0f0f0; border-radius:10px; padding:12px; margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; margin-bottom:6px;">
+            <span style="color:#7c3aed;"><i class="ti ti-package"></i> Products: ₹${productSpend.toLocaleString()} (${productSpendPct}%)</span>
+            <span style="color:#d97706;"><i class="ti ti-building"></i> General: ₹${overheadSpend.toLocaleString()} (${overheadSpendPct}%)</span>
+          </div>
+          <div style="width:100%; height:10px; background:#fde68a; border-radius:6px; overflow:hidden; display:flex;">
+            <div style="width:${productSpendPct}%; height:100%; background:#7c3aed;" title="Products: ${productSpendPct}%"></div>
+            <div style="width:${overheadSpendPct}%; height:100%; background:#f59e0b;" title="General Expenses: ${overheadSpendPct}%"></div>
+          </div>
+        </div>
+      ` : activeTab === 'general' ? `
+        <!-- General Expenses Summary Box -->
+        <div style="background:#fffdf0; border:1px solid #fef3c7; border-radius:10px; padding:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:11px; color:#b45309; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">General Operating Spend</div>
+            <div style="font-size:18px; font-weight:700; color:#92400e">₹${totalGeneralExpenses.toLocaleString()}</div>
+          </div>
+          <div style="text-align:right;">
+            <span class="badge badge-gold" style="font-size:11px">${generalExpensesList.length} bills (${generalSpendPct}% of outflow)</span>
+          </div>
+        </div>
+      ` : `
+        <!-- Product Expenses Summary Box -->
+        <div style="background:#faf5ff; border:1px solid #f3e8ff; border-radius:10px; padding:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:11px; color:#7c3aed; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Salon Products & Stock</div>
+            <div style="font-size:18px; font-weight:700; color:#5b21b6">₹${totalProductExpenses.toLocaleString()}</div>
+          </div>
+          <div style="text-align:right;">
+            <span class="badge badge-purple" style="font-size:11px">${productExpensesList.length} purchases (${productSpendPct}% of outflow)</span>
+          </div>
+        </div>
+      `}
+
+      <!-- Payment Method Distribution -->
+      <div class="section-title" style="font-size:12.5px; margin-bottom:8px;">
+        <i class="ti ti-credit-card" style="color:#2563eb;"></i> Payment Mode Distribution (${tabName} · ${selectedMonthLabel})
+      </div>
+      <div style="position:relative; width:100%; height:160px; margin-bottom:12px;">
+        <canvas id="expensePaymentChart"></canvas>
+      </div>
+
+      <!-- Top Vendors / Suppliers -->
+      ${sortedVendors.length ? `
+        <div style="border-top:1px solid #f0f0f0; padding-top:12px; margin-top:10px;">
+          <div style="font-size:11.5px; font-weight:600; color:#555; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">Top Suppliers / Stores</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${sortedVendors.map(v => `
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:5px 8px; background:#f9fafb; border-radius:6px;">
+                <span style="font-weight:600; color:#333;"><i class="ti ti-building-store" style="color:#7c3aed; margin-right:4px;"></i> ${v.name}</span>
+                <span style="font-weight:600; color:#1a1a1a;">₹${v.amount.toLocaleString()}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </div>
   </div>`;
 }
 
@@ -781,36 +630,31 @@ export function initExpenseAnalyticsCharts() {
     const counts = dd.sortedMonths.map(m => m.count);
     const totals = dd.sortedMonths.map(m => m.total);
 
+    const tabColor = dd.activeTab === 'product' ? '#7c3aed' : dd.activeTab === 'general' ? '#f59e0b' : '#f5c842';
+    const tabColorFade = dd.activeTab === 'product' ? 'rgba(124, 58, 237, 0.45)' : dd.activeTab === 'general' ? 'rgba(245, 158, 11, 0.45)' : 'rgba(245, 200, 66, 0.45)';
+    const tabBorder = dd.activeTab === 'product' ? '#6d28d9' : '#d97706';
+
     window._expenseCharts.monthly = new Chart(monthCanvas, {
       type: 'bar',
       data: {
         labels: labels,
         datasets: [
           {
-            label: 'Expense Entries',
+            label: `${dd.tabName || 'Expense'} Entries`,
             data: counts,
             backgroundColor: dd.sortedMonths.map(m => {
-              if (dd.isMonthComparison && dd.currMonthExpense && m.key === dd.currMonthExpense.key) {
-                return '#f5c842';
-              }
-              if (dd.peakExpenseMonth && m.key === dd.peakExpenseMonth.key) {
-                return '#f5c842';
-              }
-              return 'rgba(245, 200, 66, 0.45)';
+              const isSelected = dd.isMonthComparison && dd.currMonthExpense && m.key === dd.currMonthExpense.key;
+              const isPeak = dd.peakExpenseMonth && m.key === dd.peakExpenseMonth.key;
+              return (isSelected || isPeak) ? tabColor : tabColorFade;
             }),
-            borderColor: dd.sortedMonths.map(m => {
-              if (dd.isMonthComparison && dd.currMonthExpense && m.key === dd.currMonthExpense.key) {
-                return '#d97706';
-              }
-              return '#f5c842';
-            }),
+            borderColor: dd.sortedMonths.map(() => tabBorder),
             borderWidth: 1.5,
             borderRadius: 8,
             maxBarThickness: 70,
             yAxisID: 'y'
           },
           {
-            label: 'Total Outflow (₹)',
+            label: `${dd.tabName ? `${dd.tabName} Spend (₹)` : 'Total Outflow (₹)'}`,
             data: totals,
             type: 'line',
             borderColor: '#10b981',
@@ -843,9 +687,9 @@ export function initExpenseAnalyticsCharts() {
               },
               label: function(ctx) {
                 if (ctx.dataset.type === 'line') {
-                  return ` Total Outflow: ₹${Number(ctx.raw).toLocaleString()}`;
+                  return ` ${dd.tabName || 'Total'} Outflow: ₹${Number(ctx.raw).toLocaleString()}`;
                 }
-                return ` Expenses: ${ctx.raw} entries`;
+                return ` ${dd.tabName || 'Expenses'}: ${ctx.raw} entries`;
               }
             }
           }
@@ -855,7 +699,7 @@ export function initExpenseAnalyticsCharts() {
             type: 'linear',
             display: true,
             position: 'left',
-            title: { display: true, text: 'Expenses Count', font: { size: 10 } },
+            title: { display: true, text: `${dd.tabName || 'Expenses'} Count`, font: { size: 10 } },
             ticks: { precision: 0, font: { size: 10 } }
           },
           y1: {
@@ -863,7 +707,7 @@ export function initExpenseAnalyticsCharts() {
             display: true,
             position: 'right',
             grid: { drawOnChartArea: false },
-            title: { display: true, text: 'Total Outflow (₹)', font: { size: 10 } },
+            title: { display: true, text: `${dd.tabName ? `${dd.tabName} Spend (₹)` : 'Total Outflow (₹)'}`, font: { size: 10 } },
             ticks: {
               callback: function(val) { return '₹' + Number(val).toLocaleString(); },
               font: { size: 10 }
@@ -1884,7 +1728,6 @@ export async function submitProductExpenseForm() {
 window.setExpenseTab = setExpenseTab;
 window.filterExpenseByMonth = filterExpenseByMonth;
 window.setExpenseMonth = filterExpenseByMonth;
-window.setExpenseTrendView = setExpenseTrendView;
 window.openExpenseFormSelector = openExpenseFormSelector;
 window.openBulkExpenseForm = openBulkExpenseForm;
 window.addBulkExpenseRow = addBulkExpenseRow;

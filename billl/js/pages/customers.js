@@ -1752,8 +1752,8 @@ export function renderCustomerAnalyticsDashboard(customers, allCustomers = windo
   customers.forEach(c => {
     const sList = Array.isArray(c.services) ? c.services : (c.services || '').split(',');
     sList.forEach(s => {
-      // Strip payment tags like (GPay), (Cash), (Online) to consolidate identical services
-      const cleanS = s.replace(/\s*\((GPay|Cash|Online|UPI)\)/gi, '').trim();
+      // Strip payment tags like (GPay), (Cash), (Online), (Both), (Cash: ₹..., GPay: ₹...) to consolidate identical services
+      const cleanS = s.replace(/\s*\((?:Cash:\s*₹?\d+,\s*GPay:\s*₹?\d+|Both|Cash|GPay|Online|UPI)[^)]*\)/gi, '').trim();
       if (!cleanS) return;
       if (!serviceMap[cleanS]) serviceMap[cleanS] = { count: 0, revenue: 0 };
       serviceMap[cleanS].count += 1;

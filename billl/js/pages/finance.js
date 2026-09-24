@@ -74,20 +74,20 @@ export async function renderFinance() {
 
     <!-- Cash vs Digital Breakdown -->
     <div class="grid-2" style="margin-bottom:20px">
-      <div class="card" style="background:linear-gradient(135deg, #ffffff 0%, #fffbeb 100%);border-color:#fde68a">
-        <div class="section-title" style="color:#b45309">
+      <div class="card fin-cash-card">
+        <div class="section-title fin-cash-title">
           <i class="ti ti-cash" style="font-size:18px"></i> Cash in Hand (Drawer)
         </div>
-        <div style="font-size:28px;font-weight:700;color:#92400e">₹${fin.cashTotal.toLocaleString()}</div>
-        <div style="font-size:12px;color:#b45309;margin-top:4px">Physical cash collections logged across shop & services</div>
+        <div class="fin-cash-val">₹${fin.cashTotal.toLocaleString()}</div>
+        <div class="fin-cash-sub">Physical cash collections logged across shop & services</div>
       </div>
 
-      <div class="card" style="background:linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);border-color:#bbf7d0">
-        <div class="section-title" style="color:#15803d">
+      <div class="card fin-gpay-card">
+        <div class="section-title fin-gpay-title">
           <i class="ti ti-brand-google" style="font-size:18px"></i> Digital Receipts (GPay / Bank)
         </div>
-        <div style="font-size:28px;font-weight:700;color:#166534">₹${fin.gpayTotal.toLocaleString()}</div>
-        <div style="font-size:12px;color:#15803d;margin-top:4px">Direct bank transfer and online UPI payment receipts</div>
+        <div class="fin-gpay-val">₹${fin.gpayTotal.toLocaleString()}</div>
+        <div class="fin-gpay-sub">Direct bank transfer and online UPI payment receipts</div>
       </div>
     </div>
 

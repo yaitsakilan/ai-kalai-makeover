@@ -1,42 +1,94 @@
 // billl/js/pages/analytics.js
-import { fetchCustomers, fetchEvents, fetchExpenses } from '../db.js';
+import { fetchCustomers, fetchEvents, fetchExpenses, fetchClassEnrollments } from '../db.js';
 
 export async function renderAnalytics() {
-  const [customers, events, expenses] = await Promise.all([
+  const [customers, events, expenses, students] = await Promise.all([
     fetchCustomers(),
     fetchEvents(),
-    fetchExpenses()
+    fetchExpenses(),
+    fetchClassEnrollments().catch(() => [])
   ]);
+
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const now = new Date();
+  const currentMonthIndex = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  if (window._selectedAnalyticsMonth === undefined) {
+    window._selectedAnalyticsMonth = 'all';
+  }
+
+  const selectedMonth = window._selectedAnalyticsMonth;
+  const isAllMonths = selectedMonth === 'all';
+  const selectedMonthLabel = isAllMonths ? 'All Months' : MONTHS[selectedMonth];
+  const selectedMonthStr = isAllMonths ? '' : `${currentYear}-${String(Number(selectedMonth) + 1).padStart(2, '0')}`;
 
   const getSvcArray = (c) => Array.isArray(c.services) ? c.services : (typeof c.services === 'string' && c.services.trim() ? c.services.split(',').map(s => s.trim()) : []);
 
+  // Filter datasets by selected month if not 'all'
+  const filteredCustomers = isAllMonths
+    ? customers
+    : customers.filter(c => c.last_visit && c.last_visit.startsWith(selectedMonthStr));
+
+  const filteredEvents = isAllMonths
+    ? events
+    : events.filter(e => e.date && e.date.startsWith(selectedMonthStr));
+
+  const filteredExpenses = isAllMonths
+    ? expenses
+    : expenses.filter(e => e.date && e.date.startsWith(selectedMonthStr));
+
+  const filteredStudents = isAllMonths
+    ? (students || [])
+    : (students || []).filter(s => (s.start_date || s.created_at) && String(s.start_date || s.created_at).startsWith(selectedMonthStr));
+
   // Separate normal shop customers and class students
-  const shopCustomers = customers.filter(c => !getSvcArray(c).some(s => s.includes('Classes')));
-  const classStudents = customers.filter(c => getSvcArray(c).some(s => s.includes('Classes')));
+  const shopCustomers = filteredCustomers.filter(c => !getSvcArray(c).some(s => s.includes('Classes')));
+  const legacyClassStudents = filteredCustomers.filter(c => getSvcArray(c).some(s => s.includes('Classes')));
+
+  const allClassStudents = (filteredStudents.length > 0)
+    ? filteredStudents.map(s => ({
+        name: s.name,
+        amount: s.total_paid || 0,
+        last_visit: s.start_date || (s.created_at ? s.created_at.split('T')[0] : '')
+      }))
+    : legacyClassStudents;
 
   const shopRev = shopCustomers.reduce((s, c) => s + (c.amount || 0), 0);
-  const classRev = classStudents.reduce((s, c) => s + (c.amount || 0), 0);
-  const eventTotal = events.reduce((s, e) => s + (e.total || 0), 0);
-  const eventAdvance = events.reduce((s, e) => s + (e.advance || 0), 0);
-  const eventPending = events.reduce((s, e) => s + (e.pending || 0), 0);
-  const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const classRev = filteredStudents.reduce((s, st) => s + (st.total_paid || 0), 0) + legacyClassStudents.reduce((s, c) => s + (c.amount || 0), 0);
+  const totalStudentCount = filteredStudents.length > 0 ? filteredStudents.length : legacyClassStudents.length;
+
+  const eventTotal = filteredEvents.reduce((s, e) => s + (e.total || 0), 0);
+  const eventAdvance = filteredEvents.reduce((s, e) => s + (e.advance || 0), 0);
+  const eventPending = filteredEvents.reduce((s, e) => s + (e.pending || 0), 0);
+  const totalExpenses = filteredExpenses.reduce((s, e) => s + (e.amount || 0), 0);
   const totalInflow = shopRev + classRev + eventAdvance;
 
   // Build service popularity (excluding Classes)
   const serviceCounts = {};
-  shopCustomers.forEach(c => getSvcArray(c).forEach(s => { serviceCounts[s] = (serviceCounts[s] || 0) + 1; }));
+  shopCustomers.forEach(c => getSvcArray(c).forEach(s => {
+    const cleanS = s.replace(/\s*\((?:Cash:\s*₹?\d+,\s*GPay:\s*₹?\d+|Both|Cash|GPay|Online|UPI)[^)]*\)/gi, '').trim();
+    if (cleanS) serviceCounts[cleanS] = (serviceCounts[cleanS] || 0) + 1;
+  }));
   const topServices = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const maxSvc = topServices.length ? topServices[0][1] : 1;
 
   // Build wedding/event types popularity
   const eventTypeCounts = {};
-  events.forEach(e => { if (e.type) eventTypeCounts[e.type] = (eventTypeCounts[e.type] || 0) + 1; });
+  filteredEvents.forEach(e => { if (e.type) eventTypeCounts[e.type] = (eventTypeCounts[e.type] || 0) + 1; });
   const topEventTypes = Object.entries(eventTypeCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const maxEvt = topEventTypes.length ? topEventTypes[0][1] : 1;
 
   // Group expenses by category
   const expGroup = {};
-  expenses.forEach(e => { expGroup[e.category] = (expGroup[e.category] || 0) + (e.amount || 0); });
+  filteredExpenses.forEach(e => {
+    const cat = e.category || 'General';
+    expGroup[cat] = (expGroup[cat] || 0) + (e.amount || 0);
+  });
 
   // Generate dynamic trend months
   const monthKeys = new Set();
@@ -61,13 +113,7 @@ export async function renderAnalytics() {
   });
 
   // Map data to months
-  shopCustomers.forEach(c => {
-    if (!c.last_visit) return;
-    const mKey = c.last_visit.substring(0, 7);
-    const mObj = monthsList.find(m => m.key === mKey);
-    if (mObj) mObj.income += (c.amount || 0);
-  });
-  classStudents.forEach(c => {
+  customers.forEach(c => {
     if (!c.last_visit) return;
     const mKey = c.last_visit.substring(0, 7);
     const mObj = monthsList.find(m => m.key === mKey);
@@ -100,10 +146,27 @@ export async function renderAnalytics() {
   const cashProfit = totalInflow - totalExpenses;
   const netMargin = totalInflow > 0 ? Math.round((cashProfit / totalInflow) * 100) : 0;
 
+  window.filterAnalyticsByMonth = function(val) {
+    window._selectedAnalyticsMonth = val === 'all' ? 'all' : parseInt(val, 10);
+    if (typeof window.render === 'function') {
+      window.render();
+    }
+  };
+
   return `
-  <div class="top-bar">
-    <h2>Analytics & Insights</h2>
-    <div class="date"><i class="ti ti-database" style="color:#d97706;margin-right:4px"></i> Live Business Report</div>
+  <div class="top-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+    <div>
+      <h2 style="margin:0; font-size:24px; font-weight:700;">Analytics & Insights</h2>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <select class="form-input form-select" id="analytics-month-filter" style="width:auto; height:38px; font-size:12.5px; padding:4px 32px 4px 12px; font-weight:600; cursor:pointer;" onchange="window.filterAnalyticsByMonth(this.value)" title="Choose Month Filter">
+        <option value="all" ${isAllMonths ? 'selected' : ''}>📅 All Months</option>
+        ${MONTHS.map((m, idx) => `
+          <option value="${idx}" ${!isAllMonths && selectedMonth === idx ? 'selected' : ''}>📅 ${m}</option>
+        `).join('')}
+      </select>
+      <div class="date" style="padding:6px 12px; border-radius:8px;"><i class="ti ti-database" style="color:#d97706; margin-right:4px;"></i> Live Business Report</div>
+    </div>
   </div>
 
   <div class="metric-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
@@ -116,19 +179,19 @@ export async function renderAnalytics() {
     <div class="metric-card mc-teal">
       <div class="metric-label">Event Bookings</div>
       <div class="metric-value">₹${eventTotal.toLocaleString()}</div>
-      <div class="metric-sub">${events.length} bookings (₹${eventAdvance.toLocaleString()} paid)</div>
+      <div class="metric-sub">${filteredEvents.length} bookings (₹${eventAdvance.toLocaleString()} paid)</div>
       <i class="ti ti-calendar-event metric-icon"></i>
     </div>
     <div class="metric-card mc-purple">
       <div class="metric-label">Student Classes</div>
       <div class="metric-value">₹${classRev.toLocaleString()}</div>
-      <div class="metric-sub">${classStudents.length} student enrollments</div>
+      <div class="metric-sub">${totalStudentCount} student enrollments</div>
       <i class="ti ti-school metric-icon"></i>
     </div>
     <div class="metric-card mc-rose">
       <div class="metric-label">Total Expenses</div>
       <div class="metric-value">₹${totalExpenses.toLocaleString()}</div>
-      <div class="metric-sub">${expenses.length} expense transactions</div>
+      <div class="metric-sub">${filteredExpenses.length} expense transactions</div>
       <i class="ti ti-receipt metric-icon"></i>
     </div>
   </div>
@@ -190,7 +253,7 @@ export async function renderAnalytics() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
         <div style="background:#f9f9f9;border-radius:8px;padding:10px">
           <div style="font-size:11px;color:#999;margin-bottom:2px">Average Class Fee</div>
-          <div style="font-size:16px;font-weight:600;color:#1a1a1a">₹${classStudents.length ? Math.round(classRev / classStudents.length).toLocaleString() : 0}</div>
+          <div style="font-size:16px;font-weight:600;color:#1a1a1a">₹${allClassStudents.length ? Math.round(classRev / allClassStudents.length).toLocaleString() : 0}</div>
         </div>
         <div style="background:#f9f9f9;border-radius:8px;padding:10px">
           <div style="font-size:11px;color:#999;margin-bottom:2px">Inflow Contribution</div>
@@ -198,7 +261,7 @@ export async function renderAnalytics() {
         </div>
       </div>
       <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px">Recent Academy Students</div>
-      ${classStudents.length ? classStudents.slice(0, 4).map(s=>`
+      ${allClassStudents.length ? allClassStudents.slice(0, 4).map(s=>`
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid #f5f5f5;font-size:12px">
           <div>
             <span style="font-weight:500">${s.name}</span>

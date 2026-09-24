@@ -2640,14 +2640,492 @@ body:not(.theme-light) .card [style*="background:#ffffff"], body:not(.theme-ligh
   color: #f1f5f9 !important;
 }
 
-body.theme-dark .preview-box,
-body.theme-dark [style*="background:#fffbeb"], body.theme-dark [style*="background: #fffbeb"],
-body.theme-dark [style*="background:#fffdf5"], body.theme-dark [style*="background: #fffdf5"],
-body:not(.theme-light) .preview-box,
-body:not(.theme-light) [style*="background:#fffbeb"], body:not(.theme-light) [style*="background: #fffbeb"] {
+/* Dashboard Theme Classes (Base & Light Theme defaults) */
+.dash-customer-name { color: #1a1a1a; font-weight: 600; }
+.dash-item-amount { color: #1a1a1a; font-weight: 700; }
+.dash-item-sub { color: #666; }
+.dash-item-sub-muted { color: #888; }
+.dash-subcard { background: #ffffff; border: 1px solid #f0f0f0; }
+.dash-progress-track { background: #f0f0f0; }
+.dash-summary-tile { background: #f9f9f9; border: 1px solid #f0f0f0; }
+.dash-staff-avatar { background: #f3e8ff; color: #7c3aed; }
+
+/* Academy & Jewels Snapshot Cards - Light Mode */
+.dash-snapshot-card.dsc-blue { background: #eff6ff; border: 1px solid #bfdbfe; }
+.dash-snapshot-card.dsc-blue .dsc-label { color: #1e40af; }
+.dash-snapshot-card.dsc-blue .dsc-val { color: #1d4ed8; }
+.dash-snapshot-card.dsc-blue .dsc-sub { color: #60a5fa; }
+
+.dash-snapshot-card.dsc-red { background: #fef2f2; border: 1px solid #fecaca; }
+.dash-snapshot-card.dsc-red .dsc-label { color: #991b1b; }
+.dash-snapshot-card.dsc-red .dsc-val { color: #dc2626; }
+.dash-snapshot-card.dsc-red .dsc-sub { color: #f87171; }
+
+.dash-snapshot-card.dsc-green { background: #ecfdf5; border: 1px solid #a7f3d0; }
+.dash-snapshot-card.dsc-green .dsc-label { color: #065f46; }
+.dash-snapshot-card.dsc-green .dsc-val { color: #059669; }
+.dash-snapshot-card.dsc-green .dsc-sub { color: #34d399; }
+
+.dash-snapshot-card.dsc-amber { background: #fefce8; border: 1px solid #fef08a; }
+.dash-snapshot-card.dsc-amber .dsc-label { color: #854d0e; }
+.dash-snapshot-card.dsc-amber .dsc-val { color: #ca8a04; }
+.dash-snapshot-card.dsc-amber .dsc-sub { color: #eab308; }
+
+/* Dark Theme Overrides for Dashboard */
+body.theme-dark .dash-customer-name,
+body:not(.theme-light) .dash-customer-name,
+body.theme-dark .dash-item-amount,
+body:not(.theme-light) .dash-item-amount {
+  color: #f8fafc !important;
+}
+body.theme-dark .dash-item-sub,
+body:not(.theme-light) .dash-item-sub {
+  color: #cbd5e1 !important;
+}
+body.theme-dark .dash-item-sub-muted,
+body:not(.theme-light) .dash-item-sub-muted {
+  color: #94a3b8 !important;
+}
+body.theme-dark .dash-subcard,
+body:not(.theme-light) .dash-subcard,
+body.theme-dark .event-card,
+body:not(.theme-light) .event-card {
+  background: #201509 !important;
+  border-color: rgba(245, 200, 66, 0.16) !important;
+  color: #f1f5f9 !important;
+}
+body.theme-dark .dash-progress-track,
+body:not(.theme-light) .dash-progress-track {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+body.theme-dark .dash-summary-tile,
+body:not(.theme-light) .dash-summary-tile {
+  background: #201509 !important;
+  border-color: rgba(245, 200, 66, 0.15) !important;
+  color: #f1f5f9 !important;
+}
+body.theme-dark .dash-staff-avatar,
+body:not(.theme-light) .dash-staff-avatar {
+  background: rgba(124, 58, 237, 0.22) !important;
+  color: #c084fc !important;
+  border: 1px solid rgba(124, 58, 237, 0.35) !important;
+}
+
+/* Academy & Jewels Snapshot Cards - Dark Mode */
+body.theme-dark .dash-snapshot-card.dsc-blue,
+body:not(.theme-light) .dash-snapshot-card.dsc-blue {
+  background: rgba(37, 99, 235, 0.12) !important;
+  border-color: rgba(37, 99, 235, 0.3) !important;
+}
+body.theme-dark .dash-snapshot-card.dsc-blue .dsc-label,
+body:not(.theme-light) .dash-snapshot-card.dsc-blue .dsc-label { color: #93c5fd !important; }
+body.theme-dark .dash-snapshot-card.dsc-blue .dsc-val,
+body:not(.theme-light) .dash-snapshot-card.dsc-blue .dsc-val { color: #60a5fa !important; }
+body.theme-dark .dash-snapshot-card.dsc-blue .dsc-sub,
+body:not(.theme-light) .dash-snapshot-card.dsc-blue .dsc-sub { color: #bfdbfe !important; }
+
+body.theme-dark .dash-snapshot-card.dsc-red,
+body:not(.theme-light) .dash-snapshot-card.dsc-red {
+  background: rgba(220, 38, 38, 0.12) !important;
+  border-color: rgba(220, 38, 38, 0.3) !important;
+}
+body.theme-dark .dash-snapshot-card.dsc-red .dsc-label,
+body:not(.theme-light) .dash-snapshot-card.dsc-red .dsc-label { color: #fca5a5 !important; }
+body.theme-dark .dash-snapshot-card.dsc-red .dsc-val,
+body:not(.theme-light) .dash-snapshot-card.dsc-red .dsc-val { color: #f87171 !important; }
+body.theme-dark .dash-snapshot-card.dsc-red .dsc-sub,
+body:not(.theme-light) .dash-snapshot-card.dsc-red .dsc-sub { color: #fecaca !important; }
+
+body.theme-dark .dash-snapshot-card.dsc-green,
+body:not(.theme-light) .dash-snapshot-card.dsc-green {
+  background: rgba(5, 150, 105, 0.12) !important;
+  border-color: rgba(5, 150, 105, 0.3) !important;
+}
+body.theme-dark .dash-snapshot-card.dsc-green .dsc-label,
+body:not(.theme-light) .dash-snapshot-card.dsc-green .dsc-label { color: #86efac !important; }
+body.theme-dark .dash-snapshot-card.dsc-green .dsc-val,
+body:not(.theme-light) .dash-snapshot-card.dsc-green .dsc-val { color: #34d399 !important; }
+body.theme-dark .dash-snapshot-card.dsc-green .dsc-sub,
+body:not(.theme-light) .dash-snapshot-card.dsc-green .dsc-sub { color: #bbf7d0 !important; }
+
+body.theme-dark .dash-snapshot-card.dsc-amber,
+body:not(.theme-light) .dash-snapshot-card.dsc-amber {
+  background: rgba(202, 138, 4, 0.12) !important;
+  border-color: rgba(202, 138, 4, 0.3) !important;
+}
+body.theme-dark .dash-snapshot-card.dsc-amber .dsc-label,
+body:not(.theme-light) .dash-snapshot-card.dsc-amber .dsc-label { color: #fde047 !important; }
+body.theme-dark .dash-snapshot-card.dsc-amber .dsc-val,
+body:not(.theme-light) .dash-snapshot-card.dsc-amber .dsc-val { color: #facc15 !important; }
+body.theme-dark .dash-snapshot-card.dsc-amber .dsc-sub,
+body:not(.theme-light) .dash-snapshot-card.dsc-amber .dsc-sub { color: #fef08a !important; }
+
+/* Finance Drawer and Digital Cards - Light Mode Base */
+.fin-cash-card { background: linear-gradient(135deg, #ffffff 0%, #fffbeb 100%); border-color: #fde68a; }
+.fin-cash-title { color: #b45309; }
+.fin-cash-val { font-size: 28px; font-weight: 700; color: #92400e; }
+.fin-cash-sub { font-size: 12px; color: #b45309; margin-top: 4px; }
+
+.fin-gpay-card { background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); border-color: #bbf7d0; }
+.fin-gpay-title { color: #15803d; }
+.fin-gpay-val { font-size: 28px; font-weight: 700; color: #166534; }
+.fin-gpay-sub { font-size: 12px; color: #15803d; margin-top: 4px; }
+
+/* Finance Drawer and Digital Cards - Dark Mode */
+body.theme-dark .fin-cash-card, body:not(.theme-light) .fin-cash-card {
+  background: linear-gradient(135deg, #24180a 0%, #170e04 100%) !important;
+  border: 1px solid rgba(245, 200, 66, 0.35) !important;
+}
+body.theme-dark .fin-cash-title, body:not(.theme-light) .fin-cash-title { color: #fde047 !important; }
+body.theme-dark .fin-cash-val, body:not(.theme-light) .fin-cash-val { color: #f5c842 !important; }
+body.theme-dark .fin-cash-sub, body:not(.theme-light) .fin-cash-sub { color: #cbd5e1 !important; }
+
+body.theme-dark .fin-gpay-card, body:not(.theme-light) .fin-gpay-card {
+  background: linear-gradient(135deg, #092617 0%, #05140b 100%) !important;
+  border: 1px solid rgba(34, 197, 94, 0.35) !important;
+}
+body.theme-dark .fin-gpay-title, body:not(.theme-light) .fin-gpay-title { color: #86efac !important; }
+body.theme-dark .fin-gpay-val, body:not(.theme-light) .fin-gpay-val { color: #4ade80 !important; }
+body.theme-dark .fin-gpay-sub, body:not(.theme-light) .fin-gpay-sub { color: #cbd5e1 !important; }
+
+/* ======================================================
+   GLOBAL DARK THEME HIGH-CONTRAST SAFETY OVERRIDES
+   Ensures ALL text, cards, rows, modals & elements anywhere
+   on the entire website are 100% legible in dark mode.
+   ====================================================== */
+
+/* 1. Primary Text Overrides: Replace almost-black/dark text with bright crisp white (#f8fafc) */
+body.theme-dark [style*="color:#1a1a1a" i], body:not(.theme-light) [style*="color:#1a1a1a" i],
+body.theme-dark [style*="color: #1a1a1a" i], body:not(.theme-light) [style*="color: #1a1a1a" i],
+body.theme-dark [style*="color:#000" i], body:not(.theme-light) [style*="color:#000" i],
+body.theme-dark [style*="color: #000" i], body:not(.theme-light) [style*="color: #000" i],
+body.theme-dark [style*="color:#000000" i], body:not(.theme-light) [style*="color:#000000" i],
+body.theme-dark [style*="color: #000000" i], body:not(.theme-light) [style*="color: #000000" i],
+body.theme-dark [style*="color:black" i], body:not(.theme-light) [style*="color:black" i],
+body.theme-dark [style*="color: black" i], body:not(.theme-light) [style*="color: black" i],
+body.theme-dark [style*="color:#111" i], body:not(.theme-light) [style*="color:#111" i],
+body.theme-dark [style*="color: #111" i], body:not(.theme-light) [style*="color: #111" i],
+body.theme-dark [style*="color:#222" i], body:not(.theme-light) [style*="color:#222" i],
+body.theme-dark [style*="color: #222" i], body:not(.theme-light) [style*="color: #222" i],
+body.theme-dark [style*="color:#333" i], body:not(.theme-light) [style*="color:#333" i],
+body.theme-dark [style*="color: #333" i], body:not(.theme-light) [style*="color: #333" i],
+body.theme-dark [style*="color:#1f2937" i], body:not(.theme-light) [style*="color:#1f2937" i],
+body.theme-dark [style*="color: #1f2937" i], body:not(.theme-light) [style*="color: #1f2937" i],
+body.theme-dark [style*="color:#1e293b" i], body:not(.theme-light) [style*="color:#1e293b" i],
+body.theme-dark [style*="color: #1e293b" i], body:not(.theme-light) [style*="color: #1e293b" i],
+body.theme-dark [style*="color:#0f172a" i], body:not(.theme-light) [style*="color:#0f172a" i],
+body.theme-dark [style*="color: #0f172a" i], body:not(.theme-light) [style*="color: #0f172a" i],
+body.theme-dark [style*="color:#1a1005" i], body:not(.theme-light) [style*="color:#1a1005" i],
+body.theme-dark [style*="color: #1a1005" i], body:not(.theme-light) [style*="color: #1a1005" i],
+body.theme-dark [style*="color:#111827" i], body:not(.theme-light) [style*="color:#111827" i],
+body.theme-dark [style*="color: #111827" i], body:not(.theme-light) [style*="color: #111827" i],
+body.theme-dark [style*="color:#141414" i], body:not(.theme-light) [style*="color:#141414" i],
+body.theme-dark [style*="color: #141414" i], body:not(.theme-light) [style*="color: #141414" i] {
+  color: #f8fafc !important;
+}
+
+/* 2. Secondary & Medium-Dark Text: Replace #444, #555, #666, #777 with clean legible slate (#cbd5e1) */
+body.theme-dark [style*="color:#444" i], body:not(.theme-light) [style*="color:#444" i],
+body.theme-dark [style*="color: #444" i], body:not(.theme-light) [style*="color: #444" i],
+body.theme-dark [style*="color:#555" i], body:not(.theme-light) [style*="color:#555" i],
+body.theme-dark [style*="color: #555" i], body:not(.theme-light) [style*="color: #555" i],
+body.theme-dark [style*="color:#666" i], body:not(.theme-light) [style*="color:#666" i],
+body.theme-dark [style*="color: #666" i], body:not(.theme-light) [style*="color: #666" i],
+body.theme-dark [style*="color:#777" i], body:not(.theme-light) [style*="color:#777" i],
+body.theme-dark [style*="color: #777" i], body:not(.theme-light) [style*="color: #777" i],
+body.theme-dark [style*="color:#334155" i], body:not(.theme-light) [style*="color:#334155" i],
+body.theme-dark [style*="color: #334155" i], body:not(.theme-light) [style*="color: #334155" i],
+body.theme-dark [style*="color:#374151" i], body:not(.theme-light) [style*="color:#374151" i],
+body.theme-dark [style*="color: #374151" i], body:not(.theme-light) [style*="color: #374151" i],
+body.theme-dark [style*="color:#475569" i], body:not(.theme-light) [style*="color:#475569" i],
+body.theme-dark [style*="color: #475569" i], body:not(.theme-light) [style*="color: #475569" i],
+body.theme-dark [style*="color:#4b5563" i], body:not(.theme-light) [style*="color:#4b5563" i],
+body.theme-dark [style*="color: #4b5563" i], body:not(.theme-light) [style*="color: #4b5563" i],
+body.theme-dark [style*="color:#64748b" i], body:not(.theme-light) [style*="color:#64748b" i],
+body.theme-dark [style*="color: #64748b" i], body:not(.theme-light) [style*="color: #64748b" i],
+body.theme-dark [style*="color:#6b7280" i], body:not(.theme-light) [style*="color:#6b7280" i],
+body.theme-dark [style*="color: #6b7280" i], body:not(.theme-light) [style*="color: #6b7280" i] {
+  color: #cbd5e1 !important;
+}
+
+/* 3. Muted & Hint Text: Replace #888, #999, #aaa, #bbb, #ccc with clear muted slate (#94a3b8) */
+body.theme-dark [style*="color:#888" i], body:not(.theme-light) [style*="color:#888" i],
+body.theme-dark [style*="color: #888" i], body:not(.theme-light) [style*="color: #888" i],
+body.theme-dark [style*="color:#999" i], body:not(.theme-light) [style*="color:#999" i],
+body.theme-dark [style*="color: #999" i], body:not(.theme-light) [style*="color: #999" i],
+body.theme-dark [style*="color:#aaa" i], body:not(.theme-light) [style*="color:#aaa" i],
+body.theme-dark [style*="color: #aaa" i], body:not(.theme-light) [style*="color: #aaa" i],
+body.theme-dark [style*="color:#bbb" i], body:not(.theme-light) [style*="color:#bbb" i],
+body.theme-dark [style*="color: #bbb" i], body:not(.theme-light) [style*="color: #bbb" i],
+body.theme-dark [style*="color:#ccc" i], body:not(.theme-light) [style*="color:#ccc" i],
+body.theme-dark [style*="color: #ccc" i], body:not(.theme-light) [style*="color: #ccc" i],
+body.theme-dark [style*="color:#9ca3af" i], body:not(.theme-light) [style*="color:#9ca3af" i],
+body.theme-dark [style*="color: #9ca3af" i], body:not(.theme-light) [style*="color: #9ca3af" i] {
+  color: #94a3b8 !important;
+}
+
+/* 4. Dark Colored Accents: Convert to luminous high-contrast shades */
+/* Dark Blues -> Sky Blue (#60a5fa) */
+body.theme-dark [style*="color:#1e40af" i], body:not(.theme-light) [style*="color:#1e40af" i],
+body.theme-dark [style*="color: #1e40af" i], body:not(.theme-light) [style*="color: #1e40af" i],
+body.theme-dark [style*="color:#1e3a8a" i], body:not(.theme-light) [style*="color:#1e3a8a" i],
+body.theme-dark [style*="color: #1e3a8a" i], body:not(.theme-light) [style*="color: #1e3a8a" i],
+body.theme-dark [style*="color:#1d4ed8" i], body:not(.theme-light) [style*="color:#1d4ed8" i],
+body.theme-dark [style*="color: #1d4ed8" i], body:not(.theme-light) [style*="color: #1d4ed8" i],
+body.theme-dark [style*="color:#2563eb" i], body:not(.theme-light) [style*="color:#2563eb" i],
+body.theme-dark [style*="color: #2563eb" i], body:not(.theme-light) [style*="color: #2563eb" i] {
+  color: #60a5fa !important;
+}
+
+/* Dark Greens -> Mint Green (#4ade80) */
+body.theme-dark [style*="color:#15803d" i], body:not(.theme-light) [style*="color:#15803d" i],
+body.theme-dark [style*="color: #15803d" i], body:not(.theme-light) [style*="color: #15803d" i],
+body.theme-dark [style*="color:#166534" i], body:not(.theme-light) [style*="color:#166534" i],
+body.theme-dark [style*="color: #166534" i], body:not(.theme-light) [style*="color: #166534" i],
+body.theme-dark [style*="color:#14532d" i], body:not(.theme-light) [style*="color:#14532d" i],
+body.theme-dark [style*="color: #14532d" i], body:not(.theme-light) [style*="color: #14532d" i],
+body.theme-dark [style*="color:#065f46" i], body:not(.theme-light) [style*="color:#065f46" i],
+body.theme-dark [style*="color: #065f46" i], body:not(.theme-light) [style*="color: #065f46" i],
+body.theme-dark [style*="color:#16a34a" i], body:not(.theme-light) [style*="color:#16a34a" i],
+body.theme-dark [style*="color: #16a34a" i], body:not(.theme-light) [style*="color: #16a34a" i] {
+  color: #4ade80 !important;
+}
+
+/* Dark Ambers & Browns -> Bright Gold/Amber (#fde047 / #f5c842) */
+body.theme-dark [style*="color:#92400e" i], body:not(.theme-light) [style*="color:#92400e" i],
+body.theme-dark [style*="color: #92400e" i], body:not(.theme-light) [style*="color: #92400e" i],
+body.theme-dark [style*="color:#78350f" i], body:not(.theme-light) [style*="color:#78350f" i],
+body.theme-dark [style*="color: #78350f" i], body:not(.theme-light) [style*="color: #78350f" i],
+body.theme-dark [style*="color:#854d0e" i], body:not(.theme-light) [style*="color:#854d0e" i],
+body.theme-dark [style*="color: #854d0e" i], body:not(.theme-light) [style*="color: #854d0e" i],
+body.theme-dark [style*="color:#b45309" i], body:not(.theme-light) [style*="color:#b45309" i],
+body.theme-dark [style*="color: #b45309" i], body:not(.theme-light) [style*="color: #b45309" i] {
+  color: #fde047 !important;
+}
+
+/* Dark Reds -> Soft Coral Red (#f87171) */
+body.theme-dark [style*="color:#991b1b" i], body:not(.theme-light) [style*="color:#991b1b" i],
+body.theme-dark [style*="color: #991b1b" i], body:not(.theme-light) [style*="color: #991b1b" i],
+body.theme-dark [style*="color:#7f1d1d" i], body:not(.theme-light) [style*="color:#7f1d1d" i],
+body.theme-dark [style*="color: #7f1d1d" i], body:not(.theme-light) [style*="color: #7f1d1d" i],
+body.theme-dark [style*="color:#b91c1c" i], body:not(.theme-light) [style*="color:#b91c1c" i],
+body.theme-dark [style*="color: #b91c1c" i], body:not(.theme-light) [style*="color: #b91c1c" i] {
+  color: #f87171 !important;
+}
+
+/* Dark Purples & Indigos -> Soft Lilac/Purple (#c084fc) */
+body.theme-dark [style*="color:#581c87" i], body:not(.theme-light) [style*="color:#581c87" i],
+body.theme-dark [style*="color: #581c87" i], body:not(.theme-light) [style*="color: #581c87" i],
+body.theme-dark [style*="color:#6b21a8" i], body:not(.theme-light) [style*="color:#6b21a8" i],
+body.theme-dark [style*="color: #6b21a8" i], body:not(.theme-light) [style*="color: #6b21a8" i],
+body.theme-dark [style*="color:#5b21b6" i], body:not(.theme-light) [style*="color:#5b21b6" i],
+body.theme-dark [style*="color: #5b21b6" i], body:not(.theme-light) [style*="color: #5b21b6" i],
+body.theme-dark [style*="color:#6d28d9" i], body:not(.theme-light) [style*="color:#6d28d9" i],
+body.theme-dark [style*="color: #6d28d9" i], body:not(.theme-light) [style*="color: #6d28d9" i],
+body.theme-dark [style*="color:#4338ca" i], body:not(.theme-light) [style*="color:#4338ca" i],
+body.theme-dark [style*="color: #4338ca" i], body:not(.theme-light) [style*="color: #4338ca" i],
+body.theme-dark [style*="color:#4f46e5" i], body:not(.theme-light) [style*="color:#4f46e5" i],
+body.theme-dark [style*="color: #4f46e5" i], body:not(.theme-light) [style*="color: #4f46e5" i] {
+  color: #c084fc !important;
+}
+
+/* Dark Cyans -> Light Cyan (#38bdf8) */
+body.theme-dark [style*="color:#0e7490" i], body:not(.theme-light) [style*="color:#0e7490" i],
+body.theme-dark [style*="color: #0e7490" i], body:not(.theme-light) [style*="color: #0e7490" i],
+body.theme-dark [style*="color:#155e75" i], body:not(.theme-light) [style*="color:#155e75" i],
+body.theme-dark [style*="color: #155e75" i], body:not(.theme-light) [style*="color: #155e75" i] {
+  color: #38bdf8 !important;
+}
+
+/* 5. Surface & Box Background Overrides for Dark Mode */
+body.theme-dark [style*="background:#fff" i], body:not(.theme-light) [style*="background:#fff" i],
+body.theme-dark [style*="background: #fff" i], body:not(.theme-light) [style*="background: #fff" i],
+body.theme-dark [style*="background:#ffffff" i], body:not(.theme-light) [style*="background:#ffffff" i],
+body.theme-dark [style*="background: #ffffff" i], body:not(.theme-light) [style*="background: #ffffff" i],
+body.theme-dark [style*="background:white" i], body:not(.theme-light) [style*="background:white" i],
+body.theme-dark [style*="background: white" i], body:not(.theme-light) [style*="background: white" i],
+body.theme-dark [style*="background:#fafafa" i], body:not(.theme-light) [style*="background:#fafafa" i],
+body.theme-dark [style*="background: #fafafa" i], body:not(.theme-light) [style*="background: #fafafa" i],
+body.theme-dark [style*="background:#f9fafb" i], body:not(.theme-light) [style*="background:#f9fafb" i],
+body.theme-dark [style*="background: #f9fafb" i], body:not(.theme-light) [style*="background: #f9fafb" i],
+body.theme-dark [style*="background:#f9f9f9" i], body:not(.theme-light) [style*="background:#f9f9f9" i],
+body.theme-dark [style*="background: #f9f9f9" i], body:not(.theme-light) [style*="background: #f9f9f9" i],
+body.theme-dark [style*="background:#f5f5f5" i], body:not(.theme-light) [style*="background:#f5f5f5" i],
+body.theme-dark [style*="background: #f5f5f5" i], body:not(.theme-light) [style*="background: #f5f5f5" i],
+body.theme-dark [style*="background:#f3f4f6" i], body:not(.theme-light) [style*="background:#f3f4f6" i],
+body.theme-dark [style*="background: #f3f4f6" i], body:not(.theme-light) [style*="background: #f3f4f6" i],
+body.theme-dark [style*="background:#f8fafc" i], body:not(.theme-light) [style*="background:#f8fafc" i],
+body.theme-dark [style*="background: #f8fafc" i], body:not(.theme-light) [style*="background: #f8fafc" i],
+body.theme-dark [style*="background:#fcfcfc" i], body:not(.theme-light) [style*="background:#fcfcfc" i],
+body.theme-dark [style*="background:#fcfcfc" i], body:not(.theme-light) [style*="background:#fcfcfc" i],
+body.theme-dark [style*="background: #fcfcfc" i], body:not(.theme-light) [style*="background: #fcfcfc" i],
+body.theme-dark [style*="background:#f0f0f0" i], body:not(.theme-light) [style*="background:#f0f0f0" i],
+body.theme-dark [style*="background: #f0f0f0" i], body:not(.theme-light) [style*="background: #f0f0f0" i],
+body.theme-dark [style*="background:#edf2f7" i], body:not(.theme-light) [style*="background:#edf2f7" i],
+body.theme-dark [style*="background: #edf2f7" i], body:not(.theme-light) [style*="background: #edf2f7" i],
+body.theme-dark [style*="background:#fcfbfa" i], body:not(.theme-light) [style*="background:#fcfbfa" i],
+body.theme-dark [style*="background: #fcfbfa" i], body:not(.theme-light) [style*="background: #fcfbfa" i],
+body.theme-dark [style*="background:#faf9f7" i], body:not(.theme-light) [style*="background:#faf9f7" i],
+body.theme-dark [style*="background: #faf9f7" i], body:not(.theme-light) [style*="background: #faf9f7" i],
+body.theme-dark [style*="background:#faf9f6" i], body:not(.theme-light) [style*="background:#faf9f6" i],
+body.theme-dark [style*="background: #faf9f6" i], body:not(.theme-light) [style*="background: #faf9f6" i],
+body.theme-dark [style*="background:#e5e7eb" i], body:not(.theme-light) [style*="background:#e5e7eb" i],
+body.theme-dark [style*="background: #e5e7eb" i], body:not(.theme-light) [style*="background: #e5e7eb" i] {
+  background: #1f1408 !important;
+  border-color: rgba(245, 200, 66, 0.16) !important;
+  color: #f1f5f9 !important;
+}
+
+/* Cream & Light Gold Boxes */
+body.theme-dark [style*="background:#fffdf5" i], body:not(.theme-light) [style*="background:#fffdf5" i],
+body.theme-dark [style*="background: #fffdf5" i], body:not(.theme-light) [style*="background: #fffdf5" i],
+body.theme-dark [style*="background:#fffbeb" i], body:not(.theme-light) [style*="background:#fffbeb" i],
+body.theme-dark [style*="background: #fffbeb" i], body:not(.theme-light) [style*="background: #fffbeb" i],
+body.theme-dark [style*="background:#fefce8" i], body:not(.theme-light) [style*="background:#fefce8" i],
+body.theme-dark [style*="background: #fefce8" i], body:not(.theme-light) [style*="background: #fefce8" i],
+body.theme-dark [style*="background:#fef3c7" i], body:not(.theme-light) [style*="background:#fef3c7" i],
+body.theme-dark [style*="background: #fef3c7" i], body:not(.theme-light) [style*="background: #fef3c7" i],
+body.theme-dark [style*="background:#fcf8f2" i], body:not(.theme-light) [style*="background:#fcf8f2" i],
+body.theme-dark [style*="background: #fcf8f2" i], body:not(.theme-light) [style*="background: #fcf8f2" i],
+body.theme-dark [style*="background:#fffdf0" i], body:not(.theme-light) [style*="background:#fffdf0" i],
+body.theme-dark [style*="background: #fffdf0" i], body:not(.theme-light) [style*="background: #fffdf0" i],
+body.theme-dark [style*="background:#fff7ed" i], body:not(.theme-light) [style*="background:#fff7ed" i],
+body.theme-dark [style*="background: #fff7ed" i], body:not(.theme-light) [style*="background: #fff7ed" i],
+body.theme-dark .preview-box, body:not(.theme-light) .preview-box {
   background: rgba(245, 200, 66, 0.08) !important;
   border-color: rgba(245, 200, 66, 0.25) !important;
-  color: #fef3c7 !important;
+  color: #fde68a !important;
+}
+
+/* Light Blue & Cyan Boxes */
+body.theme-dark [style*="background:#eff6ff" i], body:not(.theme-light) [style*="background:#eff6ff" i],
+body.theme-dark [style*="background: #eff6ff" i], body:not(.theme-light) [style*="background: #eff6ff" i],
+body.theme-dark [style*="background:#dbeafe" i], body:not(.theme-light) [style*="background:#dbeafe" i],
+body.theme-dark [style*="background: #dbeafe" i], body:not(.theme-light) [style*="background: #dbeafe" i],
+body.theme-dark [style*="background:#ecfeff" i], body:not(.theme-light) [style*="background:#ecfeff" i],
+body.theme-dark [style*="background: #ecfeff" i], body:not(.theme-light) [style*="background: #ecfeff" i] {
+  background: rgba(37, 99, 235, 0.14) !important;
+  border-color: rgba(37, 99, 235, 0.3) !important;
+  color: #93c5fd !important;
+}
+
+/* Light Green Boxes */
+body.theme-dark [style*="background:#f0fdf4" i], body:not(.theme-light) [style*="background:#f0fdf4" i],
+body.theme-dark [style*="background: #f0fdf4" i], body:not(.theme-light) [style*="background: #f0fdf4" i],
+body.theme-dark [style*="background:#ecfdf5" i], body:not(.theme-light) [style*="background:#ecfdf5" i],
+body.theme-dark [style*="background: #ecfdf5" i], body:not(.theme-light) [style*="background: #ecfdf5" i],
+body.theme-dark [style*="background:#dcfce7" i], body:not(.theme-light) [style*="background:#dcfce7" i],
+body.theme-dark [style*="background: #dcfce7" i], body:not(.theme-light) [style*="background: #dcfce7" i] {
+  background: rgba(34, 197, 94, 0.14) !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  color: #86efac !important;
+}
+
+/* Light Red & Pink Boxes */
+body.theme-dark [style*="background:#fef2f2" i], body:not(.theme-light) [style*="background:#fef2f2" i],
+body.theme-dark [style*="background: #fef2f2" i], body:not(.theme-light) [style*="background: #fef2f2" i],
+body.theme-dark [style*="background:#fee2e2" i], body:not(.theme-light) [style*="background:#fee2e2" i],
+body.theme-dark [style*="background: #fee2e2" i], body:not(.theme-light) [style*="background: #fee2e2" i],
+body.theme-dark [style*="background:#fff5f5" i], body:not(.theme-light) [style*="background:#fff5f5" i],
+body.theme-dark [style*="background: #fff5f5" i], body:not(.theme-light) [style*="background: #fff5f5" i] {
+  background: rgba(239, 68, 68, 0.14) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #fca5a5 !important;
+}
+
+/* Light Purple & Lavender Boxes */
+body.theme-dark [style*="background:#f5f3ff" i], body:not(.theme-light) [style*="background:#f5f3ff" i],
+body.theme-dark [style*="background: #f5f3ff" i], body:not(.theme-light) [style*="background: #f5f3ff" i],
+body.theme-dark [style*="background:#e0e7ff" i], body:not(.theme-light) [style*="background:#e0e7ff" i],
+body.theme-dark [style*="background: #e0e7ff" i], body:not(.theme-light) [style*="background: #e0e7ff" i],
+body.theme-dark [style*="background:#f3e8ff" i], body:not(.theme-light) [style*="background:#f3e8ff" i],
+body.theme-dark [style*="background: #f3e8ff" i], body:not(.theme-light) [style*="background: #f3e8ff" i],
+body.theme-dark [style*="background:#faf5ff" i], body:not(.theme-light) [style*="background:#faf5ff" i],
+body.theme-dark [style*="background: #faf5ff" i], body:not(.theme-light) [style*="background: #faf5ff" i],
+body.theme-dark [style*="background:#fce7f3" i], body:not(.theme-light) [style*="background:#fce7f3" i],
+body.theme-dark [style*="background: #fce7f3" i], body:not(.theme-light) [style*="background: #fce7f3" i] {
+  background: rgba(168, 85, 247, 0.14) !important;
+  border-color: rgba(168, 85, 247, 0.3) !important;
+  color: #d8b4fe !important;
+}
+
+/* 6. Badges & Tags Overrides in Dark Mode */
+body.theme-dark .badge-green, body:not(.theme-light) .badge-green {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.35) !important;
+}
+body.theme-dark .badge-amber, body:not(.theme-light) .badge-amber {
+  background: rgba(245, 200, 66, 0.18) !important;
+  color: #fde047 !important;
+  border: 1px solid rgba(245, 200, 66, 0.35) !important;
+}
+body.theme-dark .badge-gold, body:not(.theme-light) .badge-gold {
+  background: rgba(245, 200, 66, 0.22) !important;
+  color: #f5c842 !important;
+  border: 1px solid rgba(245, 200, 66, 0.4) !important;
+}
+body.theme-dark .badge-red, body:not(.theme-light) .badge-red {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+}
+body.theme-dark .badge-blue, body:not(.theme-light) .badge-blue {
+  background: rgba(59, 130, 246, 0.18) !important;
+  color: #60a5fa !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+}
+body.theme-dark .badge-purple, body:not(.theme-light) .badge-purple {
+  background: rgba(168, 85, 247, 0.18) !important;
+  color: #c084fc !important;
+  border: 1px solid rgba(168, 85, 247, 0.35) !important;
+}
+body.theme-dark .badge-gray, body:not(.theme-light) .badge-gray {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+}
+
+/* 7. Avatars & Initials Circles in Dark Mode */
+body.theme-dark .av-gold, body:not(.theme-light) .av-gold {
+  background: rgba(245, 200, 66, 0.22) !important;
+  color: #fde047 !important;
+}
+body.theme-dark .av-teal, body:not(.theme-light) .av-teal {
+  background: rgba(20, 184, 166, 0.22) !important;
+  color: #5eead4 !important;
+}
+body.theme-dark .av-rose, body:not(.theme-light) .av-rose {
+  background: rgba(244, 63, 94, 0.22) !important;
+  color: #fda4af !important;
+}
+body.theme-dark .av-purple, body:not(.theme-light) .av-purple {
+  background: rgba(168, 85, 247, 0.22) !important;
+  color: #d8b4fe !important;
+}
+
+/* 8. Table & Modal Text Contrast Overrides */
+body.theme-dark table th, body:not(.theme-light) table th {
+  background: #211608 !important;
+  color: #f5c842 !important;
+  border-bottom: 1px solid rgba(245, 200, 66, 0.2) !important;
+}
+body.theme-dark table td, body:not(.theme-light) table td {
+  color: #f1f5f9 !important;
+  border-bottom: 1px solid rgba(245, 200, 66, 0.08) !important;
+}
+body.theme-dark table tr[style*="background"], body:not(.theme-light) table tr[style*="background"] {
+  background: #1e1307 !important;
+  border-color: rgba(245, 200, 66, 0.12) !important;
+}
+body.theme-dark .modal strong, body.theme-dark .modal b,
+body:not(.theme-light) .modal strong, body:not(.theme-light) .modal b,
+body.theme-dark .card strong, body.theme-dark .card b,
+body:not(.theme-light) .card strong, body:not(.theme-light) .card b {
+  color: #ffffff !important;
+}
+body.theme-dark label, body:not(.theme-light) label {
+  color: #f1f5f9 !important;
 }
 
 body.theme-dark .preview-field, body:not(.theme-light) .preview-field { color: #cbd5e1 !important; }

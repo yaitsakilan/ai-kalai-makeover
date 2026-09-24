@@ -1987,13 +1987,13 @@ export function addStaffWageRow(defaultName = '', defaultAmount = 500) {
   row.innerHTML = `
     <div class="sa-name" style="color:#dc2626; flex:1; display:flex; align-items:center; gap:6px; min-width:0;">
       <i class="ti ti-user" style="color:#dc2626; font-size:15px; flex-shrink:0;"></i>
-      <select class="form-input form-select sa-name-input ef-staff-name-input" onchange="window.handleStaffSelectChange(this)" style="flex:1; height:34px; font-size:12px; border:1px solid #fca5a5; border-radius:6px; padding:4px 8px; color:#1a1a1a; background:#fff; cursor:pointer; min-width:140px;">
+      <select class="form-input form-select sa-name-input ef-staff-name-input" onchange="window.handleStaffSelectChange(this)" style="flex:1; height:34px; font-size:12px; border:1px solid #fca5a5; border-radius:6px; padding:4px 8px; cursor:pointer; min-width:140px;">
         ${optionsHtml}
       </select>
-      <input type="text" class="form-input ef-staff-custom-input" placeholder="Enter staff name..." style="display:${defaultName === '__other__' ? 'block' : 'none'}; flex:1; height:34px; font-size:12px; border:1px solid #fca5a5; border-radius:6px; padding:4px 8px; color:#1a1a1a; background:#fff; min-width:110px;">
+      <input type="text" class="form-input ef-staff-custom-input" placeholder="Enter staff name..." style="display:${defaultName === '__other__' ? 'block' : 'none'}; flex:1; height:34px; font-size:12px; border:1px solid #fca5a5; border-radius:6px; padding:4px 8px; min-width:110px;">
     </div>
     <span style="font-size:12px; color:#dc2626; font-weight:600;">₹</span>
-    <input type="number" class="ef-staff-amount-input" value="${defaultAmount}" placeholder="Amount" style="width:80px; padding:4px 6px; font-size:12px; height:34px; border:1px solid #fca5a5; border-radius:6px; background:#fff; flex-shrink:0;">
+    <input type="number" class="form-input ef-staff-amount-input" value="${defaultAmount}" placeholder="Amount" style="width:80px; padding:4px 6px; font-size:12px; height:34px; border:1px solid #fca5a5; border-radius:6px; flex-shrink:0;">
     <div class="sa-remove" onclick="window.removeStaffWageRow('${rowId}')" title="Remove" style="color:#dc2626; cursor:pointer; padding:4px; display:flex; align-items:center; flex-shrink:0;">
       <i class="ti ti-x" style="font-size:15px"></i>
     </div>

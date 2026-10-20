@@ -23,7 +23,7 @@ export function getYesterdayStr() {
   return d.toISOString().split('T')[0];
 }
 
-export function calculateModuleStreak(dataArray = [], dateField = 'date', selectedMonth = 'all') {
+export function calculateModuleStreak(dataArray = [], dateField = 'date', selectedMonth = 'all', selectedYear = 'all') {
   const activeDateSet = new Set();
   const dateCounts = {};
   dataArray.forEach(item => {
@@ -84,18 +84,22 @@ export function calculateModuleStreak(dataArray = [], dateField = 'date', select
   const bestStreak = Math.max(currentStreak, maxStreak);
 
   // Determine Target Month & Year
-  let targetYear = now.getFullYear();
+  let targetYear = (selectedYear !== undefined && selectedYear !== null && selectedYear !== 'all')
+    ? parseInt(selectedYear, 10)
+    : now.getFullYear();
   let targetMonthIdx = now.getMonth(); // 0-11
   const isAllMonths = (selectedMonth === 'all');
 
   if (!isAllMonths && selectedMonth !== undefined && selectedMonth !== null) {
     targetMonthIdx = parseInt(selectedMonth, 10);
-    // If dates in dataset have a different year for this month, match it
-    for (const dStr of activeDateSet) {
-      const parts = dStr.split('-');
-      if (parts.length >= 2 && (parseInt(parts[1], 10) - 1) === targetMonthIdx) {
-        targetYear = parseInt(parts[0], 10);
-        break;
+    // If selectedYear is 'all', match year with data for this month if found
+    if (selectedYear === 'all' || selectedYear === undefined || selectedYear === null) {
+      for (const dStr of activeDateSet) {
+        const parts = dStr.split('-');
+        if (parts.length >= 2 && (parseInt(parts[1], 10) - 1) === targetMonthIdx) {
+          targetYear = parseInt(parts[0], 10);
+          break;
+        }
       }
     }
   } else {

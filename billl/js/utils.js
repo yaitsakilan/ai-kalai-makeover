@@ -381,9 +381,25 @@ export function getCustomerVisits(customer, allCustomers = []) {
   }];
 }
 
+export function getAvailableYears(items = [], dateFields = ['date', 'created_at', 'last_visit', 'start_date']) {
+  const currentYear = new Date().getFullYear();
+  const yearSet = new Set([currentYear]);
+  if (Array.isArray(items)) {
+    items.forEach(item => {
+      if (!item) return;
+      for (const f of dateFields) {
+        if (item[f]) {
+          const y = parseInt(String(item[f]).split('-')[0], 10);
+          if (!isNaN(y) && y >= 2020 && y <= 2040) {
+            yearSet.add(y);
+          }
+        }
+      }
+    });
+  }
+  return Array.from(yearSet).sort((a, b) => b - a);
+}
+
 window.getOrdinalVisit = getOrdinalVisit;
 window.getCustomerVisits = getCustomerVisits;
-
-
-
-
+window.getAvailableYears = getAvailableYears;

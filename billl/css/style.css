@@ -3548,3 +3548,1246 @@ body.theme-light .wifi-attendance-card {
   border-color: #fde68a !important;
   box-shadow: 0 4px 16px rgba(217, 119, 6, 0.06) !important;
 }
+
+/* ==========================================================================
+   COMPLETE EMPLOYEE MANAGEMENT & PERFORMANCE DASHBOARD DESIGN SYSTEM
+   ========================================================================== */
+
+/* --- Employee Profile & Dashboard Modal --- */
+.emp-dashboard-modal {
+  max-width: 680px !important;
+  width: 95vw !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+}
+
+/* Base Modal Tabs */
+.emp-modal-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1.5px solid rgba(245, 200, 66, 0.18);
+  margin-bottom: 18px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.emp-modal-tab-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border-radius: 8px 8px 0 0;
+  font-family: inherit;
+}
+.emp-modal-tab-btn i {
+  font-size: 14px;
+}
+
+/* Base Profile Rows */
+.emp-profile-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 6px;
+  border-bottom: 1px solid rgba(245, 200, 66, 0.12);
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+.emp-profile-row:last-child {
+  border-bottom: none;
+}
+.emp-profile-row:hover {
+  background: rgba(245, 200, 66, 0.04);
+  border-radius: 6px;
+}
+.emp-profile-label {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.emp-profile-val {
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* Stat Cards in Modal */
+.emp-stat-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.emp-stat-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+@media (max-width: 600px) {
+  .emp-stat-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .emp-stat-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.emp-stat-card {
+  padding: 14px 12px;
+  border-radius: 12px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+.emp-stat-card:hover {
+  transform: translateY(-2px);
+}
+.emp-stat-card .stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.emp-stat-card .stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+/* Specific Stat Palette - Dark Mode Default */
+body.theme-dark .emp-stat-card.stat-green,
+body:not(.theme-light) .emp-stat-card.stat-green {
+  background: rgba(34, 197, 94, 0.12) !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}
+body.theme-dark .emp-stat-card.stat-green .stat-label,
+body:not(.theme-light) .emp-stat-card.stat-green .stat-label { color: #86efac !important; }
+body.theme-dark .emp-stat-card.stat-green .stat-value,
+body:not(.theme-light) .emp-stat-card.stat-green .stat-value { color: #4ade80 !important; }
+
+body.theme-dark .emp-stat-card.stat-amber,
+body:not(.theme-light) .emp-stat-card.stat-amber {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+body.theme-dark .emp-stat-card.stat-amber .stat-label,
+body:not(.theme-light) .emp-stat-card.stat-amber .stat-label { color: #fde047 !important; }
+body.theme-dark .emp-stat-card.stat-amber .stat-value,
+body:not(.theme-light) .emp-stat-card.stat-amber .stat-value { color: #facc15 !important; }
+
+body.theme-dark .emp-stat-card.stat-red,
+body:not(.theme-light) .emp-stat-card.stat-red {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+body.theme-dark .emp-stat-card.stat-red .stat-label,
+body:not(.theme-light) .emp-stat-card.stat-red .stat-label { color: #fca5a5 !important; }
+body.theme-dark .emp-stat-card.stat-red .stat-value,
+body:not(.theme-light) .emp-stat-card.stat-red .stat-value { color: #f87171 !important; }
+
+body.theme-dark .emp-stat-card.stat-blue,
+body:not(.theme-light) .emp-stat-card.stat-blue {
+  background: rgba(56, 189, 248, 0.12) !important;
+  border: 1px solid rgba(56, 189, 248, 0.3) !important;
+}
+body.theme-dark .emp-stat-card.stat-blue .stat-label,
+body:not(.theme-light) .emp-stat-card.stat-blue .stat-label { color: #7dd3fc !important; }
+body.theme-dark .emp-stat-card.stat-blue .stat-value,
+body:not(.theme-light) .emp-stat-card.stat-blue .stat-value { color: #38bdf8 !important; }
+
+body.theme-dark .emp-stat-card.stat-purple,
+body:not(.theme-light) .emp-stat-card.stat-purple {
+  background: rgba(168, 85, 247, 0.12) !important;
+  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+}
+body.theme-dark .emp-stat-card.stat-purple .stat-label,
+body:not(.theme-light) .emp-stat-card.stat-purple .stat-label { color: #d8b4fe !important; }
+body.theme-dark .emp-stat-card.stat-purple .stat-value,
+body:not(.theme-light) .emp-stat-card.stat-purple .stat-value { color: #c084fc !important; }
+
+body.theme-dark .emp-stat-card.stat-cyan,
+body:not(.theme-light) .emp-stat-card.stat-cyan {
+  background: rgba(20, 184, 166, 0.12) !important;
+  border: 1px solid rgba(20, 184, 166, 0.3) !important;
+}
+body.theme-dark .emp-stat-card.stat-cyan .stat-label,
+body:not(.theme-light) .emp-stat-card.stat-cyan .stat-label { color: #5eead4 !important; }
+body.theme-dark .emp-stat-card.stat-cyan .stat-value,
+body:not(.theme-light) .emp-stat-card.stat-cyan .stat-value { color: #2dd4bf !important; }
+
+/* Light Theme Stat Palette */
+body.theme-light .emp-stat-card.stat-green { background: #f0fdf4; border: 1px solid #bbf7d0; }
+body.theme-light .emp-stat-card.stat-green .stat-label { color: #166534; }
+body.theme-light .emp-stat-card.stat-green .stat-value { color: #15803d; }
+
+body.theme-light .emp-stat-card.stat-amber { background: #fffbeb; border: 1px solid #fde68a; }
+body.theme-light .emp-stat-card.stat-amber .stat-label { color: #92400e; }
+body.theme-light .emp-stat-card.stat-amber .stat-value { color: #b45309; }
+
+body.theme-light .emp-stat-card.stat-red { background: #fef2f2; border: 1px solid #fecaca; }
+body.theme-light .emp-stat-card.stat-red .stat-label { color: #991b1b; }
+body.theme-light .emp-stat-card.stat-red .stat-value { color: #dc2626; }
+
+body.theme-light .emp-stat-card.stat-blue { background: #eff6ff; border: 1px solid #bfdbfe; }
+body.theme-light .emp-stat-card.stat-blue .stat-label { color: #1e40af; }
+body.theme-light .emp-stat-card.stat-blue .stat-value { color: #2563eb; }
+
+body.theme-light .emp-stat-card.stat-purple { background: #faf5ff; border: 1px solid #e9d5ff; }
+body.theme-light .emp-stat-card.stat-purple .stat-label { color: #6b21a8; }
+body.theme-light .emp-stat-card.stat-purple .stat-value { color: #7e22ce; }
+
+body.theme-light .emp-stat-card.stat-cyan { background: #ecfeff; border: 1px solid #a5f3fc; }
+body.theme-light .emp-stat-card.stat-cyan .stat-label { color: #0e7490; }
+body.theme-light .emp-stat-card.stat-cyan .stat-value { color: #0891b2; }
+
+/* Subheading inside Modal */
+.emp-section-subhead {
+  font-size: 13.5px;
+  font-weight: 700;
+  margin: 16px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+}
+body.theme-dark .emp-section-subhead,
+body:not(.theme-light) .emp-section-subhead {
+  color: #f5c842 !important;
+  border-bottom: 1px solid rgba(245, 200, 66, 0.18) !important;
+}
+body.theme-light .emp-section-subhead {
+  color: #1a1a1a !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+/* Modal Table */
+.emp-modal-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12.5px;
+}
+.emp-modal-table th {
+  padding: 8px 10px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.emp-modal-table td {
+  padding: 9px 10px;
+}
+body.theme-dark .emp-modal-table th,
+body:not(.theme-light) .emp-modal-table th {
+  background: rgba(245, 200, 66, 0.06) !important;
+  color: #f5c842 !important;
+  border-bottom: 1px solid rgba(245, 200, 66, 0.2) !important;
+}
+body.theme-dark .emp-modal-table td,
+body:not(.theme-light) .emp-modal-table td {
+  border-bottom: 1px solid rgba(245, 200, 66, 0.08) !important;
+  color: #f1f5f9 !important;
+}
+body.theme-light .emp-modal-table th {
+  background: #f9fafb;
+  color: #4b5563;
+  border-bottom: 1px solid #e5e7eb;
+}
+body.theme-light .emp-modal-table td {
+  border-bottom: 1px solid #f3f4f6;
+  color: #1f2937;
+}
+
+/* Dark Theme Overrides for Modal Components */
+body.theme-dark .emp-modal-header-card,
+body:not(.theme-light) .emp-modal-header-card {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(245, 200, 66, 0.22) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+}
+body.theme-dark .emp-modal-name,
+body:not(.theme-light) .emp-modal-name {
+  color: #ffffff !important;
+}
+body.theme-dark .emp-modal-id,
+body:not(.theme-light) .emp-modal-id,
+body.theme-dark .emp-modal-role,
+body:not(.theme-light) .emp-modal-role {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+body.theme-dark .emp-modal-tab-btn,
+body:not(.theme-light) .emp-modal-tab-btn {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+body.theme-dark .emp-modal-tab-btn:hover,
+body:not(.theme-light) .emp-modal-tab-btn:hover {
+  color: #f5c842 !important;
+  background: rgba(245, 200, 66, 0.08) !important;
+}
+body.theme-dark .emp-modal-tab-btn.active,
+body:not(.theme-light) .emp-modal-tab-btn.active {
+  color: #f5c842 !important;
+  border-bottom-color: #f5c842 !important;
+  background: rgba(245, 200, 66, 0.08) !important;
+}
+
+/* The Critical Fix: Profile values are crisp and bright in dark mode! */
+body.theme-dark .emp-profile-label,
+body:not(.theme-light) .emp-profile-label,
+body.theme-dark .profile-grid-item span:first-child,
+body:not(.theme-light) .profile-grid-item span:first-child {
+  color: rgba(255, 255, 255, 0.68) !important;
+}
+body.theme-dark .emp-profile-val,
+body:not(.theme-light) .emp-profile-val,
+body.theme-dark .profile-grid-item span:last-child,
+body:not(.theme-light) .profile-grid-item span:last-child {
+  color: #ffffff !important;
+}
+
+/* Light Theme Overrides for Modal Components */
+body.theme-light .emp-modal-header-card {
+  background: #faf9f6;
+  border: 1px solid #e5e5e5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+body.theme-light .emp-modal-name {
+  color: #1a1a1a;
+}
+body.theme-light .emp-modal-id,
+body.theme-light .emp-modal-role {
+  color: #666;
+}
+body.theme-light .emp-modal-tab-btn {
+  color: #555;
+}
+body.theme-light .emp-modal-tab-btn:hover {
+  color: #d97706;
+  background: rgba(217, 119, 6, 0.05);
+}
+body.theme-light .emp-modal-tab-btn.active {
+  color: #d97706;
+  border-bottom-color: #d97706;
+  background: rgba(217, 119, 6, 0.05);
+}
+body.theme-light .emp-profile-label,
+body.theme-light .profile-grid-item span:first-child {
+  color: #555;
+}
+body.theme-light .emp-profile-val,
+body.theme-light .profile-grid-item span:last-child {
+  color: #1a1a1a;
+}
+
+/* --- Staff Directory Cards on Main Page --- */
+.emp-directory-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 230px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.emp-directory-card:hover {
+  transform: translateY(-3px);
+}
+body.theme-dark .emp-directory-card,
+body:not(.theme-light) .emp-directory-card {
+  background: #201509 !important;
+  border: 1px solid rgba(245, 200, 66, 0.18) !important;
+}
+body.theme-dark .emp-directory-card:hover,
+body:not(.theme-light) .emp-directory-card:hover {
+  border-color: #f5c842 !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 18px rgba(245, 200, 66, 0.15) !important;
+}
+body.theme-dark .emp-card-name,
+body:not(.theme-light) .emp-card-name {
+  color: #ffffff !important;
+}
+body.theme-dark .emp-card-meta,
+body:not(.theme-light) .emp-card-meta {
+  color: #cbd5e1 !important;
+}
+body.theme-dark .emp-card-meta i,
+body:not(.theme-light) .emp-card-meta i {
+  color: #f5c842 !important;
+  opacity: 0.8;
+}
+body.theme-dark .emp-card-pay-rate,
+body:not(.theme-light) .emp-card-pay-rate {
+  border-top: 1px dashed rgba(245, 200, 66, 0.2) !important;
+  color: #cbd5e1 !important;
+}
+body.theme-dark .emp-card-pay-rate strong,
+body:not(.theme-light) .emp-card-pay-rate strong {
+  color: #f5c842 !important;
+}
+
+body.theme-light .emp-directory-card {
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+}
+body.theme-light .emp-directory-card:hover {
+  border-color: #d97706;
+  box-shadow: 0 10px 28px rgba(217, 119, 6, 0.12);
+}
+body.theme-light .emp-card-name {
+  color: #1a1a1a;
+}
+body.theme-light .emp-card-meta {
+  color: #555;
+}
+body.theme-light .emp-card-meta i {
+  color: #888;
+}
+body.theme-light .emp-card-pay-rate {
+  border-top: 1px dashed #eee;
+  color: #1a1a1a;
+}
+body.theme-light .emp-card-pay-rate strong {
+  color: #d97706;
+}
+
+/* --- Payroll Estimate Card --- */
+.emp-payroll-estimate-card {
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+  transition: all 0.2s ease;
+}
+body.theme-dark .emp-payroll-estimate-card,
+body:not(.theme-light) .emp-payroll-estimate-card {
+  background: rgba(245, 200, 66, 0.05) !important;
+  border: 1px solid rgba(245, 200, 66, 0.25) !important;
+}
+body.theme-dark .emp-pe-title,
+body:not(.theme-light) .emp-pe-title {
+  color: #f5c842 !important;
+}
+body.theme-dark .emp-pe-row,
+body:not(.theme-light) .emp-pe-row {
+  color: #cbd5e1 !important;
+}
+body.theme-dark .emp-pe-row strong,
+body:not(.theme-light) .emp-pe-row strong {
+  color: #ffffff !important;
+}
+body.theme-dark .emp-pe-add,
+body:not(.theme-light) .emp-pe-add {
+  color: #4ade80 !important;
+}
+body.theme-dark .emp-pe-sub,
+body:not(.theme-light) .emp-pe-sub {
+  color: #f87171 !important;
+}
+body.theme-dark .emp-pe-net,
+body:not(.theme-light) .emp-pe-net {
+  color: #f5c842 !important;
+  border-top: 1px solid rgba(245, 200, 66, 0.25) !important;
+}
+
+body.theme-light .emp-payroll-estimate-card {
+  background: #faf9f7;
+  border: 1px solid #e5e5e5;
+}
+body.theme-light .emp-pe-title {
+  color: #1a1a1a;
+}
+body.theme-light .emp-pe-row {
+  color: #555;
+}
+body.theme-light .emp-pe-row strong {
+  color: #1a1a1a;
+}
+body.theme-light .emp-pe-add {
+  color: #15803d;
+}
+body.theme-light .emp-pe-sub {
+  color: #dc2626;
+}
+body.theme-light .emp-pe-net {
+  color: #7e22ce;
+  border-top: 1px solid #e5e5e5;
+}
+
+/* WiFi Attendance & Modal Dark Theme safety overrides */
+.wifi-card-title {
+  color: #1a1a1a;
+  font-family: 'DM Sans', sans-serif;
+}
+body.theme-dark .wifi-card-title,
+body:not(.theme-light) .wifi-card-title {
+  color: #ffffff !important;
+}
+
+/* Universal high-contrast modal text protection in dark theme */
+body.theme-dark .modal [style*="color:#1a1a1a"],
+body.theme-dark .modal [style*="color: #1a1a1a"],
+body.theme-dark .modal [style*="color:#111"],
+body.theme-dark .modal [style*="color: #111"],
+body.theme-dark .modal [style*="color:#222"],
+body.theme-dark .modal [style*="color: #222"],
+body.theme-dark .modal [style*="color:#333"],
+body.theme-dark .modal [style*="color: #333"],
+body:not(.theme-light) .modal [style*="color:#1a1a1a"],
+body:not(.theme-light) .modal [style*="color: #1a1a1a"] {
+  color: #f8fafc !important;
+}
+
+body.theme-dark .modal [style*="color:#666"],
+body.theme-dark .modal [style*="color: #666"],
+body.theme-dark .modal [style*="color:#777"],
+body.theme-dark .modal [style*="color: #777"],
+body.theme-dark .modal [style*="color:#888"],
+body.theme-dark .modal [style*="color: #888"],
+body:not(.theme-light) .modal [style*="color:#666"],
+body:not(.theme-light) .modal [style*="color: #666"],
+body:not(.theme-light) .modal [style*="color:#777"],
+body:not(.theme-light) .modal [style*="color: #777"] {
+  color: #94a3b8 !important;
+}
+
+/* Ensure modal inner boxes don't blindingly display bright grey on dark modals */
+body.theme-dark .modal [style*="background:#fafafa"],
+body.theme-dark .modal [style*="background: #fafafa"],
+body.theme-dark .modal [style*="background:#f9f9f9"],
+body.theme-dark .modal [style*="background: #f9f9f9"],
+body.theme-dark .modal [style*="background:#f5f5f5"],
+body.theme-dark .modal [style*="background: #f5f5f5"],
+body:not(.theme-light) .modal [style*="background:#fafafa"],
+body:not(.theme-light) .modal [style*="background: #fafafa"],
+body:not(.theme-light) .modal [style*="background:#f9f9f9"],
+body:not(.theme-light) .modal [style*="background: #f9f9f9"] {
+  background: #211609 !important;
+  border-color: rgba(245, 200, 66, 0.2) !important;
+  color: #f8fafc !important;
+}
+
+/* Payslip print receipt inside modal: maintain paper voucher style */
+#payslip-print-section {
+  background: #ffffff !important;
+  color: #111111 !important;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+#payslip-print-section * {
+  color: #111111 !important;
+}
+#payslip-print-section [style*="color:#dc2626"],
+#payslip-print-section [style*="color: #dc2626"] {
+  color: #dc2626 !important;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CALENDAR & DATE FILTER MODAL (Filter By...)
+   Full App Theme Support (Luxury Dark Gold/Obsidian & Clean Light)
+   ───────────────────────────────────────────────────────────── */
+
+.df-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: dfFadeIn 0.2s ease-out;
+}
+
+@keyframes dfFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dfModalPop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.df-modal-card {
+  width: 350px;
+  max-width: 95vw;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dfModalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #1f2937;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  border: 1px solid #e5e7eb;
+}
+
+.df-modal-inner {
+  padding: 22px 20px 10px 20px;
+}
+
+.df-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.df-modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0b3b24;
+  letter-spacing: -0.01em;
+}
+
+.df-close-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #9ca3af;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.df-close-btn:hover {
+  background: #6b7280;
+  transform: scale(1.05);
+}
+
+/* Tab Pills Row */
+.df-pills-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.df-pills-row::-webkit-scrollbar {
+  display: none;
+}
+
+.df-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #4b5563;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.df-pill:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.df-pill.is-active {
+  background: #0b3b24 !important;
+  color: #ffffff !important;
+  border-color: #0b3b24 !important;
+  box-shadow: 0 2px 6px rgba(11, 59, 36, 0.25);
+}
+
+.df-pill-icon {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid #9ca3af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  line-height: 1;
+  color: transparent;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.df-pill.is-active .df-pill-icon {
+  background: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Navigation Row: ← Month Year → */
+.df-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 0 16px;
+}
+
+.df-nav-arrow-btn {
+  background: none;
+  border: none;
+  color: #0b3b24;
+  font-size: 19px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.df-nav-arrow-btn:hover {
+  background: rgba(11, 59, 36, 0.08);
+}
+
+.df-nav-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2937;
+  letter-spacing: -0.01em;
+}
+
+/* Calendar Grid */
+.df-calendar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.df-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  margin-bottom: 2px;
+}
+
+.df-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px 2px;
+  justify-items: center;
+  align-items: center;
+}
+
+.df-day-cell {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.df-day-cell.is-curr-month {
+  color: #111827;
+}
+
+.df-day-cell.is-other-month {
+  color: #cbd5e1;
+}
+
+.df-day-cell:not(.is-selected):hover {
+  background: #f3f4f6;
+  border-radius: 10px;
+}
+
+.df-day-cell.is-selected {
+  background: #0b3b24 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border-radius: 11px !important;
+  box-shadow: 0 4px 10px rgba(11, 59, 36, 0.35);
+}
+
+.df-day-cell.is-in-week:not(.is-selected) {
+  background: rgba(11, 59, 36, 0.1);
+  color: #0b3b24;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+/* Months & Years Selection Grids */
+.df-months-grid, .df-years-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.df-month-box, .df-year-box {
+  padding: 12px 8px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.df-month-box:hover, .df-year-box:hover {
+  border-color: #0b3b24;
+  background: #ffffff;
+}
+
+.df-month-box.is-selected, .df-year-box.is-selected {
+  background: #0b3b24 !important;
+  color: #ffffff !important;
+  border-color: #0b3b24 !important;
+  box-shadow: 0 3px 8px rgba(11, 59, 36, 0.3);
+}
+
+.df-quick-choice-btn {
+  padding: 7px 16px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.df-quick-choice-btn:hover {
+  border-color: #0b3b24;
+  background: #ffffff;
+}
+
+.df-quick-choice-btn.is-active {
+  background: #0b3b24 !important;
+  color: #ffffff !important;
+  border-color: #0b3b24 !important;
+}
+
+/* Footer & Full-Width Apply Button */
+.df-footer {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.df-apply-btn {
+  width: 100%;
+  background: #0b3b24;
+  color: #ffffff;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 16px;
+  cursor: pointer;
+  text-align: center;
+  letter-spacing: 0.02em;
+  transition: background 0.15s ease;
+  display: block;
+}
+
+.df-apply-btn:hover {
+  background: #072718;
+}
+
+.df-apply-btn:active {
+  background: #051a10;
+}
+
+.df-reset-container {
+  text-align: center;
+  padding: 10px 0 12px 0;
+  background: #f9fafb;
+  border-top: 1px solid #f3f4f6;
+}
+
+.df-all-time-link {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px;
+  transition: color 0.15s ease;
+}
+
+.df-all-time-link:hover {
+  color: #0b3b24;
+}
+
+/* Date Filter Trigger Button in Top Bars */
+.df-trigger-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.df-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1f2937;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.df-trigger-btn:hover {
+  border-color: #0b3b24;
+  background: #fdfdfd;
+}
+
+.df-trigger-btn.is-active {
+  border-color: #0b3b24;
+  background: rgba(11, 59, 36, 0.06);
+  color: #0b3b24;
+}
+
+.df-trigger-cal-icon {
+  font-size: 15px;
+  color: #0b3b24;
+}
+
+.df-trigger-text {
+  white-space: nowrap;
+}
+
+.df-trigger-arrow-icon {
+  font-size: 12px;
+  color: #6b7280;
+  margin-left: 2px;
+}
+
+.df-trigger-clear-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.df-trigger-clear-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   APP THEME (Luxury Dark Theme: Obsidian, Gold & Emerald)
+   Active in body.theme-dark and default non-theme-light body
+   ───────────────────────────────────────────────────────────── */
+
+body.theme-dark .df-modal-card,
+body:not(.theme-light) .df-modal-card {
+  background: #1c1308 !important;
+  border: 1px solid rgba(245, 200, 66, 0.25) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 25px rgba(245, 200, 66, 0.08) !important;
+  color: #f8fafc !important;
+}
+
+body.theme-dark .df-modal-title,
+body:not(.theme-light) .df-modal-title {
+  color: #f5c842 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+body.theme-dark .df-close-btn,
+body:not(.theme-light) .df-close-btn {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+body.theme-dark .df-close-btn:hover,
+body:not(.theme-light) .df-close-btn:hover {
+  background: rgba(245, 200, 66, 0.22) !important;
+  color: #f5c842 !important;
+}
+
+/* Pills in Dark Theme */
+body.theme-dark .df-pill,
+body:not(.theme-light) .df-pill {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(245, 200, 66, 0.18) !important;
+  color: #cbd5e1 !important;
+}
+
+body.theme-dark .df-pill:hover,
+body:not(.theme-light) .df-pill:hover {
+  background: rgba(245, 200, 66, 0.12) !important;
+  border-color: #f5c842 !important;
+  color: #ffffff !important;
+}
+
+body.theme-dark .df-pill.is-active,
+body:not(.theme-light) .df-pill.is-active {
+  background: #0b3b24 !important;
+  border: 1.5px solid #10b981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35) !important;
+}
+
+body.theme-dark .df-pill-icon,
+body:not(.theme-light) .df-pill-icon {
+  border-color: rgba(245, 200, 66, 0.4) !important;
+}
+
+body.theme-dark .df-pill.is-active .df-pill-icon,
+body:not(.theme-light) .df-pill.is-active .df-pill-icon {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+/* Navigator in Dark Theme */
+body.theme-dark .df-nav-arrow-btn,
+body:not(.theme-light) .df-nav-arrow-btn {
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-nav-arrow-btn:hover,
+body:not(.theme-light) .df-nav-arrow-btn:hover {
+  background: rgba(245, 200, 66, 0.15) !important;
+}
+
+body.theme-dark .df-nav-label,
+body:not(.theme-light) .df-nav-label {
+  color: #f8fafc !important;
+}
+
+/* All Months Button in Dark Theme */
+body.theme-dark .df-quick-choice-btn,
+body:not(.theme-light) .df-quick-choice-btn {
+  background: #25190b !important;
+  border: 1px solid rgba(245, 200, 66, 0.25) !important;
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-quick-choice-btn:hover,
+body:not(.theme-light) .df-quick-choice-btn:hover {
+  background: #36220e !important;
+  border-color: #f5c842 !important;
+  color: #ffffff !important;
+}
+
+body.theme-dark .df-quick-choice-btn.is-active,
+body:not(.theme-light) .df-quick-choice-btn.is-active {
+  background: #0b3b24 !important;
+  border: 1.5px solid #10b981 !important;
+  color: #ffffff !important;
+}
+
+/* Month Boxes in Dark Theme */
+body.theme-dark .df-month-box,
+body:not(.theme-light) .df-month-box {
+  background: #25190b !important;
+  border: 1px solid rgba(245, 200, 66, 0.16) !important;
+  color: #f8fafc !important;
+}
+
+body.theme-dark .df-month-box:hover,
+body:not(.theme-light) .df-month-box:hover {
+  background: #36230f !important;
+  border-color: #f5c842 !important;
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-month-box.is-selected,
+body:not(.theme-light) .df-month-box.is-selected {
+  background: #0b3b24 !important;
+  border: 1.5px solid #10b981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35) !important;
+  font-weight: 700 !important;
+}
+
+/* Year Boxes in Dark Theme */
+body.theme-dark .df-year-box,
+body:not(.theme-light) .df-year-box {
+  background: #25190b !important;
+  border: 1px solid rgba(245, 200, 66, 0.16) !important;
+  color: #f8fafc !important;
+}
+
+body.theme-dark .df-year-box:hover,
+body:not(.theme-light) .df-year-box:hover {
+  background: #36230f !important;
+  border-color: #f5c842 !important;
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-year-box.is-selected,
+body:not(.theme-light) .df-year-box.is-selected {
+  background: #0b3b24 !important;
+  border: 1.5px solid #10b981 !important;
+  color: #ffffff !important;
+}
+
+/* Calendar Days in Dark Theme */
+body.theme-dark .df-calendar-weekdays,
+body:not(.theme-light) .df-calendar-weekdays {
+  color: rgba(245, 200, 66, 0.75) !important;
+}
+
+body.theme-dark .df-day-cell.is-curr-month,
+body:not(.theme-light) .df-day-cell.is-curr-month {
+  color: #f8fafc !important;
+}
+
+body.theme-dark .df-day-cell.is-other-month,
+body:not(.theme-light) .df-day-cell.is-other-month {
+  color: #64748b !important;
+}
+
+body.theme-dark .df-day-cell:not(.is-selected):hover,
+body:not(.theme-light) .df-day-cell:not(.is-selected):hover {
+  background: rgba(245, 200, 66, 0.15) !important;
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-day-cell.is-selected,
+body:not(.theme-light) .df-day-cell.is-selected {
+  background: #0b3b24 !important;
+  border: 1.5px solid #10b981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35) !important;
+  font-weight: 700 !important;
+}
+
+body.theme-dark .df-day-cell.is-in-week:not(.is-selected),
+body:not(.theme-light) .df-day-cell.is-in-week:not(.is-selected) {
+  background: rgba(11, 59, 36, 0.38) !important;
+  color: #6ee7b7 !important;
+}
+
+/* Custom inputs in Dark Theme */
+body.theme-dark .df-custom-wrapper label,
+body:not(.theme-light) .df-custom-wrapper label {
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-custom-wrapper input[type="date"],
+body:not(.theme-light) .df-custom-wrapper input[type="date"] {
+  background: #25190b !important;
+  border: 1px solid rgba(245, 200, 66, 0.25) !important;
+  color: #f8fafc !important;
+}
+
+/* Apply & Reset in Dark Theme */
+body.theme-dark .df-apply-btn,
+body:not(.theme-light) .df-apply-btn {
+  background: #0b3b24 !important;
+  border-top: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+body.theme-dark .df-apply-btn:hover,
+body:not(.theme-light) .df-apply-btn:hover {
+  background: #0f4d30 !important;
+}
+
+body.theme-dark .df-reset-container,
+body:not(.theme-light) .df-reset-container {
+  background: #140d05 !important;
+  border-top: 1px solid rgba(245, 200, 66, 0.15) !important;
+}
+
+body.theme-dark .df-all-time-link,
+body:not(.theme-light) .df-all-time-link {
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-all-time-link:hover,
+body:not(.theme-light) .df-all-time-link:hover {
+  color: #fde68a !important;
+}
+
+/* Trigger Button in Dark Theme */
+body.theme-dark .df-trigger-btn,
+body:not(.theme-light) .df-trigger-btn {
+  background: #1c1308 !important;
+  border-color: rgba(245, 200, 66, 0.25) !important;
+  color: #f8fafc !important;
+}
+
+body.theme-dark .df-trigger-btn.is-active,
+body:not(.theme-light) .df-trigger-btn.is-active {
+  border-color: #f5c842 !important;
+  background: rgba(245, 200, 66, 0.12) !important;
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-trigger-cal-icon,
+body:not(.theme-light) .df-trigger-cal-icon {
+  color: #f5c842 !important;
+}
+
+body.theme-dark .df-trigger-arrow-icon,
+body:not(.theme-light) .df-trigger-arrow-icon {
+  color: #94a3b8 !important;
+}
+
+body.theme-dark .df-trigger-clear-btn,
+body:not(.theme-light) .df-trigger-clear-btn {
+  background: #2a1c0d !important;
+  border-color: rgba(245, 200, 66, 0.2) !important;
+  color: #94a3b8 !important;
+}
+
+
+
+

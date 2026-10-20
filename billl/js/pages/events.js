@@ -2,10 +2,11 @@
 import { state } from '../state.js';
 import { fetchEvents, fetchCustomers, fetchEmployees, addEvent, deleteEvent, updateEvent } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone, getSelectedChips, formatEmpTag } from '../utils.js';
+import { validateAndCleanPhone, getSelectedChips, formatEmpTag, getAvailableYears } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 import { renderMuhurthamWidget, bookMuhurthamEvent } from '../muhurtham.js';
 import { renderMonthBookingOverviewWidget, quickMarkEventFinished, filterEventByDate, clearEventDateFilter, navigateEventMonth } from '../monthBookings.js';
+import { renderDateFilterTrigger, isDateInModuleFilter, getModuleDateFilter } from '../dateFilter.js';
 
 export async function renderEvents() {
   const [events, customers, employees] = await Promise.all([
@@ -17,14 +18,28 @@ export async function renderEvents() {
   window._cachedCustomers = customers;
   window._cachedEmployees = employees;
 
-  const currentMonthIndex = new Date().getMonth();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIndex = now.getMonth();
+  const availableYears = getAvailableYears(events, ['date', 'created_at']);
+
   if (window._eventActiveTab === undefined || window._eventActiveTab === 'directory') window._eventActiveTab = 'history';
   if (window._eventHistorySubTab === undefined) window._eventHistorySubTab = 'all';
+
+  if (window._selectedEventYear === undefined) {
+    const hasCurrentYearData = events.some(e => {
+      const dStr = e.date || e.created_at;
+      return dStr && parseInt(String(dStr).split('-')[0], 10) === currentYear;
+    });
+    window._selectedEventYear = hasCurrentYearData ? currentYear : (availableYears[0] || currentYear);
+  }
+
   if (window._selectedEventMonth === undefined) {
     const hasCurrentMonthData = events.some(e => {
       if (!e.date) return false;
       const parts = String(e.date).split('T')[0].split('-');
-      return parts.length >= 2 && (parseInt(parts[1], 10) - 1) === currentMonthIndex;
+      const yearMatch = window._selectedEventYear === 'all' || parseInt(parts[0], 10) === parseInt(window._selectedEventYear, 10);
+      return yearMatch && parts.length >= 2 && (parseInt(parts[1], 10) - 1) === currentMonthIndex;
     });
     if (hasCurrentMonthData) {
       window._selectedEventMonth = currentMonthIndex;
@@ -33,11 +48,14 @@ export async function renderEvents() {
       let newestDateStr = '';
       events.forEach(e => {
         if (e.date && String(e.date) > newestDateStr) {
-          newestDateStr = String(e.date);
-          const parts = newestDateStr.split('T')[0].split('-');
-          if (parts.length >= 2) {
+          const parts = String(e.date).split('T')[0].split('-');
+          const yearMatch = window._selectedEventYear === 'all' || parseInt(parts[0], 10) === parseInt(window._selectedEventYear, 10);
+          if (yearMatch && parts.length >= 2) {
             const m = parseInt(parts[1], 10) - 1;
-            if (m >= 0 && m < 12) latestMonth = m;
+            if (m >= 0 && m < 12) {
+              latestMonth = m;
+              newestDateStr = String(e.date);
+            }
           }
         }
       });
@@ -65,16 +83,9 @@ export async function renderEvents() {
       (e.makeup_type || '').toLowerCase().includes(q)
     );
   }
-  if (window._selectedEventMonth !== 'all') {
-    const mTarget = parseInt(window._selectedEventMonth, 10);
-    filtered = filtered.filter(e => {
-      if (!e.date) return false;
-      const parts = String(e.date).split('-');
-      if (parts.length < 2) return false;
-      const m = parseInt(parts[1], 10) - 1;
-      return m === mTarget;
-    });
-  }
+  // Apply date filter (Day, Week, Month, Year, Custom)
+  filtered = filtered.filter(e => isDateInModuleFilter(e.date || e.created_at, 'events'));
+
   if (window._selectedEventDate) {
     filtered = filtered.filter(e => e.date && String(e.date).split('T')[0] === window._selectedEventDate);
   }
@@ -102,11 +113,7 @@ export async function renderEvents() {
     ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
     : '';
 
-  // Trigger chart initialization if analytics tab active and on overview subtab
   window._cachedFilteredEvents = filtered;
-  if (window._eventActiveTab === 'analytics' && (window._eventAnalyticsSubTab === 'overview' || !window._eventAnalyticsSubTab)) {
-    setTimeout(() => initEventAnalyticsCharts(filtered), 60);
-  }
 
   const todayStr = new Date().toISOString().split('T')[0];
   const upcomingEvents = events.filter(e => e.date && e.date >= todayStr);
@@ -120,75 +127,56 @@ export async function renderEvents() {
     <div>
       <h2>Event Management & Bookings</h2>
     </div>
-    <div style="display:flex; gap:10px; align-items:center;">
-      <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterEventByMonthSelect(this.value)" title="Choose Month Filter">
-        <option value="all" ${window._selectedEventMonth === 'all' ? 'selected' : ''}>📅 All Months</option>
-        ${MONTHS.map((m, idx) => `
-          <option value="${idx}" ${window._selectedEventMonth === idx ? 'selected' : ''}>📅 ${m}</option>
-        `).join('')}
-      </select>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <!-- Date Filter Trigger Button (Modal) -->
+      ${renderDateFilterTrigger('events')}
 
-      ${(window._eventActiveTab === 'history' || window._eventActiveTab === 'directory') ? `
-        <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Event History">
-          <i class="ti ti-search" style="color:#d97706"></i>
-        </button>
-      ` : ''}
+      <button class="btn btn-outline btn-icon" onclick="window.toggleEventSearchField()" id="toggle-evt-search-btn" style="${activeSearchBtnStyle}" title="Search Event History">
+        <i class="ti ti-search" style="color:#d97706"></i>
+      </button>
       <button class="btn btn-gold" onclick="window.openEventCustomerForm()">
         <i class="ti ti-plus"></i> Book Event
       </button>
     </div>
   </div>
 
-  ${renderMonthBookingOverviewWidget(events, window._selectedEventMonth)}
+  ${renderMonthBookingOverviewWidget(events, window._selectedEventMonth, window._selectedEventYear)}
 
-  <!-- Navigation Tabs: Event History 1st and Analytics & Insights only -->
-  <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">
-    <div class="tab ${window._eventActiveTab === 'history' ? 'active' : ''}" onclick="window.switchEventTab('history')" id="tab-evt-history">
-      <i class="ti ti-history" style="margin-right:6px"></i> Event History (${filtered.length})
+  <div id="event-metrics-container">
+    ${renderEventMetrics(filtered)}
+  </div>
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+    <div style="font-size:13px; font-weight:600; color:#d97706; display:flex; align-items:center; gap:6px;">
+      <i class="ti ti-history" style="font-size:16px;"></i> Event History Records (${filtered.length})
     </div>
-    <div class="tab ${window._eventActiveTab === 'analytics' ? 'active' : ''}" onclick="window.switchEventTab('analytics')" id="tab-evt-analytics">
-      <i class="ti ti-chart-pie" style="margin-right:6px"></i> Analytics & Insights
+    <div class="card" style="padding: 6px 12px; display:flex; gap:8px; margin-bottom:0; overflow-x:auto; max-width:100%; white-space:nowrap;" class="scrollbar-hide">
+      <span class="chip ${window._eventStatusFilter === 'all' ? 'selected' : ''}" onclick="window.filterEventsStatus('all')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">All (${events.length})</span>
+      ${overdueEvents.length > 0 ? `
+        <span class="chip ${window._eventStatusFilter === 'needs_update' ? 'selected' : ''}" onclick="window.filterEventsStatus('needs_update')" style="padding: 4px 10px; font-size:11px; cursor:pointer; color:#ef4444; border-color:rgba(239,68,68,0.4); background:rgba(239,68,68,0.08); font-weight:600;">
+          ⚠️ Needs Update (${overdueEvents.length})
+        </span>
+      ` : ''}
+      <span class="chip ${window._eventStatusFilter === 'Upcoming' ? 'selected' : ''}" onclick="window.filterEventsStatus('Upcoming')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">🗓️ Upcoming (${upcomingEvents.length})</span>
+      <span class="chip ${window._eventStatusFilter === 'Completed' ? 'selected' : ''}" onclick="window.filterEventsStatus('Completed')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">✅ Completed (${completedEvents.length})</span>
+      <span class="chip ${window._eventStatusFilter === 'Booked' ? 'selected' : ''}" onclick="window.filterEventsStatus('Booked')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">⏳ Pending (${events.filter(e => e.status === 'Booked').length})</span>
+      <span class="chip ${window._eventStatusFilter === 'top_paid' ? 'selected' : ''}" onclick="window.filterEventsStatus('top_paid')" style="padding: 4px 10px; font-size:11px; cursor:pointer;"><i class="ti ti-crown" style="color:#d97706;margin-right:3px;"></i> Top Paid Weddings (${events.length})</span>
+      <span class="chip ${window._eventStatusFilter === 'crossover' ? 'selected' : ''}" onclick="window.filterEventsStatus('crossover')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">🤝 Event & Shop Customers (${crossoverClients.length})</span>
     </div>
   </div>
 
-  ${window._eventActiveTab === 'analytics' ? renderEventAnalyticsDashboard(filtered, events, customers) : `
-    <div id="event-metrics-container">
-      ${renderEventMetrics(filtered)}
-    </div>
+  <div class="card" id="event-search-card" style="margin-bottom:16px; display: ${window._eventSearchFieldExpanded ? 'block' : 'none'};">
+    <input class="form-input" placeholder="Search event history by name, phone, or event type..." id="event-search-input" value="${window._eventSearchQuery || ''}" oninput="window.filterEventCustomers(this.value)">
+  </div>
 
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-      <div style="font-size:13px; font-weight:600; color:#d97706; display:flex; align-items:center; gap:6px;">
-        <i class="ti ti-history" style="font-size:16px;"></i> Event History Records (${filtered.length})
-      </div>
-      <div class="card" style="padding: 6px 12px; display:flex; gap:8px; margin-bottom:0; overflow-x:auto; max-width:100%; white-space:nowrap;" class="scrollbar-hide">
-        <span class="chip ${window._eventStatusFilter === 'all' ? 'selected' : ''}" onclick="window.filterEventsStatus('all')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">All (${events.length})</span>
-        ${overdueEvents.length > 0 ? `
-          <span class="chip ${window._eventStatusFilter === 'needs_update' ? 'selected' : ''}" onclick="window.filterEventsStatus('needs_update')" style="padding: 4px 10px; font-size:11px; cursor:pointer; color:#ef4444; border-color:rgba(239,68,68,0.4); background:rgba(239,68,68,0.08); font-weight:600;">
-            ⚠️ Needs Update (${overdueEvents.length})
-          </span>
-        ` : ''}
-        <span class="chip ${window._eventStatusFilter === 'Upcoming' ? 'selected' : ''}" onclick="window.filterEventsStatus('Upcoming')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">🗓️ Upcoming (${upcomingEvents.length})</span>
-        <span class="chip ${window._eventStatusFilter === 'Completed' ? 'selected' : ''}" onclick="window.filterEventsStatus('Completed')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">✅ Completed (${completedEvents.length})</span>
-        <span class="chip ${window._eventStatusFilter === 'Booked' ? 'selected' : ''}" onclick="window.filterEventsStatus('Booked')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">⏳ Pending (${events.filter(e => e.status === 'Booked').length})</span>
-        <span class="chip ${window._eventStatusFilter === 'top_paid' ? 'selected' : ''}" onclick="window.filterEventsStatus('top_paid')" style="padding: 4px 10px; font-size:11px; cursor:pointer;"><i class="ti ti-crown" style="color:#d97706;margin-right:3px;"></i> Top Paid Weddings (${events.length})</span>
-        <span class="chip ${window._eventStatusFilter === 'crossover' ? 'selected' : ''}" onclick="window.filterEventsStatus('crossover')" style="padding: 4px 10px; font-size:11px; cursor:pointer;">🤝 Event & Shop Customers (${crossoverClients.length})</span>
-      </div>
-    </div>
-
-    <div class="card" id="event-search-card" style="margin-bottom:16px; display: ${window._eventSearchFieldExpanded ? 'block' : 'none'};">
-      <input class="form-input" placeholder="Search event history by name, phone, or event type..." id="event-search-input" value="${window._eventSearchQuery || ''}" oninput="window.filterEventCustomers(this.value)">
-    </div>
-
-
-
-    <div id="event-list">
-      ${window._eventStatusFilter === 'crossover' 
-        ? renderCrossoverClientsTab(crossoverClients) 
-        : (window._eventStatusFilter === 'top_paid' 
-          ? renderTopPaidEventsTab(filtered) 
-          : renderEventList(filtered))}
-    </div>
-  `}`;
+  <div id="event-list">
+    ${window._eventStatusFilter === 'crossover' 
+      ? renderCrossoverClientsTab(crossoverClients) 
+      : (window._eventStatusFilter === 'top_paid' 
+        ? renderTopPaidEventsTab(filtered) 
+        : renderEventList(filtered))}
+  </div>
+`;
 }
 
 export function renderEventMetrics(events) {
@@ -232,6 +220,16 @@ export function applyEventFilters() {
       (e.phone || '').includes(q) ||
       (e.type || '').toLowerCase().includes(q)
     );
+  }
+
+  if (window._selectedEventYear !== undefined && window._selectedEventYear !== 'all') {
+    const yTarget = parseInt(window._selectedEventYear, 10);
+    events = events.filter(e => {
+      const dStr = e.date || e.created_at;
+      if (!dStr) return false;
+      const y = parseInt(String(dStr).split('-')[0], 10);
+      return y === yTarget;
+    });
   }
 
   if (window._selectedEventMonth !== undefined && window._selectedEventMonth !== 'all') {
@@ -328,12 +326,22 @@ export function toggleEventSearchField() {
   const el = document.getElementById('event-search-card');
   const btn = document.getElementById('toggle-evt-search-btn');
   if (el) {
-    el.style.display = window._eventSearchFieldExpanded ? 'block' : 'none';
     if (window._eventSearchFieldExpanded) {
+      // Position the search card near the button
+      const rect = btn.getBoundingClientRect();
+      el.style.position = 'fixed';
+      el.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+      el.style.left = (rect.left + window.scrollX) + 'px';
+      el.style.width = Math.min(rect.width + 24, 280) + 'px';
+      el.style.margin = '0';
+      el.style.zIndex = '1000';
+      el.style.display = 'block';
       setTimeout(() => {
         const input = document.getElementById('event-search-input');
         if (input) input.focus();
       }, 50);
+    } else {
+      el.style.display = 'none';
     }
   }
   if (btn) {
@@ -2265,6 +2273,14 @@ export function switchEventTab(tab) {
   if (typeof window.render === 'function') window.render();
 }
 
+export function filterEventByYearSelect(val) {
+  window._selectedEventYear = val === 'all' ? 'all' : parseInt(val, 10);
+  if (val !== 'all') {
+    window._monthBookingYear = parseInt(val, 10);
+  }
+  if (typeof window.render === 'function') window.render();
+}
+
 export function filterEventByMonthSelect(val) {
   window._selectedEventMonth = val === 'all' ? 'all' : parseInt(val, 10);
   if (typeof window.render === 'function') window.render();
@@ -3197,6 +3213,7 @@ function renderEventCard(e, extraBadge = '', rankNum = null) {
 
 // Bind to window object for inline HTML event handling
 window.switchEventTab = switchEventTab;
+window.filterEventByYearSelect = filterEventByYearSelect;
 window.filterEventByMonthSelect = filterEventByMonthSelect;
 window.filterEventByMonth = filterEventByMonth;
 window.filterEventCustomers = filterEventCustomers;

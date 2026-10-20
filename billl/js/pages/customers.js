@@ -2,27 +2,42 @@
 import { state } from '../state.js';
 import { fetchCustomers, addCustomer, updateCustomer, deleteCustomer, addClassEnrollment, addClassPayment } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone, formatEmpTag, formatVisitedDate, getUniqueCustomersMap, getEffectiveVisits, sortCustomersList, getOrdinalVisit, getCustomerVisits } from '../utils.js';
+import { validateAndCleanPhone, formatEmpTag, formatVisitedDate, getUniqueCustomersMap, getEffectiveVisits, sortCustomersList, getOrdinalVisit, getCustomerVisits, getAvailableYears } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 import { calculateModuleStreak, renderModuleStreakWidget } from '../streak.js';
+import { renderDateFilterTrigger, isDateInModuleFilter, getModuleDateFilter } from '../dateFilter.js';
 
 export async function renderCustomers() {
   const customers = await fetchCustomers();
   window._cachedCustomers = customers;
 
-  const currentMonthIndex = new Date().getMonth();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIndex = now.getMonth();
+  const availableYears = getAvailableYears(customers, ['last_visit', 'created_at']);
+
   if (window._customerActiveTab === undefined) window._customerActiveTab = 'history';
   if (['top_paid', 'repeat', 'lapsed', 'new'].includes(window._customerActiveTab)) {
     window._customerHistoryView = window._customerActiveTab;
     window._customerActiveTab = 'history';
   }
   if (window._customerHistoryView === undefined) window._customerHistoryView = 'all';
+
+  if (window._selectedCustomerYear === undefined) {
+    const hasCurrentYearData = customers.some(c => {
+      const dStr = c.last_visit || c.created_at;
+      return dStr && parseInt(String(dStr).split('-')[0], 10) === currentYear;
+    });
+    window._selectedCustomerYear = hasCurrentYearData ? currentYear : (availableYears[0] || currentYear);
+  }
+
   if (window._selectedMonth === undefined) {
     const hasCurrentMonthData = customers.some(c => {
       const dStr = c.last_visit || c.created_at;
       if (!dStr) return false;
       const parts = String(dStr).split('T')[0].split('-');
-      return parts.length >= 2 && (parseInt(parts[1], 10) - 1) === currentMonthIndex;
+      const yearMatch = window._selectedCustomerYear === 'all' || parseInt(parts[0], 10) === parseInt(window._selectedCustomerYear, 10);
+      return yearMatch && parts.length >= 2 && (parseInt(parts[1], 10) - 1) === currentMonthIndex;
     });
     if (hasCurrentMonthData) {
       window._selectedMonth = currentMonthIndex;
@@ -32,11 +47,14 @@ export async function renderCustomers() {
       customers.forEach(c => {
         const dStr = c.last_visit || c.created_at;
         if (dStr && String(dStr) > newestDateStr) {
-          newestDateStr = String(dStr);
-          const parts = newestDateStr.split('T')[0].split('-');
-          if (parts.length >= 2) {
+          const parts = String(dStr).split('T')[0].split('-');
+          const yearMatch = window._selectedCustomerYear === 'all' || parseInt(parts[0], 10) === parseInt(window._selectedCustomerYear, 10);
+          if (yearMatch && parts.length >= 2) {
             const m = parseInt(parts[1], 10) - 1;
-            if (m >= 0 && m < 12) latestMonth = m;
+            if (m >= 0 && m < 12) {
+              latestMonth = m;
+              newestDateStr = String(dStr);
+            }
           }
         }
       });
@@ -48,7 +66,7 @@ export async function renderCustomers() {
   if (window._searchFieldExpanded === undefined) window._searchFieldExpanded = false;
   if (window._customerSortOption === undefined) window._customerSortOption = 'date_desc';
 
-  const streakData = calculateModuleStreak(customers, 'last_visit', window._selectedMonth);
+  const streakData = calculateModuleStreak(customers, 'last_visit', window._selectedMonth, window._selectedCustomerYear);
 
   const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -63,17 +81,8 @@ export async function renderCustomers() {
       (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q)
     );
   }
-  if (window._selectedMonth !== 'all') {
-    const mTarget = parseInt(window._selectedMonth, 10);
-    filtered = filtered.filter(c => {
-      const dateStr = c.last_visit || c.created_at;
-      if (!dateStr) return false;
-      const parts = String(dateStr).split('-');
-      if (parts.length < 2) return false;
-      const m = parseInt(parts[1], 10) - 1;
-      return m === mTarget;
-    });
-  }
+  // Apply date filter (Day, Week, Month, Year, Custom)
+  filtered = filtered.filter(c => isDateInModuleFilter(c.last_visit || c.created_at, 'customers'));
 
   const activeBtnStyle = window._monthFilterExpanded
     ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
@@ -83,15 +92,10 @@ export async function renderCustomers() {
     ? 'border-color: #f5c842; background: rgba(245, 200, 66, 0.1);'
     : '';
 
-  // Trigger chart initialization if analytics tab active
-  if (window._customerActiveTab === 'analytics') {
-    setTimeout(() => initCustomerAnalyticsCharts(filtered), 60);
-  }
 
   const uniqueMap = getUniqueCustomersMap(customers);
   const repeatCount = Array.from(uniqueMap.values()).filter(g => g.totalVisits > 1 || g.records.length > 1).length;
 
-  const now = new Date();
   const LAPSED_THRESHOLD_DAYS = 40;
   const lapsedCount = customers.filter(c => {
     const dStr = c.last_visit || c.created_at;
@@ -109,16 +113,11 @@ export async function renderCustomers() {
     <div>
       <h2>Customer Management</h2>
     </div>
-    <div style="display:flex; gap:10px; align-items:center">
-      <!-- Month Filter Select Dropdown -->
-      <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterByMonthSelect(this.value)" title="Choose Month Filter">
-        <option value="all" ${window._selectedMonth === 'all' ? 'selected' : ''}>📅 All Months</option>
-        ${MONTHS.map((m, idx) => `
-          <option value="${idx}" ${window._selectedMonth === idx ? 'selected' : ''}>📅 ${m}</option>
-        `).join('')}
-      </select>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <!-- Date Filter Trigger Button (Modal) -->
+      ${renderDateFilterTrigger('customers')}
 
-      ${window._customerActiveTab === 'history' && (window._customerHistoryView === 'all' || !window._customerHistoryView) ? `
+      ${(window._customerHistoryView === 'all' || !window._customerHistoryView) ? `
         <button class="btn btn-outline btn-icon" onclick="window.toggleSearchField()" id="toggle-search-btn" style="${activeSearchBtnStyle}" title="Search Customers">
           <i class="ti ti-search" style="color:#d97706"></i>
         </button>
@@ -131,53 +130,42 @@ export async function renderCustomers() {
 
   ${renderModuleStreakWidget('Customer Entries', streakData, '#7c3aed')}
 
-  <!-- Main Navigation Tabs -->
-  <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap">
-    <div class="tab ${window._customerActiveTab === 'history' ? 'active' : ''}" onclick="window.switchCustomerTab('history')">
-      <i class="ti ti-history" style="margin-right:6px"></i> Customer History (${filtered.length})
+  <!-- Customer History View Switcher -->
+  <div class="chip-group scrollbar-hide" style="display:flex; flex-wrap:nowrap; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:18px;">
+    <div class="chip ${window._customerHistoryView === 'all' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('all')">
+      <i class="ti ti-list"></i> All Customers (${filtered.length})
     </div>
-    <div class="tab ${window._customerActiveTab === 'analytics' ? 'active' : ''}" onclick="window.switchCustomerTab('analytics')">
-      <i class="ti ti-chart-pie" style="margin-right:6px"></i> Analytics & Insights (${filtered.length})
+    <div class="chip ${window._customerHistoryView === 'top_paid' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('top_paid')">
+      <i class="ti ti-crown"></i> Top Paid Clients (${uniqueMap.size})
+    </div>
+    <div class="chip ${window._customerHistoryView === 'repeat' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('repeat')">
+      <i class="ti ti-refresh"></i> Repeat Customers (${repeatCount})
+    </div>
+    <div class="chip ${window._customerHistoryView === 'lapsed' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('lapsed')">
+      <i class="ti ti-alarm"></i> Inactive Clients (${lapsedCount})
+    </div>
+    <div class="chip ${window._customerHistoryView === 'new' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('new')">
+      <i class="ti ti-user-plus"></i> New Clients (${newCount})
     </div>
   </div>
 
-  ${window._customerActiveTab === 'analytics' ? renderCustomerAnalyticsDashboard(filtered, customers) : `
-    <!-- Inside Customer History: View Switcher -->
-    <div class="chip-group scrollbar-hide" style="display:flex; flex-wrap:nowrap; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:18px;">
-      <div class="chip ${window._customerHistoryView === 'all' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('all')">
-        <i class="ti ti-list"></i> All Customers (${filtered.length})
-      </div>
-      <div class="chip ${window._customerHistoryView === 'top_paid' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('top_paid')">
-        <i class="ti ti-crown"></i> Top Paid Clients (${uniqueMap.size})
-      </div>
-      <div class="chip ${window._customerHistoryView === 'repeat' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('repeat')">
-        <i class="ti ti-refresh"></i> Repeat Customers (${repeatCount})
-      </div>
-      <div class="chip ${window._customerHistoryView === 'lapsed' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('lapsed')">
-        <i class="ti ti-alarm"></i> Inactive Clients (${lapsedCount})
-      </div>
-      <div class="chip ${window._customerHistoryView === 'new' ? 'selected' : ''}" onclick="window.switchCustomerHistoryView('new')">
-        <i class="ti ti-user-plus"></i> New Clients (${newCount})
-      </div>
+  ${window._customerHistoryView === 'top_paid' ? renderTopPaidClientsTab(filtered) :
+    window._customerHistoryView === 'repeat' ? renderRepeatCustomersTab(customers) :
+    window._customerHistoryView === 'lapsed' ? renderLapsedRetentionTab(customers) :
+    window._customerHistoryView === 'new' ? renderNewClientsTab(customers) : `
+    <div id="customer-metrics-container">
+      ${renderCustomerMetrics(filtered)}
     </div>
 
-    ${window._customerHistoryView === 'top_paid' ? renderTopPaidClientsTab(filtered) :
-      window._customerHistoryView === 'repeat' ? renderRepeatCustomersTab(customers) :
-      window._customerHistoryView === 'lapsed' ? renderLapsedRetentionTab(customers) :
-      window._customerHistoryView === 'new' ? renderNewClientsTab(customers) : `
-      <div id="customer-metrics-container">
-        ${renderCustomerMetrics(filtered)}
-      </div>
+    <div class="card" id="search-card" style="margin-bottom:16px; display: ${window._searchFieldExpanded ? 'block' : 'none'};">
+      <input class="form-input" placeholder="Search by name or phone..." id="customer-search" value="${window._searchQuery || ''}" oninput="window.filterCustomers(this.value)">
+    </div>
 
-      <div class="card" id="search-card" style="margin-bottom:16px; display: ${window._searchFieldExpanded ? 'block' : 'none'};">
-        <input class="form-input" placeholder="Search by name or phone..." id="customer-search" value="${window._searchQuery || ''}" oninput="window.filterCustomers(this.value)">
-      </div>
-
-      <div id="customer-list">
-        ${renderCustomerList(filtered)}
-      </div>
-    `}
-  `}`;
+    <div id="customer-list">
+      ${renderCustomerList(filtered)}
+    </div>
+  `}
+`;
 }
 
 export function renderCustomerMetrics(customers) {
@@ -235,11 +223,23 @@ export function applyFilters() {
     );
   }
 
-  // 2. Month Filter
+  // 2. Year Filter
+  if (window._selectedCustomerYear !== undefined && window._selectedCustomerYear !== 'all') {
+    const yTarget = parseInt(window._selectedCustomerYear, 10);
+    customers = customers.filter(c => {
+      const dStr = c.last_visit || c.created_at;
+      if (!dStr) return false;
+      const y = parseInt(String(dStr).split('-')[0], 10);
+      return y === yTarget;
+    });
+  }
+
+  // 3. Month Filter
   if (window._selectedMonth !== undefined && window._selectedMonth !== 'all') {
     customers = customers.filter(c => {
-      if (!c.last_visit) return false;
-      const parts = c.last_visit.split('-');
+      const dStr = c.last_visit || c.created_at;
+      if (!dStr) return false;
+      const parts = String(dStr).split('-');
       if (parts.length < 2) return false;
       const m = parseInt(parts[1], 10) - 1;
       return m === window._selectedMonth;
@@ -304,12 +304,22 @@ export function toggleSearchField() {
   const el = document.getElementById('search-card');
   const btn = document.getElementById('toggle-search-btn');
   if (el) {
-    el.style.display = window._searchFieldExpanded ? 'block' : 'none';
     if (window._searchFieldExpanded) {
+      // Position the search card near the button
+      const rect = btn.getBoundingClientRect();
+      el.style.position = 'fixed';
+      el.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+      el.style.left = (rect.left + window.scrollX) + 'px';
+      el.style.width = Math.min(rect.width + 24, 280) + 'px';
+      el.style.margin = '0';
+      el.style.zIndex = '1000';
+      el.style.display = 'block';
       setTimeout(() => {
         const input = document.getElementById('customer-search');
         if (input) input.focus();
       }, 50);
+    } else {
+      el.style.display = 'none';
     }
   }
   if (btn) {
@@ -2351,6 +2361,12 @@ window.handleDeleteCustomer = handleDeleteCustomer;
 window.promptWhatsAppBill = promptWhatsAppBill;
 window.promptWhatsAppBillFromId = promptWhatsAppBillFromId;
 window.openClassesForm = openClassesForm;
+export function filterByYearSelect(val) {
+  window._selectedCustomerYear = val === 'all' ? 'all' : parseInt(val, 10);
+  if (typeof window.render === 'function') window.render();
+}
+window.filterByYearSelect = filterByYearSelect;
+
 window.filterByMonthSelect = function(val) {
   window._selectedMonth = val === 'all' ? 'all' : parseInt(val, 10);
   if (typeof window.render === 'function') window.render();
@@ -2928,3 +2944,5 @@ window.showCustomerDetailsModal = showCustomerDetailsModal;
 window.getInviteSentInfo = getInviteSentInfo;
 window.recordInviteSent = recordInviteSent;
 window.renderCustomerInviteBtn = renderCustomerInviteBtn;
+window.renderCustomerAnalyticsDashboard = renderCustomerAnalyticsDashboard;
+window.initCustomerAnalyticsCharts = initCustomerAnalyticsCharts;

@@ -1141,7 +1141,7 @@ export async function fetchAllJewelRentals() {
   return data || [];
 }
 
-export async function fetchFinancialSummary(selectedMonth = 'all') {
+export async function fetchFinancialSummary(selectedMonth = 'all', selectedYear = 'all', customFilterFn = null) {
   let [customers, events, expenses, payslips, studentPayments, jewelRentals] = await Promise.all([
     fetchCustomers().catch(() => []),
     fetchEvents().catch(() => []),
@@ -1151,31 +1151,61 @@ export async function fetchFinancialSummary(selectedMonth = 'all') {
     fetchAllJewelRentals().catch(() => [])
   ]);
 
-  // Extract all unique YYYY-MM months for filter dropdown
+  // Extract all unique YYYY-MM months and YYYY years for filter dropdown
   const monthSet = new Set();
+  const yearSet = new Set();
   const getMonthStr = (dStr) => dStr ? String(dStr).substring(0, 7) : null;
+  const getYearStr = (dStr) => dStr ? String(dStr).substring(0, 4) : null;
 
-  customers.forEach(c => { const m = getMonthStr(c.last_visit || c.created_at); if(m && m.length===7) monthSet.add(m); });
-  events.forEach(e => { const m = getMonthStr(e.date || e.created_at); if(m && m.length===7) monthSet.add(m); });
-  expenses.forEach(ex => { const m = getMonthStr(ex.date || ex.created_at); if(m && m.length===7) monthSet.add(m); });
-  payslips.forEach(p => { const m = getMonthStr(p.month || p.created_at); if(m && m.length===7) monthSet.add(m); });
-  studentPayments.forEach(sp => { const m = getMonthStr(sp.date || sp.created_at); if(m && m.length===7) monthSet.add(m); });
-  jewelRentals.forEach(r => { const m = getMonthStr(r.start_date || r.created_at); if(m && m.length===7) monthSet.add(m); });
+  const checkItemDate = (item, dateProp) => {
+    if (!item) return;
+    const dStr = item[dateProp] || item.created_at;
+    const m = getMonthStr(dStr);
+    if (m && m.length === 7) monthSet.add(m);
+    const y = getYearStr(dStr);
+    if (y && y.length === 4) yearSet.add(y);
+  };
+
+  customers.forEach(c => checkItemDate(c, 'last_visit'));
+  events.forEach(e => checkItemDate(e, 'date'));
+  expenses.forEach(ex => checkItemDate(ex, 'date'));
+  payslips.forEach(p => checkItemDate(p, 'month'));
+  studentPayments.forEach(sp => checkItemDate(sp, 'date'));
+  jewelRentals.forEach(r => checkItemDate(r, 'start_date'));
+
+  const currentYearStr = String(new Date().getFullYear());
+  yearSet.add(currentYearStr);
+  const availableYears = Array.from(yearSet).sort().reverse();
 
   // Ensure current month is included if set is empty
   const currentMonthStr = new Date().toISOString().substring(0, 7);
   monthSet.add(currentMonthStr);
-  const availableMonths = Array.from(monthSet).sort().reverse();
+  let availableMonths = Array.from(monthSet).sort().reverse();
 
-  // Filter lists if a specific month is selected
-  if (selectedMonth && selectedMonth !== 'all') {
-    customers = customers.filter(c => getMonthStr(c.last_visit || c.created_at) === selectedMonth);
-    events = events.filter(e => getMonthStr(e.date || e.created_at) === selectedMonth);
-    expenses = expenses.filter(ex => getMonthStr(ex.date || ex.created_at) === selectedMonth);
-    payslips = payslips.filter(p => getMonthStr(p.month || p.created_at) === selectedMonth);
-    studentPayments = studentPayments.filter(sp => getMonthStr(sp.date || sp.created_at) === selectedMonth);
-    jewelRentals = jewelRentals.filter(r => getMonthStr(r.start_date || r.created_at) === selectedMonth);
+  // If a specific year is selected (not 'all'), filter availableMonths for dropdown to that year
+  if (selectedYear && selectedYear !== 'all') {
+    availableMonths = availableMonths.filter(m => m.startsWith(selectedYear));
   }
+
+  // Filter lists by year and month or customFilterFn
+  const matchFilter = (dStr) => {
+    if (typeof customFilterFn === 'function') {
+      return customFilterFn(dStr);
+    }
+    if (!dStr) return false;
+    const m = getMonthStr(dStr);
+    const y = getYearStr(dStr);
+    const yMatch = (selectedYear === 'all' || !selectedYear) ? true : (y === selectedYear);
+    const mMatch = (selectedMonth === 'all' || !selectedMonth) ? true : (m === selectedMonth);
+    return yMatch && mMatch;
+  };
+
+  customers = customers.filter(c => matchFilter(c.last_visit || c.created_at));
+  events = events.filter(e => matchFilter(e.date || e.created_at));
+  expenses = expenses.filter(ex => matchFilter(ex.date || ex.created_at));
+  payslips = payslips.filter(p => matchFilter(p.month || p.created_at));
+  studentPayments = studentPayments.filter(sp => matchFilter(sp.date || sp.created_at));
+  jewelRentals = jewelRentals.filter(r => matchFilter(r.start_date || r.created_at));
 
   // Income Streams
   const shopRevenue = customers.reduce((sum, c) => sum + (c.payment_status === 'paid' ? (c.amount || 0) : 0), 0);
@@ -1236,6 +1266,8 @@ export async function fetchFinancialSummary(selectedMonth = 'all') {
 
   return {
     selectedMonth,
+    selectedYear,
+    availableYears,
     availableMonths,
     shopRevenue,
     eventRevenue,

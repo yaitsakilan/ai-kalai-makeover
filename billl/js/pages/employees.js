@@ -105,35 +105,48 @@ function renderDirectoryTab(employees) {
     ${employees.map((emp, i) => {
       const initials = (emp.name || '').split(' ').map(n => n[0]).join('').slice(0, 2);
       return `
-      <div class="card" onclick="window.showEmployeePerformance('${emp.id}')" style="display:flex; flex-direction:column; justify-content:space-between; min-height: 240px; cursor:pointer; transition: all 0.2s ease;" onmouseover="this.style.borderColor='#d97706'; this.style.boxShadow='0 8px 24px rgba(217, 119, 6, 0.08)';" onmouseout="this.style.borderColor=''; this.style.boxShadow='';">
+      <div class="emp-directory-card card" onclick="window.showEmployeePerformance('${emp.id}')" title="Click to view full profile & performance">
         <div style="display:flex; gap:14px; align-items:flex-start;">
           ${emp.photo_url ? `
-            <img src="${emp.photo_url}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid #d97706; flex-shrink:0;" />
+            <img src="${emp.photo_url}" style="width:50px; height:50px; border-radius:50%; object-fit:cover; border:2px solid #f5c842; flex-shrink:0;" />
           ` : `
-            <div class="avatar ${colors[i % 4]}" style="width:48px; height:48px; font-size:16px;">${initials}</div>
+            <div class="avatar ${colors[i % 4]}" style="width:50px; height:50px; font-size:16px; font-weight:700; flex-shrink:0;">${initials}</div>
           `}
-          <div style="flex:1;">
-            <h3 style="font-size:15px; font-weight:600; color:#1a1a1a; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-              ${emp.name} 
-              <i class="ti ti-chart-bar" style="color:#d97706; font-size:14px;" title="View Performance Dashboard"></i>
-            </h3>
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
+              <h3 class="emp-card-name" style="font-size:15px; font-weight:700; margin:0 0 4px 0; display:flex; align-items:center; gap:6px;">
+                ${emp.name} 
+                <i class="ti ti-chart-bar" style="color:#f5c842; font-size:14px;" title="View Performance Dashboard"></i>
+              </h3>
+              <span class="badge ${emp.status === 'Active' ? 'badge-green' : emp.status === 'On Leave' ? 'badge-amber' : 'badge-red'}" style="font-size:9.5px; padding:2px 7px;">
+                ${emp.status || 'Active'}
+              </span>
+            </div>
             
-            <div style="display:flex; flex-direction:column; gap:4px; margin-top:8px; font-size:11.5px; color:#555;">
-              <div><i class="ti ti-phone" style="color:#888; font-size:12px;"></i> <strong>Phone:</strong> ${emp.phone || '—'}</div>
-              <div><i class="ti ti-calendar" style="color:#888; font-size:12px;"></i> <strong>Joined:</strong> ${emp.joining_date || '—'}</div>
-              <div><i class="ti ti-phone-incoming" style="color:#888; font-size:12px;"></i> <strong>Emergency:</strong> ${emp.emergency_name ? `${emp.emergency_name} (${emp.emergency_number || ''})` : (emp.emergency_contact || '—')}</div>
+            <div class="emp-card-meta" style="display:flex; flex-direction:column; gap:5px; margin-top:8px; font-size:12px;">
+              <div><i class="ti ti-phone"></i> <strong>Phone:</strong> ${emp.phone || '—'}</div>
+              <div><i class="ti ti-calendar"></i> <strong>Joined:</strong> ${emp.joining_date || '—'}</div>
+              <div><i class="ti ti-phone-incoming"></i> <strong>Emergency:</strong> ${emp.emergency_name ? `${emp.emergency_name} (${emp.emergency_number || ''})` : (emp.emergency_contact || '—')}</div>
             </div>
 
-            <div style="font-size:12.5px; color:#1a1a1a; font-weight:600; margin-top:10px; border-top: 0.5px dashed #eee; padding-top:8px;">
-              Pay Rate: <span style="color:#d97706;">₹${(emp.base_rate || 0).toLocaleString()}</span>
-              <span style="font-size:11px; font-weight:400; color:#888;"> / ${emp.salary_type === 'monthly' ? 'month' : 'day'}</span>
+            <div class="emp-card-pay-rate" style="font-size:12px; margin-top:10px; padding-top:8px; display:flex; justify-content:space-between; align-items:center;">
+              <span>Base Pay Rate:</span>
+              <span><strong>₹${(emp.base_rate || 0).toLocaleString()}</strong> <span style="font-size:10.5px; opacity:0.8;">/ ${emp.salary_type === 'monthly' ? 'month' : 'day'}</span></span>
             </div>
           </div>
         </div>
-        <div style="display:flex; justify-content:flex-end; border-top:0.5px solid #f5f5f5; padding-top:12px; margin-top:12px;">
-          <button class="btn btn-danger btn-icon" onclick="event.stopPropagation(); window.handleDeleteEmployee('${emp.id}')" style="width:32px; height:32px; padding:0; color:#dc2626;" title="Remove Employee">
-            <i class="ti ti-trash" style="font-size:14px;"></i>
-          </button>
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(245,200,66,0.12); padding-top:10px; margin-top:12px;">
+          <span style="font-size:11px; color:#f5c842; font-weight:600; display:flex; align-items:center; gap:4px;">
+            <i class="ti ti-id"></i> ${emp.emp_id || 'Staff'}
+          </span>
+          <div style="display:flex; gap:6px;">
+            <button class="btn btn-outline" onclick="event.stopPropagation(); window.showEmployeePerformance('${emp.id}')" style="height:28px; padding:0 10px; font-size:11px; display:inline-flex; align-items:center; gap:4px;" title="View Performance">
+              <i class="ti ti-eye"></i> View Profile
+            </button>
+            <button class="btn btn-danger btn-icon" onclick="event.stopPropagation(); window.handleDeleteEmployee('${emp.id}')" style="width:28px; height:28px; padding:0; color:#dc2626;" title="Remove Employee">
+              <i class="ti ti-trash" style="font-size:13px;"></i>
+            </button>
+          </div>
         </div>
       </div>
       `;
@@ -157,31 +170,33 @@ function renderAttendanceTab(employees, attendance) {
   ${renderWifiAttendanceCard(employees)}
 
   <div class="card" style="padding:0; overflow:hidden;">
-    <div style="padding:16px; border-bottom:0.5px solid #f5f5f5; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-      <h3 style="font-size:14px; font-weight:600; color:#1a1a1a; margin:0;">Daily Check-In logs</h3>
-      <div style="font-size:11.5px; color:#888;">
+    <div style="padding:16px 20px; border-bottom:1px solid rgba(245,200,66,0.15); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <h3 style="font-size:15px; font-weight:700; margin:0; display:flex; align-items:center; gap:8px;">
+        <i class="ti ti-calendar-check" style="color:#f5c842;"></i> Daily Check-In Logs
+      </h3>
+      <div style="font-size:11.5px; opacity:0.8;">
         Showing ${validAttendance.length} attendance record${validAttendance.length === 1 ? '' : 's'}
       </div>
     </div>
     <div style="overflow-x:auto;">
-      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+      <table class="emp-modal-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:12.5px;">
         <thead>
-          <tr style="background:#fafafa; border-bottom:0.5px solid #eaeaea; color:#666;">
-            <th style="padding:12px 16px; font-weight:500;">Date</th>
-            <th style="padding:12px 16px; font-weight:500;">Employee</th>
-            <th style="padding:12px 16px; font-weight:500;">Check In</th>
-            <th style="padding:12px 16px; font-weight:500;">Check Out</th>
-            <th style="padding:12px 16px; font-weight:500;">Hours Logged</th>
-            <th style="padding:12px 16px; font-weight:500;">Status</th>
-            <th style="padding:12px 16px; font-weight:500;">WiFi / Network</th>
-            <th style="padding:12px 16px; font-weight:500; text-align:right;">Action</th>
+          <tr>
+            <th style="padding:12px 16px;">Date</th>
+            <th style="padding:12px 16px;">Employee</th>
+            <th style="padding:12px 16px;">Check In</th>
+            <th style="padding:12px 16px;">Check Out</th>
+            <th style="padding:12px 16px;">Hours Logged</th>
+            <th style="padding:12px 16px;">Status</th>
+            <th style="padding:12px 16px;">WiFi / Network</th>
+            <th style="padding:12px 16px; text-align:right;">Action</th>
           </tr>
         </thead>
         <tbody>
           ${!validAttendance.length ? `
             <tr>
-              <td colspan="8" style="text-align:center; padding:36px; color:#999;">
-                <i class="ti ti-calendar" style="font-size:32px; display:block; margin-bottom:8px; opacity:0.3;"></i>
+              <td colspan="8" style="text-align:center; padding:36px; opacity:0.7;">
+                <i class="ti ti-calendar" style="font-size:32px; display:block; margin-bottom:8px; opacity:0.4;"></i>
                 No attendance logs found yet. Tap "Punch Check-In" or "Log Manual Attendance" to add a log.
               </td>
             </tr>
@@ -209,12 +224,12 @@ function renderAttendanceTab(employees, attendance) {
               : `<span class="badge badge-gray" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;" title="${a.notes || 'Manual Entry'}"><i class="ti ti-pencil"></i> Manual Entry</span>`;
 
             return `
-            <tr style="border-bottom:0.5px solid #f5f5f5;">
-              <td style="padding:12px 16px; font-weight:500;">${a.date}</td>
-              <td style="padding:12px 16px; font-weight:600; color:#1a1a1a;">${emp.name}</td>
-              <td style="padding:12px 16px; color:#555;">${inTime}</td>
-              <td style="padding:12px 16px; color:#555;">${outTime}</td>
-              <td style="padding:12px 16px; color:#666; font-weight:500;">${hoursStr}</td>
+            <tr>
+              <td style="padding:12px 16px; font-weight:600;">${a.date}</td>
+              <td style="padding:12px 16px; font-weight:700;">${emp.name}</td>
+              <td style="padding:12px 16px; opacity:0.85;">${inTime}</td>
+              <td style="padding:12px 16px; opacity:0.85;">${outTime}</td>
+              <td style="padding:12px 16px; font-weight:600; color:#f5c842;">${hoursStr}</td>
               <td style="padding:12px 16px;"><span class="badge ${badgeClass}">${a.status}</span></td>
               <td style="padding:12px 16px;">${wifiBadge}</td>
               <td style="padding:12px 16px; text-align:right;">
@@ -247,8 +262,8 @@ function renderPayrollTab(employees, attendance, payslips, events) {
   <div style="display:grid; grid-template-columns: 1fr 2fr; gap:16px; align-items:start;">
     <!-- LEFT PANEL: GENERATE PAYSLIP FORM -->
     <div class="card">
-      <h3 style="font-size:14px; font-weight:600; color:#1a1a1a; margin-bottom:14px; border-bottom:0.5px solid #f5f5f5; padding-bottom:8px;">
-        <i class="ti ti-calculator" style="color:#d97706; margin-right:4px;"></i> Generate Monthly Payslip
+      <h3 style="font-size:15px; font-weight:700; margin-bottom:14px; border-bottom:1px solid rgba(245,200,66,0.15); padding-bottom:10px; display:flex; align-items:center; gap:8px;">
+        <i class="ti ti-calculator" style="color:#f5c842;"></i> Generate Monthly Payslip
       </h3>
       
       <div class="form-group">
@@ -260,12 +275,12 @@ function renderPayrollTab(employees, attendance, payslips, events) {
         <label class="form-label">Select Employee</label>
         <select class="form-input form-select" id="payroll-emp-id" onchange="window.calculatePayrollEstimate()">
           <option value="">-- Choose Staff --</option>
-          ${employees.map(e => `<option value="${e.id}">${e.name} (${e.role})</option>`).join('')}
+          ${employees.map(e => `<option value="${e.id}">${e.name} (${e.role || 'Staff'})</option>`).join('')}
         </select>
       </div>
 
       <!-- Realtime Calculation Estimate Panel -->
-      <div id="payroll-estimate-container" style="display:none; margin: 16px 0; padding:14px; background:#faf9f7; border: 0.5px solid #e5e5e5; border-radius:10px;">
+      <div id="payroll-estimate-container" class="emp-payroll-estimate-card" style="display:none;">
         <!-- Calculated values will inject here dynamically -->
       </div>
 
@@ -289,21 +304,23 @@ function renderPayrollTab(employees, attendance, payslips, events) {
 
     <!-- RIGHT PANEL: EXISTING PAYSLIPS HISTORY -->
     <div class="card" style="padding:0; overflow:hidden;">
-      <div style="padding:16px; border-bottom:0.5px solid #f5f5f5;">
-        <h3 style="font-size:14px; font-weight:600; color:#1a1a1a;">Payslips History</h3>
+      <div style="padding:16px 20px; border-bottom:1px solid rgba(245,200,66,0.15);">
+        <h3 style="font-size:15px; font-weight:700; margin:0; display:flex; align-items:center; gap:8px;">
+          <i class="ti ti-file-invoice" style="color:#f5c842;"></i> Payslips History
+        </h3>
       </div>
       <div style="overflow-x:auto;">
         ${!payslips.length ? `
-          <div style="text-align:center; padding:40px; color:#bbb; font-size:12.5px;">No payslips generated yet</div>
+          <div style="text-align:center; padding:40px; opacity:0.7; font-size:12.5px;">No payslips generated yet</div>
         ` : `
-          <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+          <table class="emp-modal-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:12.5px;">
             <thead>
-              <tr style="background:#fafafa; border-bottom:0.5px solid #eaeaea; color:#666;">
-                <th style="padding:12px 16px; font-weight:500;">Month</th>
-                <th style="padding:12px 16px; font-weight:500;">Employee</th>
-                <th style="padding:12px 16px; font-weight:500;">Net Salary</th>
-                <th style="padding:12px 16px; font-weight:500;">Status</th>
-                <th style="padding:12px 16px; font-weight:500; text-align:right;">Actions</th>
+              <tr>
+                <th style="padding:12px 16px;">Month</th>
+                <th style="padding:12px 16px;">Employee</th>
+                <th style="padding:12px 16px;">Net Salary</th>
+                <th style="padding:12px 16px;">Status</th>
+                <th style="padding:12px 16px; text-align:right;">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -311,17 +328,17 @@ function renderPayrollTab(employees, attendance, payslips, events) {
                 const emp = employees.find(e => e.id === p.employee_id);
                 if (!emp) return '';
                 return `
-                <tr style="border-bottom:0.5px solid #f5f5f5;">
-                  <td style="padding:12px 16px; font-weight:600;">${p.month}</td>
-                  <td style="padding:12px 16px;">${emp.name}</td>
-                  <td style="padding:12px 16px; font-weight:700; color:#d97706;">₹${(p.net_pay || 0).toLocaleString()}</td>
+                <tr>
+                  <td style="padding:12px 16px; font-weight:700;">${p.month}</td>
+                  <td style="padding:12px 16px; font-weight:600;">${emp.name}</td>
+                  <td style="padding:12px 16px; font-weight:800; color:#f5c842;">₹${(p.net_pay || 0).toLocaleString()}</td>
                   <td style="padding:12px 16px;">
                     <span class="badge ${p.status === 'Paid' ? 'badge-green' : 'badge-amber'}" onclick="window.togglePayslipStatus('${p.id}', '${p.status}')" style="cursor:pointer;" title="Click to toggle status">
                       ${p.status}
                     </span>
                   </td>
                   <td style="padding:12px 16px; text-align:right; display:flex; justify-content:flex-end; gap:6px;">
-                    <button class="btn btn-outline" onclick="window.viewPayslipReceipt('${p.id}')" style="padding:4px 8px; font-size:11px; height:28px;">
+                    <button class="btn btn-outline" onclick="window.viewPayslipReceipt('${p.id}')" style="padding:4px 8px; font-size:11px; height:28px; display:inline-flex; align-items:center; gap:4px;">
                       <i class="ti ti-printer"></i> View & Print
                     </button>
                     <button class="btn btn-danger btn-icon" onclick="window.handleDeletePayslip('${p.id}')" style="width:28px; height:28px; padding:0; color:#dc2626;">
@@ -409,33 +426,34 @@ window.calculatePayrollEstimate = function() {
     days_present: daysPresent
   };
 
+  container.className = 'emp-payroll-estimate-card';
   container.innerHTML = `
-    <div style="font-size:12.5px; font-weight:600; color:#1a1a1a; margin-bottom:8px; display:flex; justify-content:space-between;">
-      <span>Calculation Breakdown:</span>
-      <span style="color:#d97706;">${emp.salary_type === 'monthly' ? 'Monthly Salary' : 'Daily Wage'}</span>
+    <div class="emp-pe-title" style="font-size:13px; font-weight:700; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+      <span><i class="ti ti-chart-pie"></i> Calculation Breakdown:</span>
+      <span class="badge badge-amber">${emp.salary_type === 'monthly' ? 'Monthly Salary' : 'Daily Wage'}</span>
     </div>
-    <div style="display:flex; justify-content:space-between; font-size:12px; color:#555; padding:3px 0;">
+    <div class="emp-pe-row" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;">
       <span>Present Days:</span>
       <strong>${daysPresent} days</strong>
     </div>
-    <div style="display:flex; justify-content:space-between; font-size:12px; color:#555; padding:3px 0;">
+    <div class="emp-pe-row" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;">
       <span>Base Pay Rate:</span>
       <strong>₹${(emp.base_rate || 0).toLocaleString()} / ${emp.salary_type === 'monthly' ? 'mo' : 'day'}</strong>
     </div>
-    <div style="display:flex; justify-content:space-between; font-size:12px; color:#15803d; padding:3px 0; border-top: 0.5px dashed #ccc; margin-top:4px;">
+    <div class="emp-pe-row emp-pe-add" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0; border-top:1px dashed rgba(245,200,66,0.2); margin-top:6px;">
       <span>Calculated Base Pay:</span>
       <strong>₹${basePay.toLocaleString()}</strong>
     </div>
-    <div style="display:flex; justify-content:space-between; font-size:12px; color:#15803d; padding:3px 0;">
+    <div class="emp-pe-row emp-pe-add" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;">
       <span>Event Commission Wages:</span>
       <strong>+₹${eventCommissions.toLocaleString()}</strong>
     </div>
-    <div style="display:flex; justify-content:space-between; font-size:12px; color:#dc2626; padding:3px 0;">
+    <div class="emp-pe-row emp-pe-sub" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;">
       <span>Deductions:</span>
       <strong>-₹${manualDeductions.toLocaleString()}</strong>
     </div>
-    <div style="display:flex; justify-content:space-between; font-size:13.5px; font-weight:700; color:#7e22ce; padding:6px 0 0; border-top:1px solid #e5e5e5; margin-top:6px;">
-      <span>Total Net Salary:</span>
+    <div class="emp-pe-net" style="display:flex; justify-content:space-between; font-size:15px; font-weight:800; padding:10px 0 2px; margin-top:8px;">
+      <span>Total Net Take-Home:</span>
       <span>₹${netPay.toLocaleString()}</span>
     </div>
   `;
@@ -696,9 +714,9 @@ window.openManualAttendanceModal = function() {
         <option value="Absent">Absent</option>
       </select>
     </div>
-    <div style="margin-top:10px; padding:10px 12px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.25); border-radius:8px;">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; margin:0; font-weight:600; color:#15803d;">
-        <input type="checkbox" id="ma-wifi-check" checked style="width:16px; height:16px; accent-color:#15803d;">
+    <div style="margin-top:10px; padding:10px 12px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; margin:0; font-weight:600; color:#22c55e;">
+        <input type="checkbox" id="ma-wifi-check" checked style="width:16px; height:16px; accent-color:#22c55e;">
         <span><i class="ti ti-wifi"></i> Verified via Salon WiFi Router</span>
       </label>
     </div>
@@ -854,10 +872,16 @@ window.showEmployeePerformance = async function(empId) {
   showModal('Employee Profile & Performance Dashboard', `
     <div class="loading-page" style="height: 180px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
       <div class="spinner"></div>
-      <div style="margin-top:12px;font-weight:500;color:#555;">Loading profile details...</div>
+      <div style="margin-top:12px;font-weight:600;color:#f5c842;">Loading profile details...</div>
     </div>
   `, null);
   
+  // Attach custom wide dashboard modal class
+  const modalEl = document.querySelector('#modal-container .modal');
+  if (modalEl) {
+    modalEl.classList.add('emp-dashboard-modal');
+  }
+
   // Hide modal save button and make cancel button say Close
   const saveBtn = document.getElementById('modal-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
@@ -971,138 +995,107 @@ window.showEmployeePerformance = async function(empId) {
 
     const styles = `
       <style>
+        #modal-container .modal {
+          max-width: 680px !important;
+          width: 95vw !important;
+        }
+        .modal-tab-menu-wrap {
+          display: flex !important;
+          gap: 4px !important;
+          border-bottom: 1.5px solid rgba(245, 200, 66, 0.2) !important;
+          margin-bottom: 16px !important;
+          overflow-x: auto !important;
+          padding-bottom: 2px !important;
+        }
         .modal-tab-btn {
-          flex: 1 0 auto;
-          background: none;
-          border: none;
-          border-bottom: 2px solid transparent;
-          padding: 10px 4px;
-          font-size: 11.5px;
-          font-weight: 600;
-          color: #666;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 4px;
-          white-space: nowrap;
+          flex: 0 0 auto !important;
+          background: none !important;
+          border: none !important;
+          border-bottom: 2.5px solid transparent !important;
+          padding: 8px 12px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          color: rgba(255, 255, 255, 0.65) !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          white-space: nowrap !important;
+          border-radius: 6px 6px 0 0 !important;
+          font-family: inherit !important;
+        }
+        body.theme-light .modal-tab-btn {
+          color: #555 !important;
         }
         .modal-tab-btn:hover {
-          color: #d97706;
-          background: rgba(217, 119, 6, 0.04);
+          color: #f5c842 !important;
+          background: rgba(245, 200, 66, 0.08) !important;
         }
         .modal-tab-btn.active {
-          color: #d97706;
-          border-bottom-color: #d97706;
-        }
-        .profile-grid-item {
-          display: flex;
-          justify-content: space-between;
-          border-bottom: 0.5px solid #f5f5f5;
-          padding: 8px 0;
-          font-size: 12.5px;
-        }
-        .profile-grid-item span:first-child {
-          color: #666;
-          font-weight: 500;
-        }
-        .profile-grid-item span:last-child {
-          color: #1a1a1a;
-          font-weight: 600;
-          text-align: right;
-        }
-
-        /* PREMIUM DARK GOLD GLASSMORPHISM OVERRIDES FOR EMPLOYEE THEME */
-        #app.employee-mode ~ #modal-container .modal {
-          background: rgba(26, 16, 5, 0.98) !important;
-          border: 1px solid rgba(245, 200, 66, 0.2) !important;
-          box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8) !important;
-          color: #fff !important;
-        }
-        #app.employee-mode ~ #modal-container .modal-overlay {
-          background: rgba(0, 0, 0, 0.7) !important;
-          backdrop-filter: blur(8px) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal .profile-header-card {
-          background: rgba(255, 255, 255, 0.04) !important;
-          border: 1px solid rgba(245, 200, 66, 0.15) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal h3,
-        #app.employee-mode ~ #modal-container .modal h4,
-        #app.employee-mode ~ #modal-container .modal .profile-grid-item span:last-child {
-          color: #fff !important;
-        }
-        #app.employee-mode ~ #modal-container .modal .profile-grid-item {
-          border-bottom-color: rgba(245, 200, 66, 0.1) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal .profile-grid-item span:first-child {
-          color: rgba(255, 255, 255, 0.5) !important;
-        }
-        #app.employee-mode ~ #modal-container .performance-chip {
-          background: rgba(255, 255, 255, 0.05) !important;
-          border-color: rgba(245, 200, 66, 0.2) !important;
-          color: rgba(255, 255, 255, 0.9) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal table td,
-        #app.employee-mode ~ #modal-container .modal table td div,
-        #app.employee-mode ~ #modal-container .modal table th {
-          color: rgba(255, 255, 255, 0.8) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal table tr {
-          border-bottom-color: rgba(245, 200, 66, 0.1) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal h4 {
-          border-bottom-color: rgba(245, 200, 66, 0.15) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal-tab-menu-wrap {
-          border-bottom-color: rgba(245, 200, 66, 0.15) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal-tab-btn {
-          color: rgba(255, 255, 255, 0.4) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal-tab-btn:hover {
-          color: #f5c842 !important;
-          background: rgba(245, 200, 66, 0.05) !important;
-        }
-        #app.employee-mode ~ #modal-container .modal-tab-btn.active {
           color: #f5c842 !important;
           border-bottom-color: #f5c842 !important;
+          background: rgba(245, 200, 66, 0.08) !important;
         }
-        #app.employee-mode ~ #modal-container .edit-profile-header {
-          border-bottom-color: rgba(245, 200, 66, 0.15) !important;
-          color: #f5c842 !important;
+        body.theme-light .modal-tab-btn.active {
+          color: #d97706 !important;
+          border-bottom-color: #d97706 !important;
+          background: rgba(217, 119, 6, 0.06) !important;
         }
-        #app.employee-mode ~ #modal-container .edit-profile-footer {
-          border-top-color: rgba(245, 200, 66, 0.15) !important;
+
+        /* Profile & Employment Items - 100% High Contrast */
+        .profile-grid-item {
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+          border-bottom: 1px solid rgba(245, 200, 66, 0.12) !important;
+          padding: 10px 4px !important;
+          font-size: 13px !important;
         }
-        #app.employee-mode ~ #modal-container .form-label {
-          color: rgba(255, 255, 255, 0.7) !important;
+        .profile-grid-item:last-child {
+          border-bottom: none !important;
         }
-        #app.employee-mode ~ #modal-container .form-input {
-          background: rgba(26, 16, 5, 0.6) !important;
-          border: 1px solid rgba(245, 200, 66, 0.2) !important;
-          color: #fff !important;
+        .profile-grid-item span:first-child {
+          color: rgba(255, 255, 255, 0.65) !important;
+          font-weight: 500 !important;
         }
-        #app.employee-mode ~ #modal-container .form-input:focus {
-          border-color: #f5c842 !important;
-          box-shadow: 0 0 0 2px rgba(245, 200, 66, 0.15) !important;
+        .profile-grid-item span:last-child {
+          color: #ffffff !important;
+          font-weight: 600 !important;
+          text-align: right !important;
         }
-        #app.employee-mode ~ #modal-container .form-input:disabled {
-          background: rgba(255, 255, 255, 0.02) !important;
-          border-color: rgba(255, 255, 255, 0.05) !important;
-          color: rgba(255, 255, 255, 0.35) !important;
+        body.theme-light .profile-grid-item {
+          border-bottom: 1px solid #f0f0f0 !important;
         }
-        #app.employee-mode ~ #modal-container .btn-outline {
-          background: rgba(255, 255, 255, 0.05) !important;
-          border-color: rgba(245, 200, 66, 0.15) !important;
-          color: rgba(255, 255, 255, 0.8) !important;
+        body.theme-light .profile-grid-item span:first-child {
+          color: #4b5563 !important;
         }
-        #app.employee-mode ~ #modal-container .btn-outline:hover {
-          background: rgba(255, 255, 255, 0.1) !important;
+        body.theme-light .profile-grid-item span:last-child {
+          color: #0f172a !important;
         }
-        #app.employee-mode ~ #modal-container .modal-close-icon {
-          color: rgba(255, 255, 255, 0.4) !important;
+
+        .profile-header-card {
+          background: rgba(255, 255, 255, 0.04) !important;
+          border: 1px solid rgba(245, 200, 66, 0.22) !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+          padding: 16px !important;
+          border-radius: 14px !important;
+          margin-bottom: 16px !important;
+        }
+        body.theme-light .profile-header-card {
+          background: #faf9f6 !important;
+          border: 1px solid #e5e5e5 !important;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+        }
+
+        #modal-container .modal h3,
+        #modal-container .modal h4 {
+          color: #ffffff !important;
+        }
+        body.theme-light #modal-container .modal h3,
+        body.theme-light #modal-container .modal h4 {
+          color: #1a1a1a !important;
         }
       </style>
     `;
@@ -1112,23 +1105,24 @@ window.showEmployeePerformance = async function(empId) {
       <div style="max-height:75vh; overflow-y:auto; padding-right:4px;" class="scrollbar-hide">
         
         <!-- Header Profile Card -->
-        <div class="profile-header-card" style="display:flex; gap:16px; align-items:center; background:#faf9f6; border:1px solid #e5e5e5; padding:16px; border-radius:12px; margin-bottom:16px;">
+        <div class="profile-header-card" style="display:flex; gap:16px; align-items:center;">
           ${photoUrl ? `
-            <img src="${photoUrl}" style="width:60px; height:60px; border-radius:50%; object-fit:cover; border:2px solid #d97706;" />
+            <img src="${photoUrl}" style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:2px solid #f5c842; flex-shrink:0;" />
           ` : `
-            <div class="avatar ${colors[empIndex >= 0 ? empIndex % 4 : 0]}" style="width:60px; height:60px; font-size:18px; font-weight:700; flex-shrink:0;">${initials}</div>
+            <div class="avatar ${colors[empIndex >= 0 ? empIndex % 4 : 0]}" style="width:64px; height:64px; font-size:20px; font-weight:700; flex-shrink:0;">${initials}</div>
           `}
           <div style="flex:1; min-width:0;">
-            <h3 style="font-size:17px; font-weight:700; color:#1a1a1a; margin:0 0 2px 0;">${emp.name}</h3>
+            <h3 style="font-size:18px; font-weight:700; margin:0 0 4px 0;">${emp.name}</h3>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px;">
-              <span class="badge ${emp.status === 'Active' ? 'badge-green' : emp.status === 'On Leave' ? 'badge-amber' : 'badge-red'}" style="font-size:9.5px; padding:2px 8px;">
+              <span class="badge ${emp.status === 'Active' ? 'badge-green' : emp.status === 'On Leave' ? 'badge-amber' : 'badge-red'}" style="font-size:10px; padding:2px 8px;">
                 ${emp.status || 'Active'}
               </span>
-              <span style="font-size:11px; color:#888; font-weight:600;">ID: ${emp.emp_id || 'kalai-emp-XX'}</span>
+              <span style="font-size:12px; font-weight:600; opacity:0.8;">ID: ${emp.emp_id || 'kalai-emp-XX'}</span>
+              <span style="font-size:12px; opacity:0.7;">· ${emp.role || 'Staff'}</span>
             </div>
           </div>
           ${isOwner ? `
-            <button class="btn btn-outline" onclick="window.toggleEditProfile('${empId}')" style="padding:6px 12px; font-size:11.5px; height:32px;">
+            <button class="btn btn-outline" onclick="window.toggleEditProfile('${empId}')" style="padding:6px 14px; font-size:12px; height:34px; display:inline-flex; align-items:center; gap:6px;">
               <i class="ti ti-edit"></i> Edit Profile
             </button>
           ` : `
@@ -1144,13 +1138,13 @@ window.showEmployeePerformance = async function(empId) {
         </div>
 
         <!-- Tabs Menu -->
-        <div class="modal-tab-menu-wrap" style="display:flex; border-bottom:1px solid #eaeaea; margin-bottom:16px; overflow-x:auto;">
-          <button class="modal-tab-btn active" data-tab="profile" onclick="window.switchModalTab('profile')">👤 Profile</button>
-          <button class="modal-tab-btn" data-tab="employment" onclick="window.switchModalTab('employment')">💼 Employment</button>
-          <button class="modal-tab-btn" data-tab="attendance" onclick="window.switchModalTab('attendance')">📅 Attendance</button>
-          <button class="modal-tab-btn" data-tab="performance" onclick="window.switchModalTab('performance')">📈 Performance</button>
-          <button class="modal-tab-btn" data-tab="payslips" onclick="window.switchModalTab('payslips')">💵 Payslips</button>
-          <button class="modal-tab-btn" data-tab="notes" onclick="window.switchModalTab('notes')">💬 Notes &amp; Messages</button>
+        <div class="modal-tab-menu-wrap">
+          <button class="modal-tab-btn active" data-tab="profile" onclick="window.switchModalTab('profile')"><i class="ti ti-user"></i> Profile</button>
+          <button class="modal-tab-btn" data-tab="employment" onclick="window.switchModalTab('employment')"><i class="ti ti-briefcase"></i> Employment</button>
+          <button class="modal-tab-btn" data-tab="attendance" onclick="window.switchModalTab('attendance')"><i class="ti ti-calendar"></i> Attendance</button>
+          <button class="modal-tab-btn" data-tab="performance" onclick="window.switchModalTab('performance')"><i class="ti ti-chart-bar"></i> Performance</button>
+          <button class="modal-tab-btn" data-tab="payslips" onclick="window.switchModalTab('payslips')"><i class="ti ti-file-invoice"></i> Payslips</button>
+          <button class="modal-tab-btn" data-tab="notes" onclick="window.switchModalTab('notes')"><i class="ti ti-message-dots"></i> Notes &amp; Messages</button>
         </div>
 
         <!-- TAB PANES -->
@@ -1173,57 +1167,55 @@ window.showEmployeePerformance = async function(empId) {
           <div style="display:flex; flex-direction:column; gap:2px;">
             <div class="profile-grid-item"><span>Date of Joining</span><span>${emp.joining_date || '—'}</span></div>
             <div class="profile-grid-item"><span>Employment Type</span><span>${emp.employment_type || 'Full Time'}</span></div>
-            <div class="profile-grid-item"><span>Employee Status</span><span>${emp.status || 'Active'}</span></div>
+            <div class="profile-grid-item"><span>Employee Status</span><span><span class="badge ${emp.status === 'Active' ? 'badge-green' : emp.status === 'On Leave' ? 'badge-amber' : 'badge-red'}" style="font-size:9.5px; padding:2px 7px;">${emp.status || 'Active'}</span></span></div>
             <div class="profile-grid-item"><span>Leave Balance</span><span>${emp.leave_balance || 0} Days</span></div>
             <div class="profile-grid-item"><span>Salary/Wage Basis</span><span>${emp.salary_type === 'monthly' ? 'Monthly Salary' : 'Daily Wages'}</span></div>
-            <div class="profile-grid-item"><span>Base Pay Rate</span><span style="color:#b45309;">₹${(emp.base_rate || 0).toLocaleString()} / ${emp.salary_type === 'monthly' ? 'month' : 'day'}</span></div>
+            <div class="profile-grid-item"><span>Base Pay Rate</span><span style="color:#f5c842; font-weight:700;">₹${(emp.base_rate || 0).toLocaleString()} / ${emp.salary_type === 'monthly' ? 'month' : 'day'}</span></div>
             <div class="profile-grid-item" style="border-bottom:none;"><span>Shift Start Time</span><span>${emp.shift_start || '09:00'}</span></div>
           </div>
         </div>
 
         <!-- Tab 3: Attendance Pane -->
         <div id="tab-pane-attendance" class="modal-tab-pane" style="display:none;">
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:16px;">
-            <div style="background:#f0fdf4; border:1px solid #bbf7d0; padding:10px; border-radius:8px; text-align:center;">
-              <div style="font-size:10px; color:#166534; font-weight:600; text-transform:uppercase;">Present Days</div>
-              <div style="font-size:17px; font-weight:700; color:#14532d; margin-top:2px;">${daysPresent}</div>
+          <div class="emp-stat-grid-4">
+            <div class="emp-stat-card stat-green">
+              <div class="stat-label">Present Days</div>
+              <div class="stat-value">${daysPresent}</div>
             </div>
-            <div style="background:#fffbeb; border:1px solid #fde68a; padding:10px; border-radius:8px; text-align:center;">
-              <div style="font-size:10px; color:#92400e; font-weight:600; text-transform:uppercase;">Late Entries</div>
-              <div style="font-size:17px; font-weight:700; color:#78350f; margin-top:2px;">${lateEntries}</div>
+            <div class="emp-stat-card stat-amber">
+              <div class="stat-label">Late Entries</div>
+              <div class="stat-value">${lateEntries}</div>
             </div>
-            <div style="background:#fef2f2; border:1px solid #fecaca; padding:10px; border-radius:8px; text-align:center;">
-              <div style="font-size:10px; color:#991b1b; font-weight:600; text-transform:uppercase;">Absent Days</div>
-              <div style="font-size:17px; font-weight:700; color:#7f1d1d; margin-top:2px;">${daysAbsent}</div>
+            <div class="emp-stat-card stat-red">
+              <div class="stat-label">Absent Days</div>
+              <div class="stat-value">${daysAbsent}</div>
             </div>
-            <div style="background:#eff6ff; border:1px solid #bfdbfe; padding:10px; border-radius:8px; text-align:center;">
-              <div style="font-size:10px; color:#1e40af; font-weight:600; text-transform:uppercase;">Total Hours</div>
-              <div style="font-size:17px; font-weight:700; color:#1e3a8a; margin-top:2px;">${formattedHours}h</div>
+            <div class="emp-stat-card stat-blue">
+              <div class="stat-label">Total Hours</div>
+              <div class="stat-value">${formattedHours}h</div>
             </div>
           </div>
 
-
-
-          <h4 style="font-size:12.5px; font-weight:600; color:#1a1a1a; margin-bottom:8px; border-bottom:0.5px solid #eee; padding-bottom:4px;">Recent Shift History</h4>
+          <h4 class="emp-section-subhead"><i class="ti ti-history"></i> Recent Shift History</h4>
           ${empAttendance.length === 0 ? `
-            <div style="font-size:11px; color:#999; text-align:center; padding:10px 0;">No shifts recorded.</div>
+            <div style="font-size:12px; opacity:0.7; text-align:center; padding:16px 0;">No shifts recorded.</div>
           ` : `
-            <table style="width:100%; font-size:12px; border-collapse:collapse; text-align:left;">
+            <table class="emp-modal-table">
               <thead>
-                <tr style="border-bottom:1px solid #eee; color:#666;">
-                  <th style="padding:6px 0;">Date</th>
-                  <th style="padding:6px 0;">Check In</th>
-                  <th style="padding:6px 0;">Check Out</th>
-                  <th style="padding:6px 0; text-align:right;">Status</th>
+                <tr>
+                  <th>Date</th>
+                  <th>Check In</th>
+                  <th>Check Out</th>
+                  <th style="text-align:right;">Status</th>
                 </tr>
               </thead>
               <tbody>
                 ${empAttendance.slice(0, 5).map(a => `
-                  <tr style="border-bottom:0.5px solid #f5f5f5;">
-                    <td style="padding:6px 0; font-weight:500;">${a.date}</td>
-                    <td style="padding:6px 0; color:#555;">${a.check_in ? new Date(a.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                    <td style="padding:6px 0; color:#555;">${a.check_out ? new Date(a.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                    <td style="padding:6px 0; text-align:right;"><span class="badge ${a.status === 'Present' ? 'badge-green' : a.status === 'Late' ? 'badge-amber' : a.status === 'Half-day' ? 'badge-blue' : 'badge-red'}" style="font-size:9px; padding:1px 5px;">${a.status}</span></td>
+                  <tr>
+                    <td style="font-weight:600;">${a.date}</td>
+                    <td style="opacity:0.85;">${a.check_in ? new Date(a.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                    <td style="opacity:0.85;">${a.check_out ? new Date(a.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                    <td style="text-align:right;"><span class="badge ${a.status === 'Present' ? 'badge-green' : a.status === 'Late' ? 'badge-amber' : a.status === 'Half-day' ? 'badge-blue' : 'badge-red'}" style="font-size:9.5px; padding:1px 6px;">${a.status}</span></td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1233,53 +1225,53 @@ window.showEmployeePerformance = async function(empId) {
 
         <!-- Tab 4: Performance Pane -->
         <div id="tab-pane-performance" class="modal-tab-pane" style="display:none;">
-          <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; margin-bottom:16px;">
-            <div style="background:#faf5ff; border:1px solid #f3e8ff; padding:12px; border-radius:8px; text-align:center;">
-              <div style="font-size:10px; color:#6b21a8; font-weight:600; text-transform:uppercase;">Customers Served</div>
-              <div style="font-size:22px; font-weight:700; color:#581c87; margin-top:2px;">${customersServed}</div>
+          <div class="emp-stat-grid-2">
+            <div class="emp-stat-card stat-purple">
+              <div class="stat-label">Customers Served</div>
+              <div class="stat-value">${customersServed}</div>
             </div>
-            <div style="background:#fffbeb; border:1px solid #fef3c7; padding:12px; border-radius:8px; text-align:center;">
-              <div style="font-size:10px; color:#b45309; font-weight:600; text-transform:uppercase;">Average Customer Rating</div>
-              <div style="font-size:22px; font-weight:700; color:#78350f; margin-top:2px; display:flex; align-items:center; justify-content:center; gap:4px;">
-                ${avgRating} <span style="color:#d97706; font-size:18px;">★</span>
+            <div class="emp-stat-card stat-amber">
+              <div class="stat-label">Average Customer Rating</div>
+              <div class="stat-value" style="display:flex; align-items:center; justify-content:center; gap:4px;">
+                ${avgRating} <span style="font-size:18px;">★</span>
               </div>
             </div>
-            <div style="background:#ecfeff; border:1px solid #cffafe; padding:12px; border-radius:8px; text-align:center; grid-column: span 2;">
-              <div style="font-size:10px; color:#0e7490; font-weight:600; text-transform:uppercase;">Total Revenue Generated</div>
-              <div style="font-size:24px; font-weight:800; color:#155e75; margin-top:2px;">₹${totalRevenue.toLocaleString('en-IN')}</div>
+            <div class="emp-stat-card stat-cyan" style="grid-column: span 2;">
+              <div class="stat-label">Total Revenue Generated</div>
+              <div class="stat-value" style="font-size:26px;">₹${totalRevenue.toLocaleString('en-IN')}</div>
             </div>
           </div>
 
-          <h4 style="font-size:12.5px; font-weight:600; color:#1a1a1a; margin-bottom:8px; border-bottom:0.5px solid #eee; padding-bottom:4px;">Services Breakdown</h4>
+          <h4 class="emp-section-subhead"><i class="ti ti-apps"></i> System Activity Breakdown</h4>
           <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
-            <span class="performance-chip" style="background:#fafafa; border:1px solid #eaeaea; padding:4px 10px; border-radius:15px; font-size:11.5px;">Customers: <strong>${empCounts.customers}</strong></span>
-            <span class="performance-chip" style="background:#fafafa; border:1px solid #eaeaea; padding:4px 10px; border-radius:15px; font-size:11.5px;">Events Booked: <strong>${empCounts.events}</strong></span>
-            <span class="performance-chip" style="background:#fafafa; border:1px solid #eaeaea; padding:4px 10px; border-radius:15px; font-size:11.5px;">Expenses Logged: <strong>${empCounts.expenses}</strong></span>
-            <span class="performance-chip" style="background:#fafafa; border:1px solid #eaeaea; padding:4px 10px; border-radius:15px; font-size:11.5px;">Students Registered: <strong>${empCounts.students}</strong></span>
-            <span class="performance-chip" style="background:#fafafa; border:1px solid #eaeaea; padding:4px 10px; border-radius:15px; font-size:11.5px;">Jewel Purchases: <strong>${empCounts.jewels}</strong></span>
+            <span class="performance-chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(245,200,66,0.2); padding:5px 12px; border-radius:15px; font-size:12px;">Customers: <strong style="color:#f5c842;">${empCounts.customers}</strong></span>
+            <span class="performance-chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(245,200,66,0.2); padding:5px 12px; border-radius:15px; font-size:12px;">Events Booked: <strong style="color:#f5c842;">${empCounts.events}</strong></span>
+            <span class="performance-chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(245,200,66,0.2); padding:5px 12px; border-radius:15px; font-size:12px;">Expenses Logged: <strong style="color:#f5c842;">${empCounts.expenses}</strong></span>
+            <span class="performance-chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(245,200,66,0.2); padding:5px 12px; border-radius:15px; font-size:12px;">Students Registered: <strong style="color:#f5c842;">${empCounts.students}</strong></span>
+            <span class="performance-chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(245,200,66,0.2); padding:5px 12px; border-radius:15px; font-size:12px;">Jewel Purchases: <strong style="color:#f5c842;">${empCounts.jewels}</strong></span>
           </div>
 
-          <h4 style="font-size:12.5px; font-weight:600; color:#1a1a1a; margin-bottom:8px; border-bottom:0.5px solid #eee; padding-bottom:4px;">Recent Customer Entries</h4>
+          <h4 class="emp-section-subhead"><i class="ti ti-users"></i> Recent Customer Entries Logged</h4>
           ${empCustomers.length === 0 ? `
-            <div style="font-size:11px; color:#999; text-align:center; padding:10px 0;">No client entries logged.</div>
+            <div style="font-size:12px; opacity:0.7; text-align:center; padding:16px 0;">No client entries logged.</div>
           ` : `
-            <table style="width:100%; font-size:11.5px; border-collapse:collapse; text-align:left;">
+            <table class="emp-modal-table">
               <thead>
-                <tr style="border-bottom:1px solid #eee; color:#666;">
-                  <th style="padding:6px 0;">Customer / Services</th>
-                  <th style="padding:6px 0;">Amount</th>
-                  <th style="padding:6px 0; text-align:right;">Rating</th>
+                <tr>
+                  <th>Customer / Services</th>
+                  <th>Amount</th>
+                  <th style="text-align:right;">Rating</th>
                 </tr>
               </thead>
               <tbody>
                 ${empCustomers.slice(0, 5).map(c => `
-                  <tr style="border-bottom:0.5px solid #f5f5f5;">
-                    <td style="padding:6px 0; font-weight:500;">
-                      <div style="color:#1a1a1a; font-weight:600;">${c.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim()}</div>
-                      <div style="font-size:10px; color:#666; margin-top:2px;">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'Service')}</div>
+                  <tr>
+                    <td>
+                      <div style="font-weight:600;">${c.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim()}</div>
+                      <div style="font-size:10.5px; opacity:0.75; margin-top:2px;">${Array.isArray(c.services) ? c.services.join(', ') : (c.services || 'Service')}</div>
                     </td>
-                    <td style="padding:6px 0; color:#1a1a1a; font-weight:700;">₹${(c.amount || c.total_spend || 0).toLocaleString()}</td>
-                    <td style="padding:6px 0; text-align:right; color:#d97706;">
+                    <td style="font-weight:700; color:#f5c842;">₹${(c.amount || c.total_spend || 0).toLocaleString()}</td>
+                    <td style="text-align:right; color:#f5c842; letter-spacing:1px;">
                       ${c.rating ? '★'.repeat(c.rating) + '☆'.repeat(5 - c.rating) : '—'}
                     </td>
                   </tr>
@@ -1291,23 +1283,23 @@ window.showEmployeePerformance = async function(empId) {
 
         <!-- Tab: Payslips Pane -->
         <div id="tab-pane-payslips" class="modal-tab-pane" style="display:none;">
-          <h4 style="font-size:12.5px; font-weight:600; color:#1a1a1a; margin-bottom:12px; border-bottom:0.5px solid #eee; padding-bottom:6px;">Salary Payslip History</h4>
+          <h4 class="emp-section-subhead"><i class="ti ti-receipt-2"></i> Salary Payslip History</h4>
           ${empPayslips.length === 0 ? `
-            <div style="font-size:12.5px; color:#999; text-align:center; padding:20px 0;">
-              <i class="ti ti-file-x" style="font-size:24px; display:block; margin-bottom:8px; opacity:0.5;"></i>
+            <div style="font-size:12.5px; opacity:0.7; text-align:center; padding:24px 0;">
+              <i class="ti ti-file-x" style="font-size:28px; display:block; margin-bottom:8px; opacity:0.4;"></i>
               No payslips generated for this employee yet.
             </div>
           ` : `
             <div style="display:flex; flex-direction:column; gap:8px;">
               ${empPayslips.map(p => `
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#fafafa; border:0.5px solid #eaeaea; padding:10px 14px; border-radius:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.04); border:1px solid rgba(245,200,66,0.18); padding:12px 16px; border-radius:12px;">
                   <div>
-                    <div style="font-size:13px; font-weight:600; color:#1a1a1a;">${p.month}</div>
-                    <div style="font-size:11.5px; color:#555; margin-top:2px;">Net Pay: <strong>₹${(p.net_pay || 0).toLocaleString()}</strong></div>
+                    <div style="font-size:14px; font-weight:700;">${p.month}</div>
+                    <div style="font-size:12px; opacity:0.8; margin-top:2px;">Net Take-Home: <strong style="color:#f5c842;">₹${(p.net_pay || 0).toLocaleString()}</strong></div>
                   </div>
                   <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="badge ${p.status === 'Paid' ? 'badge-green' : 'badge-amber'}" style="font-size:9.5px; padding:2px 6px;">${p.status}</span>
-                    <button class="btn btn-outline" onclick="window.viewPayslipReceipt('${p.id}')" style="padding:4px 8px; font-size:10.5px; height:26px;">
+                    <span class="badge ${p.status === 'Paid' ? 'badge-green' : 'badge-amber'}" style="font-size:10px; padding:2px 8px;">${p.status}</span>
+                    <button class="btn btn-outline" onclick="window.viewPayslipReceipt('${p.id}')" style="padding:4px 10px; font-size:11px; height:28px; display:inline-flex; align-items:center; gap:4px;">
                       <i class="ti ti-printer"></i> Receipt
                     </button>
                   </div>
@@ -1317,56 +1309,54 @@ window.showEmployeePerformance = async function(empId) {
           `}
         </div>
 
-
-
         <!-- Tab 6: Notes & Messages Pane -->
         <div id="tab-pane-notes" class="modal-tab-pane" style="display:none;">
           ${isOwner ? `
             <!-- OWNER PRIVATE NOTES -->
-            <div style="background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:14px; margin-bottom:16px;">
-              <h4 style="font-size:13px; font-weight:700; color:#78350f; margin:0 0 10px 0; display:flex; align-items:center; gap:4px;">
-                <i class="ti ti-lock" style="font-size:14px;"></i> Owner Private Notes (Owner Only)
+            <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,200,66,0.3); border-radius:12px; padding:16px; margin-bottom:16px;">
+              <h4 style="font-size:13.5px; font-weight:700; color:#f5c842; margin:0 0 10px 0; display:flex; align-items:center; gap:6px;">
+                <i class="ti ti-lock" style="font-size:15px;"></i> Owner Private Notes (Confidential)
               </h4>
-              <textarea id="owner-notes-textarea" class="form-input" style="width:100%; height:120px; font-size:12.5px; border-color:#fcd34d; font-family:inherit; padding:8px; resize:none;" placeholder="Type confidential notes about employee performance, reviews, leaves, etc.">${emp.owner_notes || ''}</textarea>
-              <button class="btn btn-gold" onclick="window.saveOwnerNotes('${empId}')" style="margin-top:10px; background:#d97706; border:none; height:32px; padding:0 12px; font-size:12px; color:#fff;">
-                Save Private Notes
+              <textarea id="owner-notes-textarea" class="form-input" style="width:100%; height:120px; font-size:13px; font-family:inherit; padding:10px; resize:none;" placeholder="Type confidential notes about employee performance, reviews, leaves, etc.">${emp.owner_notes || ''}</textarea>
+              <button class="btn btn-gold" onclick="window.saveOwnerNotes('${empId}')" style="margin-top:10px; font-size:12px; font-weight:600; height:34px; padding:0 14px;">
+                <i class="ti ti-device-floppy"></i> Save Private Notes
               </button>
             </div>
             
             <!-- MESSAGES RECEIVED FROM EMPLOYEE -->
-            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px;">
-              <h4 style="font-size:13px; font-weight:700; color:#334155; margin:0 0 10px 0; display:flex; align-items:center; justify-content:space-between; width:100%;">
-                <span><i class="ti ti-message" style="color:#d97706; margin-right:4px;"></i> Suggestions &amp; Alerts from Employee</span>
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(245,200,66,0.18); border-radius:12px; padding:16px;">
+              <h4 style="font-size:13.5px; font-weight:700; margin:0 0 10px 0; display:flex; align-items:center; justify-content:space-between; width:100%;">
+                <span style="display:flex; align-items:center; gap:6px;"><i class="ti ti-message" style="color:#f5c842;"></i> Suggestions &amp; Alerts from Employee</span>
                 ${emp.employee_msg ? `
-                  <button onclick="window.clearEmployeeMessages('${empId}')" style="background:none; border:none; color:#dc2626; font-size:10.5px; font-weight:600; cursor:pointer;">Clear Log</button>
+                  <button onclick="window.clearEmployeeMessages('${empId}')" style="background:none; border:none; color:#dc2626; font-size:11px; font-weight:600; cursor:pointer;">Clear Log</button>
                 ` : ''}
               </h4>
               ${emp.employee_msg ? `
-                <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px; max-height:150px; overflow-y:auto; font-size:12px; font-family:'Courier New', monospace; white-space:pre-wrap; line-height:1.4;">${emp.employee_msg}</div>
+                <div style="background:rgba(20,12,4,0.85); border:1px solid rgba(245,200,66,0.2); border-radius:8px; padding:12px; max-height:160px; overflow-y:auto; font-size:12px; font-family:monospace; white-space:pre-wrap; line-height:1.5;">${emp.employee_msg}</div>
               ` : `
-                <div style="text-align:center; padding:15px; color:#64748b; font-size:11.5px; font-style:italic;">No suggestions received from employee yet.</div>
+                <div style="text-align:center; padding:16px; opacity:0.6; font-size:12px; font-style:italic;">No suggestions received from employee yet.</div>
               `}
             </div>
           ` : `
             <!-- EMPLOYEE MESSAGES TO OWNER -->
-            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:14px; margin-bottom:16px;">
-              <h4 style="font-size:13px; font-weight:700; color:#1e40af; margin:0 0 8px 0; display:flex; align-items:center; gap:4px;">
+            <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:12px; padding:16px; margin-bottom:16px;">
+              <h4 style="font-size:13.5px; font-weight:700; color:#60a5fa; margin:0 0 8px 0; display:flex; align-items:center; gap:6px;">
                 <i class="ti ti-send"></i> Send Suggestion / Message to Owner
               </h4>
-              <p style="font-size:11px; color:#555; margin:0 0 10px 0;">Alert the owner about customer updates, feedback, or scheduling queries.</p>
-              <textarea id="emp-message-input" class="form-input" style="width:100%; height:80px; font-size:12.5px; border-color:#bfdbfe; font-family:inherit; padding:8px; resize:none;" placeholder="e.g. Meena customer told she will meet you tomorrow at 4 PM..."></textarea>
-              <button class="btn btn-gold" onclick="window.sendEmployeeMessageToOwner('${empId}')" style="margin-top:10px; background:#1d4ed8; border:none; height:32px; padding:0 12px; font-size:12px; color:#fff;">
-                Send Message
+              <p style="font-size:11.5px; opacity:0.8; margin:0 0 10px 0;">Alert the owner about customer updates, feedback, or scheduling queries.</p>
+              <textarea id="emp-message-input" class="form-input" style="width:100%; height:90px; font-size:13px; font-family:inherit; padding:10px; resize:none;" placeholder="e.g. Meena customer told she will meet you tomorrow at 4 PM..."></textarea>
+              <button class="btn btn-gold" onclick="window.sendEmployeeMessageToOwner('${empId}')" style="margin-top:10px; background:#2563eb; color:#fff; border:none; height:34px; padding:0 14px; font-size:12px; font-weight:600;">
+                <i class="ti ti-send"></i> Send Message
               </button>
             </div>
 
             <!-- LOG OF PREVIOUS SENT MESSAGES -->
-            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px;">
-              <h4 style="font-size:13px; font-weight:700; color:#334155; margin:0 0 10px 0;"><i class="ti ti-history"></i> Your Message Log</h4>
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(245,200,66,0.18); border-radius:12px; padding:16px;">
+              <h4 style="font-size:13.5px; font-weight:700; margin:0 0 10px 0; display:flex; align-items:center; gap:6px;"><i class="ti ti-history" style="color:#f5c842;"></i> Your Message Log</h4>
               ${emp.employee_msg ? `
-                <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px; max-height:150px; overflow-y:auto; font-size:12px; font-family:'Courier New', monospace; white-space:pre-wrap; line-height:1.4;">${emp.employee_msg}</div>
+                <div style="background:rgba(20,12,4,0.85); border:1px solid rgba(245,200,66,0.2); border-radius:8px; padding:12px; max-height:160px; overflow-y:auto; font-size:12px; font-family:monospace; white-space:pre-wrap; line-height:1.5;">${emp.employee_msg}</div>
               ` : `
-                <div style="text-align:center; padding:15px; color:#64748b; font-size:11.5px; font-style:italic;">No messages sent yet.</div>
+                <div style="text-align:center; padding:16px; opacity:0.6; font-size:12px; font-style:italic;">No messages sent yet.</div>
               `}
             </div>
           `}
@@ -1471,48 +1461,61 @@ window.toggleEditProfile = function(empId) {
 
   const editHtml = `
     <div style="max-height:75vh; overflow-y:auto; padding-right:6px;" class="scrollbar-hide">
-      <h3 class="edit-profile-header" style="font-size:15px; font-weight:700; color:#1a1a1a; margin-bottom:16px; border-bottom:1px solid #eee; padding-bottom:6px;">
-        <i class="ti ti-edit"></i> Edit Employee Profile: ${emp.name}
-      </h3>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; padding-bottom:12px; border-bottom:1px solid var(--border-gold-subtle, rgba(245,200,66,0.18));">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg, rgba(245,200,66,0.2), rgba(217,119,6,0.1)); border:1px solid rgba(245,200,66,0.3); display:flex; align-items:center; justify-content:center; color:#f5c842; font-size:18px;">
+            <i class="ti ti-user-edit"></i>
+          </div>
+          <div>
+            <h3 style="font-size:16px; font-weight:700; margin:0;" class="emp-profile-name">
+              Edit Profile: ${emp.name}
+            </h3>
+            <div style="font-size:11.5px; opacity:0.8; font-family:monospace;">ID: ${emp.emp_id || 'Staff'}</div>
+          </div>
+        </div>
+        <button class="btn btn-outline" onclick="window.showEmployeePerformance('${empId}')" style="padding:5px 12px; font-size:11.5px; height:30px; display:inline-flex; align-items:center; gap:4px;">
+          <i class="ti ti-arrow-left"></i> Cancel Edit
+        </button>
+      </div>
       
-      <div class="form-group" style="margin-bottom:12px;">
+      <div class="form-group" style="margin-bottom:14px;">
         <label class="form-label" style="font-weight:600;">Update Profile Photo</label>
         <input type="file" class="form-input" id="edit-emp-photo-file" accept="image/*">
       </div>
 
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom:14px;">
         <label class="form-label" style="font-weight:600;">Full Name *</label>
         <input class="form-input" id="edit-emp-name" value="${emp.name || ''}" placeholder="Employee Full Name">
       </div>
 
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom:14px;">
         <label class="form-label" style="font-weight:600;">Phone Number</label>
         <input class="form-input" id="edit-emp-phone" value="${emp.phone || ''}" placeholder="10-digit phone" maxlength="10">
       </div>
 
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom:14px;">
         <label class="form-label" style="font-weight:600;">Date of Birth</label>
         <input type="date" class="form-input" id="edit-emp-dob" value="${emp.dob || ''}" onclick="try{this.showPicker()}catch(e){}">
       </div>
 
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom:14px;">
         <label class="form-label" style="font-weight:600;">Residential Address</label>
         <input class="form-input" id="edit-emp-address" value="${emp.address || ''}" placeholder="Address">
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-        <div class="form-group">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:14px;">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600;">Emergency Contact Name</label>
           <input class="form-input" id="edit-emp-emerg-name" value="${emp.emergency_name || ''}" placeholder="Name">
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600;">Emergency Contact Number</label>
           <input class="form-input" id="edit-emp-emerg-num" value="${emp.emergency_number || ''}" placeholder="Phone number" maxlength="10">
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
-        <div class="form-group">
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:14px;">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600;">Employment Type</label>
           <select class="form-input form-select" id="edit-emp-type" ${!isOwner ? 'disabled' : ''}>
             <option value="Full Time" ${emp.employment_type === 'Full Time' ? 'selected' : ''}>Full Time</option>
@@ -1521,7 +1524,7 @@ window.toggleEditProfile = function(empId) {
             <option value="Freelance" ${emp.employment_type === 'Freelance' ? 'selected' : ''}>Freelance</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600;">Status</label>
           <select class="form-input form-select" id="edit-emp-status" ${!isOwner ? 'disabled' : ''}>
             <option value="Active" ${emp.status === 'Active' ? 'selected' : ''}>Active</option>
@@ -1530,40 +1533,40 @@ window.toggleEditProfile = function(empId) {
             <option value="Terminated" ${emp.status === 'Terminated' ? 'selected' : ''}>Terminated</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600;">Leave Balance</label>
           <input type="number" class="form-input" id="edit-emp-leaves" value="${emp.leave_balance || 0}" ${!isOwner ? 'disabled' : ''}>
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
-        <div class="form-group">
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:14px;">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600;">Base Pay Rate (₹) *</label>
           <input type="number" class="form-input" id="edit-emp-rate" value="${emp.base_rate || 0}" ${!isOwner ? 'disabled' : ''}>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600;">Salary Type</label>
           <select class="form-input form-select" id="edit-emp-salary-type" ${!isOwner ? 'disabled' : ''}>
             <option value="monthly" ${emp.salary_type === 'monthly' ? 'selected' : ''}>Monthly</option>
             <option value="daily" ${emp.salary_type === 'daily' ? 'selected' : ''}>Daily</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600;">Shift Start Time *</label>
           <input type="time" class="form-input" id="edit-emp-shift-start" value="${emp.shift_start || '09:00'}" ${!isOwner ? 'disabled' : ''}>
         </div>
       </div>
 
-
-
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom:14px;">
         <label class="form-label" style="font-weight:600;">Login Password / PIN *</label>
         <input class="form-input" id="edit-emp-password" value="${emp.password || ''}" placeholder="Login password">
       </div>
 
-      <div class="edit-profile-footer" style="display:flex; gap:10px; margin-top:20px; border-top:1px solid #eee; padding-top:14px;">
-        <button class="btn btn-outline" onclick="window.showEmployeePerformance('${empId}')" style="flex:1;">Cancel</button>
-        <button class="btn btn-gold" onclick="window.saveEditedProfile('${empId}')" style="flex:1; background:#d97706; color:#fff; border:none;">Save Profile</button>
+      <div class="edit-profile-footer" style="display:flex; gap:12px; margin-top:22px; border-top:1px solid var(--border-gold-subtle, rgba(245,200,66,0.18)); padding-top:16px;">
+        <button class="btn btn-outline" onclick="window.showEmployeePerformance('${empId}')" style="flex:1; justify-content:center;">Cancel</button>
+        <button class="btn btn-gold" onclick="window.saveEditedProfile('${empId}')" style="flex:1.5; justify-content:center; background:linear-gradient(135deg, #f5c842, #e8a020); color:#1a1005; font-weight:700;">
+          <i class="ti ti-device-floppy"></i> Save Profile
+        </button>
       </div>
     </div>
   `;

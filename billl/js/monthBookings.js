@@ -119,10 +119,15 @@ export function navigateEventMonth(offset) {
   }
 
   window._monthBookingYear = year;
+  window._selectedEventYear = year;
   window._selectedEventMonth = newMonthIdx;
   window._selectedEventDate = null; // reset date filter when changing month
 
   // Sync with top dropdown if present
+  const yearSelect = document.querySelector('select[onchange*="filterEventByYearSelect"]');
+  if (yearSelect) {
+    yearSelect.value = String(year);
+  }
   const monthSelect = document.querySelector('select[onchange*="filterEventByMonthSelect"]');
   if (monthSelect) {
     monthSelect.value = String(newMonthIdx);
@@ -136,10 +141,12 @@ export function navigateEventMonth(offset) {
 /**
  * Renders the complete Month-Wise Bookings Dashboard & Schedule Widget
  */
-export function renderMonthBookingOverviewWidget(events = [], selectedMonth = 'all') {
+export function renderMonthBookingOverviewWidget(events = [], selectedMonth = 'all', selectedYear = 'all') {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
-  const currentYear = window._monthBookingYear || now.getFullYear();
+  const currentYear = (selectedYear && selectedYear !== 'all')
+    ? parseInt(selectedYear, 10)
+    : (window._monthBookingYear || now.getFullYear());
   
   const isAllMonths = (selectedMonth === 'all' || selectedMonth === undefined);
 
@@ -151,10 +158,20 @@ export function renderMonthBookingOverviewWidget(events = [], selectedMonth = 'a
   let activeMonthIdx = now.getMonth();
 
   if (isAllMonths) {
-    activeEvents = [...events];
-    displayTitle = 'All Months';
-    billingSubtitle = 'Billing across All Months';
-    emptyStateText = 'No event bookings found across all months.';
+    if (selectedYear && selectedYear !== 'all') {
+      activeEvents = events.filter(e => {
+        if (!e.date) return false;
+        return parseInt(String(e.date).split('-')[0], 10) === currentYear;
+      });
+      displayTitle = `All Months ${currentYear}`;
+      billingSubtitle = `Billing across All Months (${currentYear})`;
+      emptyStateText = `No event bookings found for ${currentYear}.`;
+    } else {
+      activeEvents = [...events];
+      displayTitle = 'All Months';
+      billingSubtitle = 'Billing across All Months';
+      emptyStateText = 'No event bookings found across all months.';
+    }
   } else {
     activeMonthIdx = parseInt(selectedMonth, 10);
     if (isNaN(activeMonthIdx) || activeMonthIdx < 0 || activeMonthIdx > 11) {
@@ -163,14 +180,16 @@ export function renderMonthBookingOverviewWidget(events = [], selectedMonth = 'a
     const activeMonthName = MONTH_NAMES[activeMonthIdx];
     const activeMonthShort = MONTH_SHORT_NAMES[activeMonthIdx];
     displayTitle = `${activeMonthName} ${currentYear}`;
-    billingSubtitle = `Billing for ${activeMonthShort}`;
+    billingSubtitle = `Billing for ${activeMonthShort} ${currentYear}`;
     emptyStateText = `No event bookings scheduled for ${activeMonthName} ${currentYear} yet.`;
 
     activeEvents = events.filter(e => {
       if (!e.date) return false;
       const parts = String(e.date).split('T')[0].split('-');
       if (parts.length < 2) return false;
-      return (parseInt(parts[1], 10) - 1) === activeMonthIdx;
+      const monthMatch = (parseInt(parts[1], 10) - 1) === activeMonthIdx;
+      const yearMatch = (selectedYear === 'all' || !selectedYear) ? true : (parseInt(parts[0], 10) === currentYear);
+      return monthMatch && yearMatch;
     });
   }
 

@@ -1,6 +1,7 @@
 // billl/js/pages/finance.js
 import { fetchFinancialSummary } from '../db.js';
 import { isReadOnlyMode } from '../state.js';
+import { renderDateFilterTrigger, isDateInModuleFilter, getModuleDateFilter } from '../dateFilter.js';
 
 function formatMonthLabel(mKey) {
   if (!mKey || mKey === 'all') return 'All Time Overall';
@@ -10,8 +11,8 @@ function formatMonthLabel(mKey) {
 }
 
 export async function renderFinance() {
-  window._selectedFinanceMonth = window._selectedFinanceMonth || 'all';
-  const fin = await fetchFinancialSummary(window._selectedFinanceMonth);
+  const finFilter = getModuleDateFilter('finance');
+  const fin = await fetchFinancialSummary('all', 'all', (dateStr) => isDateInModuleFilter(dateStr, 'finance'));
   const readOnly = isReadOnlyMode();
 
   window._financeData = fin;
@@ -24,15 +25,9 @@ export async function renderFinance() {
           ${readOnly ? '<span class="badge badge-amber" style="font-size:11px;font-family:sans-serif;font-weight:normal"><i class="ti ti-lock" style="margin-right:4px"></i> Read-Only Mode</span>' : ''}
         </h2>
       </div>
-      <div style="display:flex;gap:10px;align-items:center">
-        <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;background-color:#fff" onchange="window.filterFinanceMonth(this.value)" title="Choose Month Filter">
-          <option value="all" ${fin.selectedMonth === 'all' ? 'selected' : ''}>📅 All Months Summary</option>
-          ${fin.availableMonths.map(m => `
-            <option value="${m}" ${fin.selectedMonth === m ? 'selected' : ''}>
-              📅 ${formatMonthLabel(m)}
-            </option>
-          `).join('')}
-        </select>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <!-- Date Filter Trigger Button (Modal) -->
+        ${renderDateFilterTrigger('finance')}
         <button class="btn btn-gold" onclick="window.downloadFinancePDF()" title="Download Financial Statement as PDF">
           <i class="ti ti-file-text"></i> Save PDF
         </button>
@@ -308,6 +303,14 @@ window.exportFinanceReport = function() {
 
 window.downloadFinancePDF = function() {
   window.print();
+};
+
+window.filterFinanceYear = function(year) {
+  window._selectedFinanceYear = year;
+  if (year !== 'all' && window._selectedFinanceMonth !== 'all' && !window._selectedFinanceMonth.startsWith(year)) {
+    window._selectedFinanceMonth = 'all';
+  }
+  if (typeof window.render === 'function') window.render();
 };
 
 window.filterFinanceMonth = function(month) {

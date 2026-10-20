@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kalai Makeover — UI/UX Redesign & Feature Specification</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    :root {
+      --primary: #c28e2b;
+      --primary-dark: #926715;
+      --primary-light: #f5dfa8;
+      --primary-subtle: #fcf8ee;
+      --dark: #0f141c;
+      --dark-card: #171f2c;
+      --slate-900: #0f172a;
+      --slate-800: #1e293b;
+      --slate-700: #334155;
+      --slate-600: #475569;
+      --slate-500: #64748b;
+      --slate-200: #e2e8f0;
+      --slate-100: #f1f5f9;
+      --slate-50: #f8fafc;
+      --emerald: #059669;
+      --emerald-subtle: #ecfdf5;
+      --rose: #e11d48;
+      --rose-subtle: #fff1f2;
+      --amber: #d97706;
+      --amber-subtle: #fffbeb;
+      --indigo: #4f46e5;
+      --indigo-subtle: #eef2ff;
+      --font-heading: 'Playfair Display', Georgia, serif;
+      --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--slate-800);
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 13.5px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    @page {
+      size: A4;
+      margin: 14mm 14mm 16mm 14mm;
+      @bottom-right {
+        content: counter(page);
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+        color: #1e293b;
+        font-size: 12.5px;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-break {
+        page-break-before: always;
+        break-before: page;
+      }
+      .avoid-break {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      .cover-page {
+        height: 100vh;
+        page-break-after: always;
+      }
+      .header-floating {
+        display: none;
+      }
+      a {
+        text-decoration: none;
+        color: inherit;
+      }
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* COVER PAGE STYLING */
+    .cover-page {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 880px;
+      padding: 48px 36px 36px 36px;
+      background: linear-gradient(135deg, #0d121a 0%, #151d2a 60%, #1f1a10 100%);
+      color: #ffffff;
+      border-radius: 16px;
+      margin-bottom: 32px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(245, 200, 66, 0.2);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    }
+
+    .cover-page::before {
+      content: '';
+      position: absolute;
+      top: -120px;
+      right: -120px;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(194, 142, 43, 0.25) 0%, rgba(0,0,0,0) 70%);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .cover-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(194, 142, 43, 0.15);
+      border: 1px solid rgba(194, 142, 43, 0.4);
+      color: var(--primary-light);
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      width: fit-content;
+    }
+
+    .cover-title-area {
+      margin-top: 40px;
+    }
+
+    .cover-title-area h1 {
+      font-family: var(--font-heading);
+      font-size: 38px;
+      line-height: 1.15;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 12px;
+    }
+
+    .cover-title-area h1 span {
+      background: linear-gradient(120deg, #f5dfa8, #c28e2b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .cover-subtitle {
+      font-size: 17px;
+      color: #94a3b8;
+      font-weight: 400;
+      max-width: 600px;
+      line-height: 1.5;
+    }
+
+    .cover-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      margin-top: 48px;
+    }
+
+    .cover-meta-item .meta-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .cover-meta-item .meta-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .cover-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 20px;
+      font-size: 11px;
+      color: #64748b;
+    }
+
+    /* SECTION HEADERS */
+    .section-header {
+      margin-top: 36px;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--slate-200);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .section-header.primary {
+      border-bottom-color: var(--primary);
+    }
+
+    .section-header h2 {
+      font-family: var(--font-heading);
+      font-size: 22px;
+      color: var(--slate-900);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-header .section-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--primary-dark);
+      background: var(--primary-subtle);
+      border: 1px solid var(--primary-light);
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    h3 {
+      font-size: 16px;
+      color: var(--slate-900);
+      margin-top: 22px;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    p {
+      margin-bottom: 12px;
+      color: var(--slate-700);
+    }
+
+    /* CALLOUT BOXES */
+    .callout {
+      padding: 14px 18px;
+      border-radius: 10px;
+      margin: 16px 0;
+      font-size: 13px;
+      border-left: 4px solid;
+    }
+
+    .callout-gold {
+      background: #fdfaf3;
+      border-left-color: var(--primary);
+      color: #785207;
+    }
+
+    .callout-blue {
+      background: var(--indigo-subtle);
+      border-left-color: var(--indigo);
+      color: #312e81;
+    }
+
+    .callout-emerald {
+      background: var(--emerald-subtle);
+      border-left-color: var(--emerald);
+      color: #065f46;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13.5px;
+    }
+
+    /* TABLES */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px 0;
+      font-size: 12.5px;
+    }
+
+    th {
+      background: var(--slate-100);
+      color: var(--slate-800);
+      text-align: left;
+      padding: 10px 12px;
+      font-weight: 700;
+      border: 1px solid var(--slate-200);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 9px 12px;
+      border: 1px solid var(--slate-200);
+      vertical-align: top;
+      color: var(--slate-700);
+    }
+
+    tr:nth-child(even) td {
+      background: var(--slate-50);
+    }
+
+    /* BADGES */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-gold { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge-emerald { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .badge-rose { background: #ffe4e6; color: #9f1239; border: 1px solid #fecdd3; }
+    .badge-indigo { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+    .badge-slate { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+
+    /* FEATURE CARDS GRID */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin: 16px 0;
+    }
+
+    .feature-card {
+      background: #ffffff;
+      border: 1px solid var(--slate-200);
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+
+    .feature-card.highlight {
+      border-color: var(--primary-light);
+      background: #fffdf9;
+    }
+
+    .feature-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .feature-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--slate-900);
+    }
+
+    .feature-card-desc {
+      font-size: 12px;
+      color: var(--slate-600);
+      line-height: 1.45;
+      margin-bottom: 8px;
+    }
+
+    .feature-list {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 6px;
+    }
+
+    .feature-list li {
+      font-size: 12px;
+      color: var(--slate-700);
+      margin-bottom: 4px;
+      position: relative;
+      padding-left: 14px;
+      line-height: 1.4;
+    }
+
+    .feature-list li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: var(--primary);
+      font-weight: 800;
+      font-size: 11px;
+    }
+
+    /* WORKFLOW BOX */
+    .workflow-container {
+      background: var(--slate-900);
+      color: #ffffff;
+      padding: 18px 20px;
+      border-radius: 12px;
+      margin: 18px 0;
+    }
+
+    .workflow-step-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .workflow-step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .workflow-step-content {
+      font-size: 12.5px;
+      color: #e2e8f0;
+      flex: 1;
+    }
+
+    .workflow-step-content strong {
+      color: var(--primary-light);
+    }
+
+    /* COLOR SWATCHES */
+    .swatch-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 14px 0;
+    }
+
+    .swatch-card {
+      border: 1px solid var(--slate-200);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 11px;
+    }
+
+    .swatch-color {
+      height: 48px;
+      width: 100%;
+    }
+
+    .swatch-info {
+      padding: 6px 8px;
+      background: #ffffff;
+    }
+
+    .swatch-name {
+      font-weight: 700;
+      color: var(--slate-800);
+    }
+
+    .swatch-hex {
+      font-family: var(--font-mono);
+      color: var(--slate-500);
+      font-size: 10px;
+    }
+
+    /* FIGMA HANDOVER CHECKLIST */
+    .checklist {
+      list-style: none;
+      margin: 12px 0;
+    }
+
+    .checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 10px;
+      background: var(--slate-50);
+      border: 1px solid var(--slate-200);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .checklist-item input {
+      margin-top: 3px;
+      accent-color: var(--primary);
+    }
+
+    .checklist-item-title {
+      font-weight: 600;
+      color: var(--slate-900);
+    }
+
+    .checklist-item-desc {
+      color: var(--slate-600);
+      font-size: 11.5px;
+    }
+
+    .footer-doc {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid var(--slate-200);
+      font-size: 11px;
+      color: var(--slate-500);
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- ========================================== -->
+  <!-- COVER PAGE -->
+  <!-- ========================================== -->
+  <div class="cover-page avoid-break">
+    <div>
+      <div class="cover-badge">✨ Official Product Requirements Document (PRD)</div>
+      
+      <div class="cover-title-area">
+        <h1>Kalai Makeover<br><span>UI/UX Redesign Blueprint</span></h1>
+        <p class="cover-subtitle">Complete End-to-End System Feature Architecture & Interface Specifications for Design Handover.</p>
+      </div>
+    </div>
+
+    <div>
+      <div class="cover-meta-grid">
+        <div class="cover-meta-item">
+          <div class="meta-label">Client / Studio</div>
+          <div class="meta-val">Kalai Makeover & Academy</div>
+        </div>
+        <div class="cover-meta-item">
+          <div class="meta-label">Document Version</div>
+          <div class="meta-val">v2.0 Redesign Brief</div>
+        </div>
+        <div class="cover-meta-item">
+          <div class="meta-label">Target Audience</div>
+          <div class="meta-val">UI/UX Designer & Dev</div>
+        </div>
+        <div class="cover-meta-item">
+          <div class="meta-label">System Type</div>
+          <div class="meta-val">AI Salon & Bridal ERP</div>
+        </div>
+      </div>
+
+      <div class="cover-footer">
+        <div>Proprietary & Confidential · Kalai Makeover Studio</div>
+        <div>Generated for UI/UX Design Handover · September 2026</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SECTION 1: EXECUTIVE BRIEF & REDESIGN MISSION -->
+  <!-- ========================================== -->
+  <div class="avoid-break">
+    <div class="section-header primary">
+      <h2>1. Executive Brief & Redesign Mission</h2>
+      <span class="section-tag">Overview</span>
+    </div>
+
+    <p><strong>Kalai Makeover</strong> is a premier luxury bridal makeover studio, beauty parlour, and professional training academy located in Tamil Nadu, India. The application is an all-in-one management ERP powered by AI that runs the complete day-to-day operations of the enterprise.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-title">🎯 The Core Mission for the UI/UX Redesigner</div>
+      Transform the current functional MVP prototype into a <strong>high-end luxury, mobile-first SaaS experience</strong> that feels as elegant and glamorous as a high-fashion beauty atelier, while remaining blazing fast and effortless for staff during busy salon rush hours.
+    </div>
+
+    <h3>Key Objectives of the Redesign</h3>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 28%;">Design Pillar</th>
+          <th style="width: 36%;">Current Pain Point</th>
+          <th style="width: 36%;">Redesign Target Experience</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Luxury Aesthetics</strong></td>
+          <td>Dark mode looks functional but generic; typography and spacing feel technical.</td>
+          <td>High-fashion bridal atelier vibe: warm noir background, champagne gold highlights, Playfair/Cormorant serif headlines, soft glassmorphism.</td>
+        </tr>
+        <tr>
+          <td><strong>2. Mobile-First Ergonomics</strong></td>
+          <td>Dense data tables overflow on small mobile screens; requires horizontal scrolling.</td>
+          <td>Adaptive card stacks, bottom action sheet drawers, floating action buttons (FAB), and thumb-friendly checkout flows.</td>
+        </tr>
+        <tr>
+          <td><strong>3. Sub-15s Quick Action</strong></td>
+          <td>Filling salon walk-in details takes multiple form fields and keystrokes.</td>
+          <td>1-tap service chips, auto-calculated service tallies, smart phone formatting, and bilingual Tanglish AI voice wizard.</td>
+        </tr>
+        <tr>
+          <td><strong>4. Role-Based Clarity</strong></td>
+          <td>Staff and Owner share navigation menus, requiring permission warnings.</td>
+          <td>Completely segregated views: Owner Command Center vs Simplified Staff Self-Service (punch-in & booking only).</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SECTION 2: BRAND IDENTITY & DESIGN SYSTEM -->
+  <!-- ========================================== -->
+  <div class="page-break avoid-break">
+    <div class="section-header primary">
+      <h2>2. Design System & Visual Guidelines</h2>
+      <span class="section-tag">Brand Tokens</span>
+    </div>
+
+    <p>The UI/UX designer must implement a dual-theme design system: <strong>Luxury Dark Theme</strong> (Default) and <strong>Clean Editorial White Theme</strong>, with seamless one-tap switching.</p>
+
+    <h3>Color Palettes</h3>
+    
+    <div style="font-weight: 700; font-size: 13px; color: var(--slate-800); margin-top: 10px;">Primary Luxury Palette (Dark Mode Base)</div>
+    <div class="swatch-grid">
+      <div class="swatch-card">
+        <div class="swatch-color" style="background:#0d0904;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name">Obsidian Noir</div>
+          <div class="swatch-hex">#0d0904</div>
+        </div>
+      </div>
+      <div class="swatch-card">
+        <div class="swatch-color" style="background:#1c1308;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name">Surface Card</div>
+          <div class="swatch-hex">#1c1308</div>
+        </div>
+      </div>
+      <div class="swatch-card">
+        <div class="swatch-color" style="background:#f5c842;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name">Champagne Gold</div>
+          <div class="swatch-hex">#f5c842</div>
+        </div>
+      </div>
+      <div class="swatch-card">
+        <div class="swatch-color" style="background:#d97706;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name">Deep Amber</div>
+          <div class="swatch-hex">#d97706</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-weight: 700; font-size: 13px; color: var(--slate-800); margin-top: 14px;">Secondary & Status Accent Palette</div>
+    <div class="swatch-grid">
+      <div class="swatch-card">
+        <div class="swatch-color" style="background:#ec4899;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name">Bridal Rose</div>
+          <div class="swatch-hex">#ec4899</div>
+        </div>
+      </div>
+      <div class="swatch-card">
+        <div class="swatch-color" style="background:#10b981;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name">Paid Green</div>
+          <div class="swatch-hex">#10b981</div>
+        </div>
+      </div>
+      <div class="swatch-card">
+        <div class="swatch-color" style="background:#ef4444;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name">Due Alert Red</div>
+          <div class="swatch-hex">#ef4444</div>
+        </div>
+      </div>
+      <div class="swatch-card">
+        <div class="swatch-color" style="background:#faf9f7;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name">Porcelain Pearl</div>
+          <div class="swatch-hex">#faf9f7 (Light)</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Typography Hierarchy</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Level</th>
+          <th>Font Family</th>
+          <th>Weight & Size</th>
+          <th>Usage Context</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Display / Title</strong></td>
+          <td>Playfair Display / Cormorant</td>
+          <td>Bold / SemiBold · 28px - 36px</td>
+          <td>Brand banner, module headers, financial totals</td>
+        </tr>
+        <tr>
+          <td><strong>Section Headers</strong></td>
+          <td>DM Sans / Plus Jakarta</td>
+          <td>Bold (700) · 16px - 20px</td>
+          <td>Card titles, modal headings, metric labels</td>
+        </tr>
+        <tr>
+          <td><strong>Body Text</strong></td>
+          <td>DM Sans / Inter</td>
+          <td>Regular (400) / Medium (500) · 13px - 14px</td>
+          <td>Customer details, logs, descriptions, table rows</td>
+        </tr>
+        <tr>
+          <td><strong>Numbers & Currency</strong></td>
+          <td>Tabular Lining Figures</td>
+          <td>Bold (700) · Monospaced or tabular</td>
+          <td>Prices, invoice amounts (₹), attendance time</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SECTION 3: SYSTEM ARCHITECTURE & RBAC -->
+  <!-- ========================================== -->
+  <div class="avoid-break">
+    <div class="section-header primary">
+      <h2>3. Roles & Information Architecture</h2>
+      <span class="section-tag">Security & IA</span>
+    </div>
+
+    <p>The platform operates under strict <strong>Role-Based Access Control (RBAC)</strong>. The UI/UX designer must design two distinct experience pathways:</p>
+
+    <div class="feature-grid">
+      <div class="feature-card highlight">
+        <div class="feature-card-header">
+          <div class="feature-card-title">👑 1. Studio Owner Experience (Kalai)</div>
+          <span class="badge badge-gold">Full Control</span>
+        </div>
+        <div class="feature-card-desc">Accessible via Secure PIN (<code>kalai1610</code>). Unrestricted access to all business secrets, financials, and staff controls.</div>
+        <ul class="feature-list">
+          <li>Executive Dashboard & 7-Day Bridal countdown</li>
+          <li>Full Customer CRM & repeat visit history</li>
+          <li>Bridal Events pipeline & Subha Muhurtham calendar</li>
+          <li>Shop expenses, product stock & bill scanner (OCR)</li>
+          <li>Academy student tuition & installment ledger</li>
+          <li>Jewellery rental catalog & asset ROI tracking</li>
+          <li>HR management: Staff WiFi attendance & payroll slips</li>
+          <li>P&L Statements, Cash vs GPay balance & Net Profit</li>
+        </ul>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-title">👤 2. Employee Self-Service Experience</div>
+          <span class="badge badge-slate">Restricted</span>
+        </div>
+        <div class="feature-card-desc">Accessible via Staff PIN (<code>emp123</code>) or personal password. Distraction-free, zero financial visibility.</div>
+        <ul class="feature-list">
+          <li>1-Tap WiFi Attendance Clock-In & Clock-Out</li>
+          <li>Quick Shop Customer Check-In (New walk-ins)</li>
+          <li>Quick Student Class Enrollment</li>
+          <li>Assigned Bridal Events schedule (call times & venues)</li>
+          <li>Personal monthly attendance sheet & leave tracker</li>
+          <li>Personal monthly payslip view & download</li>
+          <li><strong>Strictly Blocked:</strong> Financial totals, P&L, Jewel purchase costs, and Owner analytics</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SECTION 4: COMPLETE 11 MODULE SPECIFICATIONS -->
+  <!-- ========================================== -->
+  <div class="page-break avoid-break">
+    <div class="section-header primary">
+      <h2>4. Exhaustive Feature Specifications (11 Modules)</h2>
+      <span class="section-tag">Core Modules</span>
+    </div>
+
+    <!-- MODULE 1 -->
+    <div class="feature-card highlight avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">📊 Module 1: Unified Executive Dashboard & Real-Time Pulse</div>
+        <span class="badge badge-gold">Owner Only</span>
+      </div>
+      <div class="feature-card-desc">The high-impact command center summarizing business health in under 5 seconds.</div>
+      <ul class="feature-list">
+        <li><strong>Financial Metric Cards:</strong> Gross Revenue, Total Outflows, Net Operating Profit, and Cash Drawer vs GPay/Bank Account balance breakdown.</li>
+        <li><strong>Upcoming Events & Bridal Countdown (7 Days):</strong> Dynamic cards displaying scheduled brides with priority countdown tags (<code>TODAY! 👑</code>, <code>Tomorrow 🔥</code>, <code>In 3 Days</code>), service package, venue, and balance due.</li>
+        <li><strong>Pending Payment Radar:</strong> Immediate alert queue of customers with unpaid balances across salon visits and bridal bookings, with 1-click WhatsApp reminder triggers.</li>
+        <li><strong>Daily Business Logging Streak Widget (🔥):</strong> Visual streak tracker showing consecutive days of shop activity logging to ensure consistent record-keeping.</li>
+        <li><strong>Quick Action Command Bar:</strong> Instant modal triggers for <em>+ Add Shop Customer</em>, <em>+ Book Event</em>, <em>+ Add Expense</em>, <em>+ Enroll Student</em>, and <em>+ Jewel Rental</em>.</li>
+        <li><strong>Monthly Trajectory Visualizer:</strong> Chart.js revenue vs expense comparative graph.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 2 -->
+    <div class="feature-card avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">💇‍♀️ Module 2: Shop Customer Management & Service POS</div>
+        <span class="badge badge-emerald">High Frequency</span>
+      </div>
+      <div class="feature-card-desc">Daily parlour walk-in management, customer profiling, and repeat customer retention.</div>
+      <ul class="feature-list">
+        <li><strong>Customer Profile & Ordinal Visit Counter:</strong> Tracks lifetime visit history with ordinal loyalty tags (<code>1st Visit</code>, <code>2nd Visit</code>, <code>5th Visit VIP</code>).</li>
+        <li><strong>Service POS Multi-Selector:</strong> Chip-based service selection (Facial, Haircut, Hair Spa, Bleach, Waxing, Threading, Pedicure, Saree Draping) with auto-sum total calculation.</li>
+        <li><strong>Staff Attendant Tagging:</strong> Assigns which beautician serviced the client for individual performance metrics and wage commission.</li>
+        <li><strong>Payment Split Engine:</strong> Handles Cash, GPay/UPI, Card, or Multi-split payments with paid/pending status flags.</li>
+        <li><strong>Segmentation & Retention Tabs:</strong> Segment clients by <em>All History</em>, <em>Top Paying (High LTV)</em>, <em>Repeat Clients</em>, <em>Lapsed Clients (30+ days inactive)</em>, and <em>New Walk-ins</em>.</li>
+        <li><strong>Automated WhatsApp Touchpoints:</strong> 1-click WhatsApp triggers for: Service Invoice / Thank You, Review Request, and "We Miss You" reactivation discounts.</li>
+        <li><strong>Cross-Module Quick Convert:</strong> Turn any customer into an Event Booking or Academy Student with 1 click.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 3 -->
+    <div class="feature-card highlight avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">👰 Module 3: Bridal & Event Booking + Subha Muhurtham Calendar</div>
+        <span class="badge badge-rose">High Ticket</span>
+      </div>
+      <div class="feature-card-desc">High-value wedding booking management integrated with the Hindu/Tamil astrological calendar.</div>
+      <ul class="feature-list">
+        <li><strong>Subha Muhurtham Engine:</strong> Curated 2025–2027 Tamil Nadu Muhurtham database + live Nitya Panchangam API (Tithi, Nakshatram, Rahu Kalam, Yamagandam) highlighting peak bridal dates.</li>
+        <li><strong>Month Booking Calendar Overview:</strong> Visual monthly calendar grid showing booked event density per day to prevent overbooking.</li>
+        <li><strong>Event Financial Calculator:</strong> Agreed package price, advance paid, balance due, travel allowance (TA), assistant artist staff wages, and net event profit.</li>
+        <li><strong>Logistics & Timing Tracker:</strong> Call-sheet / makeup start time, ceremony muhurtham time, Kalyana Mandapam venue map link, assigned makeup artist, and bridal saree draping notes.</li>
+        <li><strong>Status Pipeline:</strong> Confirmed, Pending Advance, In Progress, Completed, Overdue Payment, and Cancelled.</li>
+        <li><strong>Overdue Status & Quick Finish:</strong> 1-click action to mark past events as completed and trigger final settlement.</li>
+        <li><strong>WhatsApp Bridal Kit:</strong> Instant booking confirmation letters, advance receipts, and venue arrival reminders.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 4 -->
+    <div class="feature-card avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">🧾 Module 4: Expenses, Inventory & Supply Chain</div>
+        <span class="badge badge-slate">Financial</span>
+      </div>
+      <div class="feature-card-desc">Categorized shop expenditure tracking and monthly cash/bank balance reconciliation.</div>
+      <ul class="feature-list">
+        <li><strong>3-Way Categorized Expense Forms:</strong>
+          <br>1. <em>Salon Products:</em> Hair colors, developer, facial kits, bleach, shampoos, and salon inventory.
+          <br>2. <em>Makeup & Accessories:</em> False lashes, hair extensions, setting sprays, pins, vanity accessories.
+          <br>3. <em>General Overhead:</em> Salon rent, TNEB electricity, water bills, cleaning, travel, and miscellaneous.
+        </li>
+        <li><strong>Monthly Balance Reconciliation:</strong> Opening balance, physical Cash at salon drawer, GPay / Bank account balance, and closing balance.</li>
+        <li><strong>Vendor Expense Analytics:</strong> Category-wise pie charts and vendor-specific spending trends over time.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 5 -->
+    <div class="feature-card avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">📸 Module 5: OCR Smart Bill & Invoice Scanner</div>
+        <span class="badge badge-indigo">AI Powered</span>
+      </div>
+      <div class="feature-card-desc">Camera/gallery receipt scanner that extracts line items and automatically enters shop expenses.</div>
+      <ul class="feature-list">
+        <li><strong>Camera & Photo Upload:</strong> Direct camera capture from mobile phone or gallery image upload.</li>
+        <li><strong>AI Vision / Whisper Extraction:</strong> Automatically detects Store Name, Bill Date, Individual Items, Subtotals, and Grand Total.</li>
+        <li><strong>1-Click Expense Conversion:</strong> Saves scanned bills directly into the product expenses ledger without manual typing.</li>
+        <li><strong>Digital Receipt Vault:</strong> Stores digital receipts and audit history for tax and accounting reconciliation.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 6 -->
+    <div class="feature-card avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">🎓 Module 6: Makeup Academy & Student Tuition Ledger</div>
+        <span class="badge badge-slate">Academy</span>
+      </div>
+      <div class="feature-card-desc">Student admissions, batch scheduling, and installment payment tracking.</div>
+      <ul class="feature-list">
+        <li><strong>Course Catalog:</strong> Professional Bridal Masterclass, Self-Grooming, Hair Styling & Draping, Nail Art, and Certification courses.</li>
+        <li><strong>Student Profiles:</strong> Full name, contact number, batch timing, enrollment date, and course selected.</li>
+        <li><strong>Milestone Installment Tracker:</strong> Total agreed fee, installment payments logged (Cash/GPay), and pending balance.</li>
+        <li><strong>Fee Reminder System:</strong> 1-click WhatsApp payment reminders with remaining tuition balance details.</li>
+        <li><strong>Status Pipeline:</strong> Active, Course Completed, Certified, or On-Hold.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 7 -->
+    <div class="feature-card highlight avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">💎 Module 7: Bridal Jewellery Rental & Asset ROI Tracker</div>
+        <span class="badge badge-gold">Asset Management</span>
+      </div>
+      <div class="feature-card-desc">Bridal ornament rental inventory, rental ledgers, and return deposit management.</div>
+      <ul class="feature-list">
+        <li><strong>Jewel Catalog & Photo Vault:</strong> Chokers, Harams, Oddiyanams (hip belts), Jhumkas, Maang Tikkas, and Hair sets with purchase price and photos.</li>
+        <li><strong>Rental Ledger:</strong> Customer name, rental issue date, expected return date, rental fee charged, and refundable security deposit.</li>
+        <li><strong>Return Inspection Workflow:</strong> 1-click return settlement, deposit refund, or damage fee deduction.</li>
+        <li><strong>Cumulative Asset ROI Calculator:</strong> Tracks total rental income generated vs initial acquisition cost (shows when an ornament has broken even and is generating pure profit).</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 8 -->
+    <div class="feature-card avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">👥 Module 8: HR Staff Management & Geofenced WiFi Attendance</div>
+        <span class="badge badge-emerald">HR & Payroll</span>
+      </div>
+      <div class="feature-card-desc">Staff database, biometric-grade WiFi attendance tracking, and monthly payslip generation.</div>
+      <ul class="feature-list">
+        <li><strong>Complete Staff KYC:</strong> Designation (Senior Artist, Beautician, Hair Stylist, Trainee), emergency phone, Aadhaar card number, photo, bank account number & IFSC.</li>
+        <li><strong>Salon WiFi Router Binding:</strong> Captures the salon's physical WiFi router network IP to enforce onsite presence.</li>
+        <li><strong>Geofenced Punch In / Punch Out:</strong> Staff can ONLY clock in when connected to the shop WiFi network (prevents proxy or remote check-ins).</li>
+        <li><strong>Automated Attendance Timesheet:</strong> Present, Late, Half-Day, Absent, On-Leave status with automated work-hour tally.</li>
+        <li><strong>Automated Payroll Engine:</strong> Base monthly salary, attendance loss-of-pay deductions, event incentives, salary advance deductions, and Net Salary Payable.</li>
+        <li><strong>PDF Payslip Generator:</strong> 1-click downloadable, formal salary slip with salon branding.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 9 -->
+    <div class="feature-card avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">📱 Module 9: Employee Mobile Self-Service Portal</div>
+        <span class="badge badge-slate">Mobile Portal</span>
+      </div>
+      <div class="feature-card-desc">Simplified, distraction-free mobile screen for salon staff on the floor.</div>
+      <ul class="feature-list">
+        <li><strong>1-Tap WiFi Punch Button:</strong> Big, clear clock-in/out button with immediate network validation feedback.</li>
+        <li><strong>Quick Customer Entry:</strong> Simplified modal for staff to log parlour clients without accessing owner screens.</li>
+        <li><strong>Quick Class Enrollment:</strong> Enroll academy walk-ins quickly.</li>
+        <li><strong>Personal Timesheet & Leave Balance:</strong> View personal monthly attendance calendar and remaining leave days.</li>
+        <li><strong>Personal Payslip Download:</strong> Access individual monthly salary slips securely.</li>
+        <li><strong>Strict Data Isolation:</strong> Shop revenue, net profit, jewel costs, and owner analytics remain completely invisible.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 10 -->
+    <div class="feature-card highlight avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">🎙️ Module 10: Multilingual AI Voice Assistant (Tamil / Tanglish)</div>
+        <span class="badge badge-indigo">AI Voice</span>
+      </div>
+      <div class="feature-card-desc">Whisper v3 + Groq AI voice wizard for hands-free, zero-typing entry in Tamil and Tanglish.</div>
+      <ul class="feature-list">
+        <li><strong>Bilingual Voice Recognition:</strong> Accurately understands spoken English, pure Tamil, and colloquial Tanglish (mixed Tamil-English).</li>
+        <li><strong>Automated Variable Extraction:</strong> Spoken commands like <em>"Priya 9876543210 Chennai facial 1500 rating 5"</em> are automatically parsed into Name, Phone, Location, Services, Amount, and Rating.</li>
+        <li><strong>Zero-Typing Database Insert:</strong> Submits customer visits, event bookings, and expenses directly into the database.</li>
+        <li><strong>Voice Overlay & Visualizer:</strong> Floating microphone button with pulsating audio waves and real-time transcription display.</li>
+        <li><strong>Conversational Business Intelligence:</strong> Ask spoken queries (e.g. <em>"How many bridal bookings do we have next month?"</em>) and receive instant answers.</li>
+      </ul>
+    </div>
+
+    <!-- MODULE 11 -->
+    <div class="feature-card avoid-break" style="margin-bottom: 20px;">
+      <div class="feature-card-header">
+        <div class="feature-card-title">💰 Module 11: Financial Statements, P&L & Business Analytics</div>
+        <span class="badge badge-gold">Accounting</span>
+      </div>
+      <div class="feature-card-desc">Formal Profit & Loss accounting, cash flow balancing, and visual sales intelligence.</div>
+      <ul class="feature-list">
+        <li><strong>Profit & Loss (P&L) Statement:</strong> Aggregated Gross Inflow across all 4 revenue streams (Shop, Events, Academy, Jewels) minus Total Operating Expenses.</li>
+        <li><strong>Liquidity Balancing:</strong> Exact physical Cash Drawer count vs Bank Account / GPay balance.</li>
+        <li><strong>Monthly & All-Time Historical Filter:</strong> Jump between individual months or view lifetime business metrics.</li>
+        <li><strong>Export to PDF:</strong> 1-click printable financial balance sheet for tax filing and audits.</li>
+        <li><strong>Service & Revenue Trend Charts:</strong> Visual rankings of high-margin services, popular salon treatments, and monthly sales trajectories.</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SECTION 5: CRITICAL USER FLOWS -->
+  <!-- ========================================== -->
+  <div class="page-break avoid-break">
+    <div class="section-header primary">
+      <h2>5. Critical User Interaction Flows</h2>
+      <span class="section-tag">UX Flows</span>
+    </div>
+
+    <p>The UI/UX designer must map out and optimize these 5 high-frequency interaction workflows:</p>
+
+    <div class="workflow-container">
+      <div style="font-weight: 700; font-size: 14px; color: var(--primary-light); margin-bottom: 12px;">Flow A: 15-Second Salon Customer Entry (The Rush-Hour Flow)</div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">1</div>
+        <div class="workflow-step-content"><strong>Tap "+ Add" Customer:</strong> Bottom nav FAB or top navbar button opens a lightweight bottom drawer sheet.</div>
+      </div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">2</div>
+        <div class="workflow-step-content"><strong>Input Name & Phone:</strong> Auto-formats 10-digit mobile number with phone validation; checks for previous visits.</div>
+      </div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">3</div>
+        <div class="workflow-step-content"><strong>Tap Service Chips:</strong> Tapping <em>Facial</em> + <em>Threading</em> auto-adds prices (₹1500 + ₹100 = ₹1600).</div>
+      </div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">4</div>
+        <div class="workflow-step-content"><strong>Select Staff & Payment:</strong> Tap beautician pill and payment mode (Cash / GPay). Tap <strong>Save & Send WhatsApp</strong>.</div>
+      </div>
+    </div>
+
+    <div class="workflow-container">
+      <div style="font-weight: 700; font-size: 14px; color: var(--primary-light); margin-bottom: 12px;">Flow B: Bridal Booking with Subha Muhurtham Date Selection</div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">1</div>
+        <div class="workflow-step-content"><strong>Open Event Booking:</strong> Tap "Book Event" from Events module or Muhurtham calendar widget.</div>
+      </div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">2</div>
+        <div class="workflow-step-content"><strong>Date Picker with Muhurtham Badges:</strong> Calendar displays gold dots on auspicious Muhurtham dates with live Panchangam details.</div>
+      </div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">3</div>
+        <div class="workflow-step-content"><strong>Financial Split:</strong> Enter agreed package (e.g. ₹35,000), advance collected (₹10,000) -> Auto-computes Balance (₹25,000).</div>
+      </div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">4</div>
+        <div class="workflow-step-content"><strong>Logistics & Staff:</strong> Enter ceremony & call-sheet timings, Kalyana Mandapam address, and assign assistant artist.</div>
+      </div>
+    </div>
+
+    <div class="workflow-container">
+      <div style="font-weight: 700; font-size: 14px; color: var(--primary-light); margin-bottom: 12px;">Flow C: Geofenced WiFi Staff Clock-In / Clock-Out</div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">1</div>
+        <div class="workflow-step-content"><strong>Staff Arrives & Connects to Salon WiFi:</strong> Opens mobile portal; app automatically checks connected network IP.</div>
+      </div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">2</div>
+        <div class="workflow-step-content"><strong>Network Match Check:</strong> Green badge <em>"Connected to Salon WiFi Router"</em> activates the Clock-In button.</div>
+      </div>
+      <div class="workflow-step-row">
+        <div class="workflow-step-num">3</div>
+        <div class="workflow-step-content"><strong>1-Tap Punch In:</strong> Logs exact timestamp, marked as <code>Present</code> or <code>Late</code> (if after 9:30 AM).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SECTION 6: UI/UX DESIGNER DELIVERABLES -->
+  <!-- ========================================== -->
+  <div class="page-break avoid-break">
+    <div class="section-header primary">
+      <h2>6. Figma Handover Checklist & Deliverables</h2>
+      <span class="section-tag">Designer Handover</span>
+    </div>
+
+    <p>The UI/UX designer must produce the following design artifacts in <strong>Figma</strong> before frontend implementation begins:</p>
+
+    <div class="checklist">
+      <div class="checklist-item">
+        <input type="checkbox" checked disabled>
+        <div>
+          <div class="checklist-item-title">1. Design System & Component Library (Figma Tokens)</div>
+          <div class="checklist-item-desc">Colors (Dark Obsidian, Champagne Gold, Light Porcelain), Typography styles, Buttons, Badges, Input fields, and Card variants.</div>
+        </div>
+      </div>
+
+      <div class="checklist-item">
+        <input type="checkbox" checked disabled>
+        <div>
+          <div class="checklist-item-title">2. Mobile-First Responsive Layouts (375px Mobile & 1440px Desktop)</div>
+          <div class="checklist-item-desc">Collapsible desktop sidebar + bottom navigation bar with central floating action button (FAB) for mobile viewports.</div>
+        </div>
+      </div>
+
+      <div class="checklist-item">
+        <input type="checkbox" checked disabled>
+        <div>
+          <div class="checklist-item-title">3. Executive Dashboard & Countdown Screen</div>
+          <div class="checklist-item-desc">High-glamour cards for revenue, cash drawer, 7-day bridal countdown, and daily logging streak flame widget.</div>
+        </div>
+      </div>
+
+      <div class="checklist-item">
+        <input type="checkbox" checked disabled>
+        <div>
+          <div class="checklist-item-title">4. Quick-Action POS & Customer Bottom Drawer</div>
+          <div class="checklist-item-desc">Thumb-friendly bottom sheet modal with 1-tap service chips, price auto-sum, and beautician selector.</div>
+        </div>
+      </div>
+
+      <div class="checklist-item">
+        <input type="checkbox" checked disabled>
+        <div>
+          <div class="checklist-item-title">5. Bridal Event Calendar & Subha Muhurtham UI</div>
+          <div class="checklist-item-desc">Visual calendar grid with gold auspicious date badges, Tithi/Nakshatram popover cards, and booking drawer.</div>
+        </div>
+      </div>
+
+      <div class="checklist-item">
+        <input type="checkbox" checked disabled>
+        <div>
+          <div class="checklist-item-title">6. Staff Geofenced WiFi Check-In & Portal View</div>
+          <div class="checklist-item-desc">Clean mobile staff view with WiFi status indicators (Green Connected vs Red Offsite warning) and big punch-in button.</div>
+        </div>
+      </div>
+
+      <div class="checklist-item">
+        <input type="checkbox" checked disabled>
+        <div>
+          <div class="checklist-item-title">7. AI Voice Wizard Overlay (Tamil / Tanglish)</div>
+          <div class="checklist-item-desc">Sleek microphone recording overlay with pulsating audio frequency waves, live transcript card, and Tanglish prompt helper chips.</div>
+        </div>
+      </div>
+
+      <div class="checklist-item">
+        <input type="checkbox" checked disabled>
+        <div>
+          <div class="checklist-item-title">8. Branded Printable Templates</div>
+          <div class="checklist-item-desc">Print/PDF-ready layout designs for: Monthly Employee Salary Payslip, Bridal Event Booking Confirmation, and Monthly Financial Statement.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TECHNICAL STACK REFERENCE -->
+    <div class="callout callout-blue" style="margin-top: 24px;">
+      <div class="callout-title">🛠️ Frontend Developer Technical Compatibility</div>
+      <strong>Architecture:</strong> Single Page Application (SPA) using HTML5, Vanilla JavaScript (ES Modules), Custom CSS Design Tokens, and Supabase PostgreSQL.
+      <br><strong>Iconography:</strong> Tabler Icons (Webfont vector icons).
+      <br><strong>Charts:</strong> Chart.js v4 (Canvas-based responsive charts).
+      <br><strong>Voice & AI:</strong> Groq API serverless proxy with Whisper-large-v3 Speech-to-Text and Llama models.
+    </div>
+
+    <div class="footer-doc">
+      <div><strong>Kalai Makeover</strong> · AI Business Assistant PRD</div>
+      <div>Confidential & Proprietary · UI/UX Handover Edition</div>
+    </div>
+
+  </div>
+
+</div>
+
+</body>
+</html>

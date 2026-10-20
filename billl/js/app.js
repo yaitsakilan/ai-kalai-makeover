@@ -13,6 +13,7 @@ import { renderStudents } from './pages/students.js';
 import { renderJewels } from './pages/jewels.js';
 import { renderEmployees } from './pages/employees.js';
 import { renderFinance, initFinanceCharts } from './pages/finance.js';
+import './dateFilter.js';
 
 // Global Chart.js luxury dark / light theme configuration
 if (typeof Chart !== 'undefined') {
@@ -170,17 +171,27 @@ export function showPage(page) {
   state.currentPage = page;
   if (page === 'customers') {
     window._selectedMonth = undefined;
+    window._selectedCustomerYear = undefined;
     window._searchQuery = '';
     window._monthFilterExpanded = false;
     window._searchFieldExpanded = false;
   }
   if (page === 'events') {
     window._selectedEventMonth = 'all';
+    window._selectedEventYear = undefined;
     window._eventSearchQuery = '';
     window._eventMonthFilterExpanded = false;
     window._eventSearchFieldExpanded = false;
     window._eventStatusFilter = 'all';
     window._eventActiveTab = 'history';
+  }
+  if (page === 'expenses') {
+    window._selectedExpenseMonth = undefined;
+    window._selectedExpenseYear = undefined;
+  }
+  if (page === 'analytics') {
+    window._selectedAnalyticsMonth = 'all';
+    window._selectedAnalyticsYear = undefined;
   }
   if (page === 'students') {
     window._studentSearchQuery = '';

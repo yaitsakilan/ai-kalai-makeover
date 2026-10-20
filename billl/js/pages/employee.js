@@ -450,7 +450,7 @@ export async function renderEmployeePage() {
 
   const totalContributions = empCustomersCount + empEventsCount + empExpensesCount + empStudentsCount + empJewelsCount;
 
-  let portalStatusHtml = '<span style="font-size:12.5px; color:#888;">Select your name to check in or out</span>';
+  let portalStatusHtml = '<span style="font-size:12.5px; color:var(--text-muted, #cbd5e1);">Select your name to check in or out</span>';
   let portalDetailsHtml = '';
 
   const colors = ['av-gold', 'av-teal', 'av-rose', 'av-purple'];
@@ -467,12 +467,12 @@ export async function renderEmployeePage() {
         <button class="btn btn-gold" onclick="window.handleEmpCheckIn('${empId}')" style="background:#22c55e; color:#fff; font-weight:600; padding:10px 20px; border-radius:8px; border:none; cursor:pointer;">
           <i class="ti ti-login"></i> Tap to Check In Today
         </button>
-        <span style="font-size:10.5px; color:#666; margin-top:6px;">Work shift starts now</span>
+        <span style="font-size:11px; color:var(--text-muted, #cbd5e1); margin-top:6px;">Work shift starts now</span>
       `;
     } else if (todayLog.check_in && !todayLog.check_out) {
       const checkInTime = new Date(todayLog.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       portalStatusHtml = `
-        <div style="font-size:12px; color:#15803d; font-weight:600; margin-bottom:6px;"><i class="ti ti-circle-check"></i> Checked In at ${checkInTime}</div>
+        <div style="font-size:12.5px; color:#22c55e; font-weight:600; margin-bottom:6px;"><i class="ti ti-circle-check"></i> Checked In at ${checkInTime}</div>
         <button class="btn btn-gold" onclick="window.handleEmpCheckOut('${todayLog.id}')" style="background:#eab308; color:#fff; font-weight:600; padding:10px 20px; border-radius:8px; border:none; cursor:pointer;">
           <i class="ti ti-logout"></i> Tap to Check Out
         </button>
@@ -481,8 +481,8 @@ export async function renderEmployeePage() {
       const checkInTime = new Date(todayLog.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       const checkOutTime = new Date(todayLog.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       portalStatusHtml = `
-        <div style="color:#15803d; font-weight:700; font-size:14px;"><i class="ti ti-circle-check"></i> Shift Completed!</div>
-        <span style="font-size:11.5px; color:#555; margin-top:4px;">In: <strong>${checkInTime}</strong> · Out: <strong>${checkOutTime}</strong></span>
+        <div style="color:#22c55e; font-weight:700; font-size:14px;"><i class="ti ti-circle-check"></i> Shift Completed!</div>
+        <span style="font-size:11.5px; color:var(--text-secondary, #cbd5e1); margin-top:4px;">In: <strong style="color:var(--text-primary, #ffffff);">${checkInTime}</strong> · Out: <strong style="color:var(--text-primary, #ffffff);">${checkOutTime}</strong></span>
       `;
     }
 

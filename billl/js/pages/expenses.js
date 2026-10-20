@@ -3,10 +3,16 @@ import { state } from '../state.js';
 import { fetchExpenses, addExpense, deleteExpense, fetchMonthlyBalances, saveMonthlyBalance } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
 import { callGroqAPI } from '../api.js';
-import { formatEmpTag } from '../utils.js';
+import { formatEmpTag, getAvailableYears } from '../utils.js';
+import { renderDateFilterTrigger, isDateInModuleFilter, getModuleDateFilterLabel, getModuleDateFilter } from '../dateFilter.js';
 
 export function setExpenseTab(tab) {
   window._expenseTabFilter = tab;
+  if (typeof window.render === 'function') window.render();
+}
+
+export function filterExpenseByYear(val) {
+  window._selectedExpenseYear = val === 'all' ? 'all' : parseInt(val, 10);
   if (typeof window.render === 'function') window.render();
 }
 
@@ -87,13 +93,28 @@ export async function renderExpenses() {
   const now = new Date();
   const currentMonthIndex = now.getMonth();
   const currentYear = now.getFullYear();
+  const availableYears = getAvailableYears(allExpenses, ['date', 'created_at']);
+
+  if (window._selectedExpenseYear === undefined) {
+    const hasCurrentYearData = allExpenses.some(e => {
+      return e.date && parseInt(String(e.date).split('-')[0], 10) === currentYear;
+    });
+    window._selectedExpenseYear = hasCurrentYearData ? currentYear : (availableYears[0] || currentYear);
+  }
+
+  const isAllMonths = (window._selectedExpenseMonth === 'all');
+  let targetYear = (window._selectedExpenseYear !== 'all' && window._selectedExpenseYear !== undefined)
+    ? parseInt(window._selectedExpenseYear, 10)
+    : currentYear;
+  let targetMonthIdx = currentMonthIndex;
 
   // Initialize selected month if not set: default to current month if data exists, or latest month with data
   if (window._selectedExpenseMonth === undefined) {
     const hasCurrentMonthData = allExpenses.some(e => {
       if (!e.date) return false;
       const parts = String(e.date).split('T')[0].split('-');
-      return parts.length >= 2 && (parseInt(parts[1], 10) - 1) === currentMonthIndex;
+      const yearMatch = window._selectedExpenseYear === 'all' || parseInt(parts[0], 10) === targetYear;
+      return yearMatch && parts.length >= 2 && (parseInt(parts[1], 10) - 1) === currentMonthIndex;
     });
     if (hasCurrentMonthData) {
       window._selectedExpenseMonth = currentMonthIndex;
@@ -102,11 +123,14 @@ export async function renderExpenses() {
       let newestDateStr = '';
       allExpenses.forEach(e => {
         if (e.date && String(e.date) > newestDateStr) {
-          newestDateStr = String(e.date);
-          const parts = newestDateStr.split('T')[0].split('-');
-          if (parts.length >= 2) {
+          const parts = String(e.date).split('T')[0].split('-');
+          const yearMatch = window._selectedExpenseYear === 'all' || parseInt(parts[0], 10) === targetYear;
+          if (yearMatch && parts.length >= 2) {
             const m = parseInt(parts[1], 10) - 1;
-            if (m >= 0 && m < 12) latestMonth = m;
+            if (m >= 0 && m < 12) {
+              latestMonth = m;
+              newestDateStr = String(e.date);
+            }
           }
         }
       });
@@ -114,37 +138,28 @@ export async function renderExpenses() {
     }
   }
 
-  const isAllMonths = (window._selectedExpenseMonth === 'all');
-  let targetYear = currentYear;
-  let targetMonthIdx = currentMonthIndex;
-
   if (!isAllMonths && window._selectedExpenseMonth !== undefined && window._selectedExpenseMonth !== null) {
     targetMonthIdx = parseInt(window._selectedExpenseMonth, 10);
-    // Find matching year for selected month if different from current year
-    for (const e of allExpenses) {
-      if (!e.date) continue;
-      const parts = String(e.date).split('T')[0].split('-');
-      if (parts.length >= 2 && (parseInt(parts[1], 10) - 1) === targetMonthIdx) {
-        targetYear = parseInt(parts[0], 10);
-        break;
+    // If selected year is 'all', find matching year for selected month from data
+    if (window._selectedExpenseYear === 'all') {
+      for (const e of allExpenses) {
+        if (!e.date) continue;
+        const parts = String(e.date).split('T')[0].split('-');
+        if (parts.length >= 2 && (parseInt(parts[1], 10) - 1) === targetMonthIdx) {
+          targetYear = parseInt(parts[0], 10);
+          break;
+        }
       }
     }
   }
 
   const selectedMonthStr = `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}`;
   const selectedMonthName = `${MONTHS[targetMonthIdx]} ${targetYear}`;
-  const selectedMonthLabel = isAllMonths ? 'All Time' : selectedMonthName;
+  const selectedMonthLabel = getModuleDateFilterLabel('expenses');
   const activeTab = window._expenseTabFilter || 'all';
 
-  // 1. Filter expenses based on selected month
-  let monthExpenses = allExpenses;
-  if (!isAllMonths) {
-    monthExpenses = allExpenses.filter(e => {
-      if (!e.date) return false;
-      const parts = String(e.date).split('T')[0].split('-');
-      return parts.length >= 2 && (parseInt(parts[1], 10) - 1) === targetMonthIdx;
-    });
-  }
+  // 1. Filter expenses based on date filter (Day, Week, Month, Year, Custom)
+  let monthExpenses = allExpenses.filter(e => isDateInModuleFilter(e.date || e.created_at, 'expenses'));
 
   // 2. Filter expenses based on active tab
   const tabName = activeTab === 'product' ? 'Product Expenses' : activeTab === 'general' ? 'General Expenses' : 'All Expenses';
@@ -322,13 +337,8 @@ export async function renderExpenses() {
       <h2>Expenses Management</h2>
     </div>
     <div style="display:flex; gap:8px; flex-wrap: wrap; align-items:center;">
-      <!-- Month Filter Select Dropdown -->
-      <select class="form-input form-select" style="width:auto;height:36px;font-size:12px;padding:4px 28px 4px 10px;border-color:#e5e5e5;font-weight:500;" onchange="window.filterExpenseByMonth(this.value)" title="Choose Month Filter">
-        <option value="all" ${isAllMonths ? 'selected' : ''}>📅 All Months</option>
-        ${MONTHS.map((m, idx) => `
-          <option value="${idx}" ${(!isAllMonths && targetMonthIdx === idx) ? 'selected' : ''}>📅 ${m}</option>
-        `).join('')}
-      </select>
+      <!-- Date Filter Trigger Button (Modal) -->
+      ${renderDateFilterTrigger('expenses')}
       <button class="btn btn-outline" onclick="window.openProductExpenseForm()">
         <i class="ti ti-plus"></i> Product Expense
       </button>
@@ -1726,6 +1736,7 @@ export async function submitProductExpenseForm() {
 }
 
 window.setExpenseTab = setExpenseTab;
+window.filterExpenseByYear = filterExpenseByYear;
 window.filterExpenseByMonth = filterExpenseByMonth;
 window.setExpenseMonth = filterExpenseByMonth;
 window.openExpenseFormSelector = openExpenseFormSelector;

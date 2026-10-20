@@ -1,5 +1,8 @@
-// billl/js/pages/analytics.js
 import { fetchCustomers, fetchEvents, fetchExpenses, fetchClassEnrollments } from '../db.js';
+import { getAvailableYears } from '../utils.js';
+import { renderDateFilterTrigger, isDateInModuleFilter, getModuleDateFilterLabel, getModuleDateFilter } from '../dateFilter.js';
+import { renderCustomerAnalyticsDashboard, initCustomerAnalyticsCharts } from './customers.js';
+import { renderEventAnalyticsDashboard, initEventAnalyticsCharts } from './events.js';
 
 export async function renderAnalytics() {
   const [customers, events, expenses, students] = await Promise.all([
@@ -14,37 +17,37 @@ export async function renderAnalytics() {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
+  const combinedItems = [...customers, ...events, ...expenses, ...(students || [])];
+  const availableYears = getAvailableYears(combinedItems, ['date', 'created_at', 'last_visit', 'start_date']);
   const now = new Date();
-  const currentMonthIndex = now.getMonth();
   const currentYear = now.getFullYear();
+
+  if (window._selectedAnalyticsYear === undefined) {
+    const hasCurrentYearData = combinedItems.some(i => {
+      const dStr = i.date || i.last_visit || i.start_date || i.created_at;
+      return dStr && parseInt(String(dStr).split('-')[0], 10) === currentYear;
+    });
+    window._selectedAnalyticsYear = hasCurrentYearData ? currentYear : (availableYears[0] || currentYear);
+  }
 
   if (window._selectedAnalyticsMonth === undefined) {
     window._selectedAnalyticsMonth = 'all';
   }
 
+  const selectedYear = window._selectedAnalyticsYear;
+  const isAllYears = selectedYear === 'all';
   const selectedMonth = window._selectedAnalyticsMonth;
   const isAllMonths = selectedMonth === 'all';
-  const selectedMonthLabel = isAllMonths ? 'All Months' : MONTHS[selectedMonth];
-  const selectedMonthStr = isAllMonths ? '' : `${currentYear}-${String(Number(selectedMonth) + 1).padStart(2, '0')}`;
+  const targetYear = isAllYears ? currentYear : parseInt(selectedYear, 10);
+  const selectedMonthLabel = getModuleDateFilterLabel('analytics');
 
   const getSvcArray = (c) => Array.isArray(c.services) ? c.services : (typeof c.services === 'string' && c.services.trim() ? c.services.split(',').map(s => s.trim()) : []);
 
-  // Filter datasets by selected month if not 'all'
-  const filteredCustomers = isAllMonths
-    ? customers
-    : customers.filter(c => c.last_visit && c.last_visit.startsWith(selectedMonthStr));
-
-  const filteredEvents = isAllMonths
-    ? events
-    : events.filter(e => e.date && e.date.startsWith(selectedMonthStr));
-
-  const filteredExpenses = isAllMonths
-    ? expenses
-    : expenses.filter(e => e.date && e.date.startsWith(selectedMonthStr));
-
-  const filteredStudents = isAllMonths
-    ? (students || [])
-    : (students || []).filter(s => (s.start_date || s.created_at) && String(s.start_date || s.created_at).startsWith(selectedMonthStr));
+  // Filter datasets by date filter (Day, Week, Month, Year, Custom)
+  const filteredCustomers = customers.filter(c => isDateInModuleFilter(c.last_visit || c.created_at, 'analytics'));
+  const filteredEvents = events.filter(e => isDateInModuleFilter(e.date || e.created_at, 'analytics'));
+  const filteredExpenses = expenses.filter(e => isDateInModuleFilter(e.date || e.created_at, 'analytics'));
+  const filteredStudents = (students || []).filter(s => isDateInModuleFilter(s.start_date || s.created_at, 'analytics'));
 
   // Separate normal shop customers and class students
   const shopCustomers = filteredCustomers.filter(c => !getSvcArray(c).some(s => s.includes('Classes')));
@@ -146,57 +149,91 @@ export async function renderAnalytics() {
   const cashProfit = totalInflow - totalExpenses;
   const netMargin = totalInflow > 0 ? Math.round((cashProfit / totalInflow) * 100) : 0;
 
-  window.filterAnalyticsByMonth = function(val) {
-    window._selectedAnalyticsMonth = val === 'all' ? 'all' : parseInt(val, 10);
-    if (typeof window.render === 'function') {
-      window.render();
-    }
-  };
+  if (window._analyticsActiveTab === undefined) {
+    window._analyticsActiveTab = 'overview';
+  }
+
+  window.switchAnalyticsTab = switchAnalyticsTab;
+
+  // Cache datasets for nested chart and list renderers
+  window._cachedCustomers = customers;
+  window._cachedEvents = events;
+  window._cachedFilteredEvents = filteredEvents;
+
+  const isShopActive = window._analyticsActiveTab === 'shop_customers';
+  const isEventActive = window._analyticsActiveTab === 'event_bookings';
+  const isOverviewActive = window._analyticsActiveTab === 'overview';
 
   return `
   <div class="top-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
     <div>
       <h2 style="margin:0; font-size:24px; font-weight:700;">Analytics & Insights</h2>
     </div>
-    <div style="display:flex; gap:10px; align-items:center;">
-      <select class="form-input form-select" id="analytics-month-filter" style="width:auto; height:38px; font-size:12.5px; padding:4px 32px 4px 12px; font-weight:600; cursor:pointer;" onchange="window.filterAnalyticsByMonth(this.value)" title="Choose Month Filter">
-        <option value="all" ${isAllMonths ? 'selected' : ''}>📅 All Months</option>
-        ${MONTHS.map((m, idx) => `
-          <option value="${idx}" ${!isAllMonths && selectedMonth === idx ? 'selected' : ''}>📅 ${m}</option>
-        `).join('')}
-      </select>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <!-- Date Filter Trigger Button (Modal) -->
+      ${renderDateFilterTrigger('analytics')}
       <div class="date" style="padding:6px 12px; border-radius:8px;"><i class="ti ti-database" style="color:#d97706; margin-right:4px;"></i> Live Business Report</div>
     </div>
   </div>
 
   <div class="metric-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-    <div class="metric-card mc-gold">
+    <div class="metric-card mc-gold" onclick="window.switchAnalyticsTab('shop_customers')" style="cursor:pointer; position:relative; transition:all 0.25s ease; ${isShopActive ? 'border:2px solid #f5c842; box-shadow:0 0 18px rgba(245, 200, 66, 0.35); transform:translateY(-2px);' : ''}">
       <div class="metric-label">Shop Customers</div>
       <div class="metric-value">₹${shopRev.toLocaleString()}</div>
       <div class="metric-sub">${shopCustomers.length} client visits</div>
+      <div style="margin-top:6px; font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:4px; ${isShopActive ? 'color:#f5c842;' : 'color:rgba(255,255,255,0.45);'}">
+        <i class="ti ${isShopActive ? 'ti-circle-check' : 'ti-pointer'}"></i> ${isShopActive ? 'Viewing Insights' : 'Tap to show insights'}
+      </div>
       <i class="ti ti-users metric-icon"></i>
     </div>
-    <div class="metric-card mc-teal">
+
+    <div class="metric-card mc-teal" onclick="window.switchAnalyticsTab('event_bookings')" style="cursor:pointer; position:relative; transition:all 0.25s ease; ${isEventActive ? 'border:2px solid #14b8a6; box-shadow:0 0 18px rgba(20, 184, 166, 0.35); transform:translateY(-2px);' : ''}">
       <div class="metric-label">Event Bookings</div>
       <div class="metric-value">₹${eventTotal.toLocaleString()}</div>
       <div class="metric-sub">${filteredEvents.length} bookings (₹${eventAdvance.toLocaleString()} paid)</div>
+      <div style="margin-top:6px; font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:4px; ${isEventActive ? 'color:#14b8a6;' : 'color:rgba(255,255,255,0.45);'}">
+        <i class="ti ${isEventActive ? 'ti-circle-check' : 'ti-pointer'}"></i> ${isEventActive ? 'Viewing Insights' : 'Tap to show insights'}
+      </div>
       <i class="ti ti-calendar-event metric-icon"></i>
     </div>
-    <div class="metric-card mc-purple">
+
+    <div class="metric-card mc-purple" onclick="window.switchAnalyticsTab('overview')" style="cursor:pointer;">
       <div class="metric-label">Student Classes</div>
       <div class="metric-value">₹${classRev.toLocaleString()}</div>
       <div class="metric-sub">${totalStudentCount} student enrollments</div>
+      <div style="margin-top:6px; font-size:10.5px; font-weight:600; color:rgba(255,255,255,0.45); display:flex; align-items:center; gap:4px;">
+        <i class="ti ti-chart-pie"></i> Inflow contribution
+      </div>
       <i class="ti ti-school metric-icon"></i>
     </div>
-    <div class="metric-card mc-rose">
+
+    <div class="metric-card mc-rose" onclick="window.switchAnalyticsTab('overview')" style="cursor:pointer;">
       <div class="metric-label">Total Expenses</div>
       <div class="metric-value">₹${totalExpenses.toLocaleString()}</div>
       <div class="metric-sub">${filteredExpenses.length} expense transactions</div>
+      <div style="margin-top:6px; font-size:10.5px; font-weight:600; color:rgba(255,255,255,0.45); display:flex; align-items:center; gap:4px;">
+        <i class="ti ti-receipt"></i> Outflow tracking
+      </div>
       <i class="ti ti-receipt metric-icon"></i>
     </div>
   </div>
 
-  <div class="grid-3" style="grid-template-columns: 2fr 1fr 1fr; margin-bottom: 20px;">
+  <!-- Analytics View Tabs -->
+  <div class="tab-row" style="margin-bottom:20px;overflow-x:auto;white-space:nowrap;display:flex;gap:8px;">
+    <div class="tab ${isOverviewActive ? 'active' : ''}" onclick="window.switchAnalyticsTab('overview')" style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+      <i class="ti ti-dashboard"></i> Overview Analytics
+    </div>
+    <div class="tab ${isShopActive ? 'active' : ''}" onclick="window.switchAnalyticsTab('shop_customers')" style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+      <i class="ti ti-users" style="color:#f5c842;"></i> Shop Customer Analytics (${shopCustomers.length})
+    </div>
+    <div class="tab ${isEventActive ? 'active' : ''}" onclick="window.switchAnalyticsTab('event_bookings')" style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+      <i class="ti ti-calendar-event" style="color:#14b8a6;"></i> Event Booking Analytics (${filteredEvents.length})
+    </div>
+  </div>
+
+  ${isShopActive ? renderCustomerAnalyticsDashboard(shopCustomers.length ? shopCustomers : filteredCustomers, customers) :
+    isEventActive ? renderEventAnalyticsDashboard(filteredEvents, events, customers) : `
+    <div class="grid-3" style="grid-template-columns: 2fr 1fr 1fr; margin-bottom: 20px;">
     <div class="card">
       <div class="section-title"><i class="ti ti-chart-bar" style="color:#d97706;margin-right:4px"></i>Cashflow Trend (Last 6 Active Months)</div>
       <div style="position:relative;width:100%;height:200px">
@@ -324,12 +361,38 @@ export async function renderAnalytics() {
           <span style="font-weight:700;color:#b45309">${netMargin}%</span>
         </div>
       </div>
-    </div>
   </div>
+  `}
   `;
 }
 
 export function initAnalyticsCharts() {
+  if (window._analyticsActiveTab === 'shop_customers') {
+    setTimeout(() => {
+      const customers = window._cachedCustomers || [];
+      if (typeof window.initCustomerAnalyticsCharts === 'function') {
+        window.initCustomerAnalyticsCharts(customers);
+      } else if (typeof initCustomerAnalyticsCharts === 'function') {
+        initCustomerAnalyticsCharts(customers);
+      }
+    }, 60);
+    return;
+  }
+
+  if (window._analyticsActiveTab === 'event_bookings') {
+    if (window._eventAnalyticsSubTab === 'overview' || !window._eventAnalyticsSubTab) {
+      setTimeout(() => {
+        const events = window._cachedFilteredEvents || window._cachedEvents || [];
+        if (typeof window.initEventAnalyticsCharts === 'function') {
+          window.initEventAnalyticsCharts(events);
+        } else if (typeof initEventAnalyticsCharts === 'function') {
+          initEventAnalyticsCharts(events);
+        }
+      }, 60);
+    }
+    return;
+  }
+
   const ad = window._analyticsData;
   if (!ad) return;
 
@@ -409,6 +472,27 @@ export function initAnalyticsCharts() {
   });
 }
 
+export function switchAnalyticsTab(tab) {
+  if (window._analyticsActiveTab === tab && tab !== 'overview') {
+    window._analyticsActiveTab = 'overview';
+  } else {
+    window._analyticsActiveTab = tab;
+  }
+  if (typeof window.render === 'function') {
+    window.render();
+  } else if (typeof window.renderAnalytics === 'function') {
+    const main = document.getElementById('main-content');
+    if (main) {
+      window.renderAnalytics().then(html => {
+        main.innerHTML = html;
+        window.initAnalyticsCharts();
+      });
+    }
+  }
+}
+
 // Bind to window to allow HTML inline event execution
 window.renderAnalytics = renderAnalytics;
 window.initAnalyticsCharts = initAnalyticsCharts;
+window.switchAnalyticsTab = switchAnalyticsTab;
+

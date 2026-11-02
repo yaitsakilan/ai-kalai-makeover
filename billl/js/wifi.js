@@ -1,68 +1,50 @@
 // billl/js/wifi.js
 // WiFi Router Capture & Enforced Attendance Check-in for Kalai Makeover
-import { showToast, showModal, closeModal } from './ui.js';
-import { saveAttendance, fetchAttendance, fetchEmployees } from './db.js';
+import { showToast, showModal, closeModal, showConfirmDelete } from './ui.js';
+import { state } from './state.js';
+import { saveAttendance, fetchAttendance, fetchEmployees, fetchShopSetting, saveShopSetting } from './db.js';
 
+// This phone's copy of the shop WiFi; the shared one is the 'shop_wifi' row in shop_settings
 const WIFI_CONFIG_KEY = 'kalai_shop_wifi_router_config';
+const WIFI_SETTING_KEY = 'shop_wifi';
+const NOT_SHARED_MESSAGE = 'Saved on this phone only, so staff phones can\'t check in. Run shop_settings_migration.sql in Supabase, then capture the WiFi again.';
+
+// Phones on the salon router share its public IPv4 address, but each phone gets its own IPv6 address,
+// so only IPv4 answers can be compared with the captured router IP
+const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/;
+const IP_LOOKUPS = [
+  { url: 'https://api.ipify.org?format=json', read: data => data.ip },
+  { url: 'https://httpbin.org/ip', read: data => String(data.origin || '').split(',')[0] }
+];
+
+const DEFAULT_WIFI_CONFIG = {
+  configured: false,
+  router_name: 'Kalai Makeover Studio WiFi',
+  router_ip: '',
+  allowed_ips: [],
+  enforce_wifi: true,
+  captured_at: null,
+  captured_by: 'Owner (Kalai)'
+};
 
 /**
- * Detect current network public IP address from browser client
+ * Detect current network public IPv4 address from browser client. Always a fresh lookup, so joining the
+ * salon WiFi and tapping Check In again works straight away.
  */
 export async function detectCurrentNetwork() {
-  const now = Date.now();
-  if (window._cachedNetworkIp && window._cachedNetworkIpTime && (now - window._cachedNetworkIpTime < 45000)) {
-    return { ip: window._cachedNetworkIp, timestamp: new Date(window._cachedNetworkIpTime).toISOString() };
+  for (const lookup of IP_LOOKUPS) {
+    try {
+      const res = await fetch(lookup.url, { cache: 'no-store' });
+      if (!res.ok) continue;
+      const ip = String(lookup.read(await res.json()) || '').trim();
+      if (IPV4_PATTERN.test(ip)) return { ip, timestamp: new Date().toISOString() };
+    } catch (e) {}
   }
-
-  // Method 1: ipify
-  try {
-    const res = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.ip) {
-        const ip = data.ip.trim();
-        window._cachedNetworkIp = ip;
-        window._cachedNetworkIpTime = now;
-        return { ip, timestamp: new Date().toISOString() };
-      }
-    }
-  } catch (e) {}
-
-  // Method 2: httpbin fallback
-  try {
-    const res2 = await fetch('https://httpbin.org/ip', { cache: 'no-store' });
-    if (res2.ok) {
-      const data2 = await res2.json();
-      if (data2 && data2.origin) {
-        const ip = data2.origin.split(',')[0].trim();
-        window._cachedNetworkIp = ip;
-        window._cachedNetworkIpTime = now;
-        return { ip, timestamp: new Date().toISOString() };
-      }
-    }
-  } catch (e2) {}
-
-  // Method 3: api64 fallback
-  try {
-    const res3 = await fetch('https://api64.ipify.org?format=json', { cache: 'no-store' });
-    if (res3.ok) {
-      const data3 = await res3.json();
-      if (data3 && data3.ip) {
-        const ip = data3.ip.trim();
-        window._cachedNetworkIp = ip;
-        window._cachedNetworkIpTime = now;
-        return { ip, timestamp: new Date().toISOString() };
-      }
-    }
-  } catch (e3) {}
 
   return { ip: null, error: 'Offline or network check failed' };
 }
 
-/**
- * Get registered salon WiFi configuration
- */
-export function getShopWifiConfig() {
+function getDeviceWifiCopy() {
   try {
     const raw = localStorage.getItem(WIFI_CONFIG_KEY);
     if (raw) {
@@ -70,22 +52,50 @@ export function getShopWifiConfig() {
       if (parsed && typeof parsed === 'object') return parsed;
     }
   } catch (e) {}
-
-  return {
-    configured: false,
-    router_name: 'Kalai Makeover Studio WiFi',
-    router_ip: '',
-    allowed_ips: [],
-    enforce_wifi: true,
-    captured_at: null,
-    captured_by: 'Owner (Kalai)'
-  };
+  return null;
 }
 
 /**
- * Save registered salon WiFi configuration
+ * Get registered salon WiFi configuration as last loaded (call loadShopWifiConfig first for the shared one)
  */
-export function saveShopWifiConfig(config) {
+export function getShopWifiConfig() {
+  return window._cachedShopWifiConfig || getDeviceWifiCopy() || { ...DEFAULT_WIFI_CONFIG };
+}
+
+/**
+ * Load the salon WiFi shared by every phone. Sets window._shopWifiShareState to 'shared', 'device-only'
+ * (captured on this phone but never stored in the database) or 'unavailable' (database can't be read).
+ */
+export async function loadShopWifiConfig() {
+  let shared;
+  try {
+    shared = await fetchShopSetting(WIFI_SETTING_KEY);
+  } catch (e) {
+    console.warn('Shop WiFi setting could not be loaded, using this phone\'s copy:', e);
+    window._shopWifiShareState = 'unavailable';
+    window._cachedShopWifiConfig = getDeviceWifiCopy() || { ...DEFAULT_WIFI_CONFIG };
+    return window._cachedShopWifiConfig;
+  }
+
+  if (shared) {
+    const config = { ...DEFAULT_WIFI_CONFIG, ...shared };
+    try { localStorage.setItem(WIFI_CONFIG_KEY, JSON.stringify(config)); } catch (e) {}
+    window._shopWifiShareState = 'shared';
+    window._cachedShopWifiConfig = config;
+    return config;
+  }
+
+  // Never stored in the database: a WiFi captured on this phone earlier still applies here
+  window._shopWifiShareState = 'device-only';
+  window._cachedShopWifiConfig = getDeviceWifiCopy() || { ...DEFAULT_WIFI_CONFIG };
+  return window._cachedShopWifiConfig;
+}
+
+/**
+ * Save registered salon WiFi configuration for every phone. Returns { config, shared }, where shared is
+ * false when it could only be kept on this phone.
+ */
+export async function saveShopWifiConfig(config) {
   const current = getShopWifiConfig();
   const updated = {
     ...current,
@@ -93,26 +103,29 @@ export function saveShopWifiConfig(config) {
     configured: !!(config.router_ip && config.router_ip.trim()),
     updated_at: new Date().toISOString()
   };
-  localStorage.setItem(WIFI_CONFIG_KEY, JSON.stringify(updated));
+  try { localStorage.setItem(WIFI_CONFIG_KEY, JSON.stringify(updated)); } catch (e) {}
   window._cachedShopWifiConfig = updated;
-  return updated;
+
+  const shared = await saveShopSetting(WIFI_SETTING_KEY, updated);
+  window._shopWifiShareState = shared ? 'shared' : 'unavailable';
+  return { config: updated, shared };
 }
 
 /**
  * Verify whether active device is on the registered salon WiFi router
  */
 export async function verifyShopWifiConnection() {
-  const config = getShopWifiConfig();
+  const config = await loadShopWifiConfig();
 
-  // If WiFi has not been captured yet by owner, do not block staff until configured
+  // Nobody can check in by WiFi until the owner has captured the salon WiFi
   if (!config.configured || !config.router_ip) {
     return {
-      isVerified: true,
+      isVerified: false,
       configured: false,
-      enforced: false,
+      enforced: true,
       routerName: config.router_name || 'Shop WiFi',
-      currentIp: window._cachedNetworkIp || 'Unknown',
-      reason: 'WiFi router not yet captured. Please capture salon WiFi.'
+      currentIp: null,
+      reason: 'Shop WiFi is not set up yet. Ask the owner to capture the salon WiFi.'
     };
   }
 
@@ -123,7 +136,7 @@ export async function verifyShopWifiConnection() {
       configured: true,
       enforced: false,
       routerName: config.router_name,
-      currentIp: window._cachedNetworkIp || 'Unknown',
+      currentIp: null,
       reason: 'WiFi restriction temporarily disabled by salon owner.'
     };
   }
@@ -216,8 +229,12 @@ export async function openCaptureWifiModal() {
       showToast('Please enter or detect the router IP', 'error');
       return;
     }
+    if (!IPV4_PATTERN.test(routerIp)) {
+      showToast('Enter the router IP as 4 numbers, e.g. 49.37.202.189', 'error');
+      return;
+    }
 
-    saveShopWifiConfig({
+    const { shared } = await saveShopWifiConfig({
       router_name: routerName,
       router_ip: routerIp,
       enforce_wifi: enforceWifi,
@@ -226,7 +243,7 @@ export async function openCaptureWifiModal() {
     });
 
     closeModal();
-    showToast(`WiFi Router captured: ${routerName} (${routerIp})`);
+    showToast(shared ? `WiFi Router captured: ${routerName} (${routerIp})` : NOT_SHARED_MESSAGE, shared ? 'success' : 'error');
     if (typeof window.render === 'function') await window.render();
   });
 
@@ -307,7 +324,18 @@ export function openWifiSettingsModal() {
     const allowedIps = rawAllowed.split(',').map(s => s.trim()).filter(Boolean);
     const enforceWifi = document.getElementById('ws-enforce')?.checked ?? true;
 
-    saveShopWifiConfig({
+    // Without a router IP nobody could check in; turning off the strict check is the way to allow any network
+    if (!routerIp) {
+      showToast('Please enter the router IP', 'error');
+      return;
+    }
+    const badIp = [routerIp, ...allowedIps].find(ip => !IPV4_PATTERN.test(ip));
+    if (badIp) {
+      showToast(`"${badIp}" is not a router IP. Use 4 numbers, e.g. 49.37.202.189`, 'error');
+      return;
+    }
+
+    const { shared } = await saveShopWifiConfig({
       router_name: routerName,
       router_ip: routerIp,
       allowed_ips: allowedIps,
@@ -315,7 +343,7 @@ export function openWifiSettingsModal() {
     });
 
     closeModal();
-    showToast('WiFi attendance settings updated!');
+    showToast(shared ? 'WiFi attendance settings updated!' : NOT_SHARED_MESSAGE, shared ? 'success' : 'error');
     if (typeof window.render === 'function') await window.render();
   });
 }
@@ -400,6 +428,20 @@ export async function openQuickWifiPunchModal(employees = window._cachedEmployee
       `;
       box.style.background = 'rgba(34,197,94,0.12)';
       box.style.borderColor = 'rgba(34,197,94,0.35)';
+    } else if (!verify.configured) {
+      box.innerHTML = `
+        <div style="display:flex; align-items:center; gap:6px; color:#ef4444; font-weight:600; font-size:12.5px;">
+          <i class="ti ti-wifi-off"></i> ${verify.reason}
+        </div>
+      `;
+      box.style.background = 'rgba(220,38,38,0.1)';
+      box.style.borderColor = 'rgba(220,38,38,0.3)';
+
+      if (saveBtn) {
+        saveBtn.innerHTML = '<i class="ti ti-lock"></i> Blocked (WiFi Only)';
+        saveBtn.disabled = true;
+        saveBtn.style.opacity = '0.6';
+      }
     } else {
       box.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:6px;">
@@ -423,12 +465,41 @@ export async function openQuickWifiPunchModal(employees = window._cachedEmployee
   }, 50);
 }
 
+let checkInInProgress = false;
+
 /**
  * Handle WiFi-verified check in for an employee
  */
 export async function handleWifiCheckIn(empId, isOwnerOverride = false) {
-  const config = getShopWifiConfig();
+  // A second tap while the first is still being verified would save the day twice
+  if (checkInInProgress) return false;
+  checkInInProgress = true;
+  try {
+    return await checkInEmployee(empId, isOwnerOverride);
+  } finally {
+    checkInInProgress = false;
+  }
+}
+
+async function checkInEmployee(empId, isOwnerOverride) {
+  const todayStr = new Date().toLocaleDateString('sv-SE');
+  const todayLog = (await fetchAttendance()).find(a => a.employee_id === empId && a.date === todayStr && a.check_in);
+  if (todayLog) {
+    const checkInTime = new Date(todayLog.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    showToast(todayLog.status === 'Pending'
+      ? `Today's check-in (${checkInTime}) is waiting for the owner's approval`
+      : `Already checked in today at ${checkInTime}`, 'error');
+    return false;
+  }
+
   const verify = await verifyShopWifiConnection();
+  const config = getShopWifiConfig();
+
+  // Staff off the shop WiFi can still check in by giving a reason; it counts once the owner approves
+  if (!verify.isVerified && state.userRole === 'employee') {
+    openOffWifiCheckInModal(empId, todayStr, verify, config);
+    return false;
+  }
 
   if (!verify.isVerified && !isOwnerOverride) {
     showModal('Attendance Check-In Blocked', `
@@ -436,11 +507,11 @@ export async function handleWifiCheckIn(empId, isOwnerOverride = false) {
         <div style="width:54px; height:54px; border-radius:50%; background:rgba(220,38,38,0.12); color:#ef4444; display:inline-flex; align-items:center; justify-content:center; font-size:26px; margin-bottom:10px; border:1px solid rgba(220,38,38,0.25);">
           <i class="ti ti-wifi-off"></i>
         </div>
-        <h3 style="font-size:16px; font-weight:700; color:#ef4444; margin:0 0 6px;">Wrong Network Detected</h3>
-        <p style="font-size:12.5px; color:var(--text-muted, #cbd5e1); margin:0;">You must be connected to the salon WiFi router to punch attendance.</p>
+        <h3 style="font-size:16px; font-weight:700; color:#ef4444; margin:0 0 6px;">${verify.configured ? 'Wrong Network Detected' : 'Shop WiFi Not Set Up'}</h3>
+        <p style="font-size:12.5px; color:var(--text-muted, #cbd5e1); margin:0;">${verify.configured ? 'You must be connected to the salon WiFi router to punch attendance.' : verify.reason}</p>
       </div>
 
-      <div style="padding:14px; background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.25); border-radius:10px; font-size:12px; margin-bottom:14px;">
+      ${verify.configured ? `<div style="padding:14px; background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.25); border-radius:10px; font-size:12px; margin-bottom:14px;">
         <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
           <span style="color:var(--text-muted, #94a3b8);">Required Salon WiFi:</span>
           <strong style="color:#22c55e;">${config.router_name}</strong>
@@ -457,7 +528,7 @@ export async function handleWifiCheckIn(empId, isOwnerOverride = false) {
 
       <div style="font-size:11.5px; color:var(--text-secondary, #cbd5e1); line-height:1.5;">
         <strong>Instructions:</strong> Please turn on WiFi on your phone, connect to <strong>"${config.router_name}"</strong>, and tap Check In again.
-      </div>
+      </div>` : ''}
     `, () => {
       closeModal();
     });
@@ -469,24 +540,15 @@ export async function handleWifiCheckIn(empId, isOwnerOverride = false) {
     return false;
   }
 
-  // Calculate if check-in is Late
-  let status = 'Present';
-  const employees = window._cachedEmployees || [];
-  const emp = employees.find(e => e.id === empId);
-  if (emp && emp.shift_start) {
-    const [shHour, shMin] = emp.shift_start.split(':').map(Number);
-    const now = new Date();
-    const shiftTime = new Date(now);
-    shiftTime.setHours(shHour, shMin, 0, 0);
-    if (now > shiftTime) {
-      status = 'Late';
-    }
-  }
+  const emp = (window._cachedEmployees || []).find(e => e.id === empId);
+  const status = getCheckInStatus(emp, new Date());
 
-  const todayStr = new Date().toLocaleDateString('sv-SE');
-  const notesText = verify.isVerified 
-    ? `WiFi Verified (${config.router_name} - ${verify.currentIp || 'Salon Router'})`
-    : `Owner Override (${verify.currentIp || 'Manual'})`;
+  // Only a real match is recorded as "WiFi Verified" (the attendance log shows the badge from this)
+  const notesText = !verify.isVerified
+    ? `Owner Override (${verify.currentIp || 'Manual'})`
+    : verify.enforced
+      ? `WiFi Verified (${config.router_name} - ${verify.currentIp})`
+      : 'Network not checked (strict check turned off by owner)';
 
   const result = await saveAttendance({
     employee_id: empId,
@@ -498,13 +560,143 @@ export async function handleWifiCheckIn(empId, isOwnerOverride = false) {
 
   if (result) {
     closeModal();
-    showToast(status === 'Late' 
-      ? '⏰ Checked in! Marked as Late Entry (WiFi Verified)' 
-      : '🎉 WiFi Verified! Checked in successfully via Salon Router');
+    if (!verify.enforced) {
+      showToast(status === 'Late' ? '⏰ Checked in! Marked as Late Entry' : 'Checked in successfully!');
+    } else {
+      showToast(status === 'Late'
+        ? '⏰ Checked in! Marked as Late Entry (WiFi Verified)'
+        : '🎉 WiFi Verified! Checked in successfully via Salon Router');
+    }
     if (typeof window.render === 'function') await window.render();
     return true;
   }
   return false;
+}
+
+// Present or Late, from the employee's shift start and the time they checked in
+function getCheckInStatus(emp, checkInTime) {
+  if (!emp || !emp.shift_start) return 'Present';
+  const [shHour, shMin] = emp.shift_start.split(':').map(Number);
+  const shiftTime = new Date(checkInTime);
+  shiftTime.setHours(shHour, shMin, 0, 0);
+  return checkInTime > shiftTime ? 'Late' : 'Present';
+}
+
+// Off-WiFi check-ins are saved with status 'Pending' and notes "Off WiFi · Reason: … · Network: …".
+// The owner's decision is put in front of the notes, and the status becomes Present/Late or Rejected.
+const OFF_WIFI_NOTE = 'Off WiFi';
+
+export function getOffWifiReason(notes) {
+  const text = String(notes || '');
+  const start = text.indexOf(`${OFF_WIFI_NOTE} · Reason: `);
+  if (start < 0) return '';
+  const reasonStart = start + `${OFF_WIFI_NOTE} · Reason: `.length;
+  const end = text.lastIndexOf(' · Network: ');
+  return text.slice(reasonStart, end > reasonStart ? end : undefined);
+}
+
+function resetModalSaveButton(html) {
+  const saveBtn = document.getElementById('modal-save-btn');
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = html;
+  }
+}
+
+const SEND_FOR_APPROVAL_HTML = '<i class="ti ti-send"></i> Send for Approval';
+
+function openOffWifiCheckInModal(empId, todayStr, verify, config) {
+  showModal('Check In Without Shop WiFi', `
+    <div style="text-align:center; padding: 4px 0 14px;">
+      <div style="width:50px; height:50px; border-radius:50%; background:rgba(217,119,6,0.12); color:#d97706; display:inline-flex; align-items:center; justify-content:center; font-size:24px; margin-bottom:10px;">
+        <i class="ti ti-wifi-off"></i>
+      </div>
+      <p style="font-size:13px; margin:0; line-height:1.5;">
+        ${verify.configured
+          ? `You're not connected to <strong>${config.router_name}</strong>. Connect to it and tap Check In again.`
+          : 'The shop WiFi is not set up yet.'}
+      </p>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Why are you checking in without the shop WiFi? *</label>
+      <textarea class="form-input" id="ow-reason" rows="3" placeholder="e.g. Bridal makeup at the client's home"></textarea>
+      <div style="font-size:11px; color:var(--text-muted, #94a3b8); margin-top:4px;">It counts as attendance once the owner approves it.</div>
+    </div>
+  `, async () => {
+    const reason = document.getElementById('ow-reason').value.trim();
+    if (reason.length < 3) {
+      showToast('Please write why you are checking in without the shop WiFi', 'error');
+      resetModalSaveButton(SEND_FOR_APPROVAL_HTML);
+      return;
+    }
+
+    const result = await saveAttendance({
+      employee_id: empId,
+      date: todayStr,
+      check_in: new Date().toISOString(),
+      status: 'Pending',
+      notes: `${OFF_WIFI_NOTE} · Reason: ${reason} · Network: ${verify.currentIp || 'Unknown'}`
+    });
+
+    if (result) {
+      closeModal();
+      showToast('Check-in sent to the owner for approval');
+      if (typeof window.render === 'function') await window.render();
+    } else {
+      showToast('Could not send the check-in. Please try again.', 'error');
+      resetModalSaveButton(SEND_FOR_APPROVAL_HTML);
+    }
+  });
+
+  resetModalSaveButton(SEND_FOR_APPROVAL_HTML);
+}
+
+async function findPendingCheckIn(logId) {
+  const log = (await fetchAttendance()).find(a => a.id === logId);
+  if (!log || log.status !== 'Pending') {
+    showToast('This check-in was already decided', 'error');
+    if (typeof window.render === 'function') await window.render();
+    return null;
+  }
+  return log;
+}
+
+/**
+ * Owner approves an off-WiFi check-in: it counts as Present or Late from the time they checked in
+ */
+export async function approveOffWifiCheckIn(logId) {
+  const log = await findPendingCheckIn(logId);
+  if (!log) return false;
+
+  const emp = (await fetchEmployees().catch(() => [])).find(e => e.id === log.employee_id);
+  const result = await saveAttendance({
+    ...log,
+    status: getCheckInStatus(emp, new Date(log.check_in)),
+    notes: `Approved by owner · ${log.notes}`
+  });
+  if (!result) return false;
+
+  showToast('Check-in approved');
+  if (typeof window.render === 'function') await window.render();
+  return true;
+}
+
+/**
+ * Owner rejects an off-WiFi check-in: it stays in the log but never counts as attendance
+ */
+export async function rejectOffWifiCheckIn(logId) {
+  const confirmed = await showConfirmDelete('Don\'t Approve Check-In', 'This day will not count as attendance for this employee.', 'Don\'t Approve');
+  if (!confirmed) return false;
+
+  const log = await findPendingCheckIn(logId);
+  if (!log) return false;
+
+  const result = await saveAttendance({ ...log, status: 'Rejected', notes: `Not approved by owner · ${log.notes}` });
+  if (!result) return false;
+
+  showToast('Check-in not approved');
+  if (typeof window.render === 'function') await window.render();
+  return true;
 }
 
 /**
@@ -594,7 +786,18 @@ export function initLiveWifiStatus() {
     const config = getShopWifiConfig();
 
     if (!config.configured) {
-      pill.innerHTML = `<i class="ti ti-alert-triangle" style="font-size:14px; color:#d97706;"></i> <span>Shop WiFi not captured yet. Connect to salon router and tap <strong>"Capture Shop WiFi Router"</strong></span>`;
+      pill.innerHTML = `<i class="ti ti-alert-triangle" style="font-size:14px; color:#d97706;"></i> <span>Shop WiFi not captured yet, so staff can't check in. Connect to salon router and tap <strong>"Capture Shop WiFi Router"</strong></span>`;
+      pill.style.background = 'rgba(217,119,6,0.1)';
+      pill.style.borderColor = 'rgba(217,119,6,0.3)';
+      pill.style.color = '#b45309';
+      return;
+    }
+
+    // Staff phones only get the WiFi once it is stored in the database
+    if (window._shopWifiShareState !== 'shared') {
+      pill.innerHTML = window._shopWifiShareState === 'unavailable'
+        ? `<i class="ti ti-alert-triangle" style="font-size:14px; color:#d97706;"></i> <span>Staff phones can't read the shop WiFi. If not done yet, run <strong>shop_settings_migration.sql</strong> in Supabase, then tap <strong>"Re-capture Shop WiFi"</strong> at the salon</span>`
+        : `<i class="ti ti-alert-triangle" style="font-size:14px; color:#d97706;"></i> <span>Shop WiFi is saved on this phone only, so staff can't check in. Tap <strong>"Re-capture Shop WiFi"</strong> at the salon</span>`;
       pill.style.background = 'rgba(217,119,6,0.1)';
       pill.style.borderColor = 'rgba(217,119,6,0.3)';
       pill.style.color = '#b45309';
@@ -620,8 +823,11 @@ window.openCaptureWifiModal = openCaptureWifiModal;
 window.openWifiSettingsModal = openWifiSettingsModal;
 window.openQuickWifiPunchModal = openQuickWifiPunchModal;
 window.handleWifiCheckIn = handleWifiCheckIn;
+window.approveOffWifiCheckIn = approveOffWifiCheckIn;
+window.rejectOffWifiCheckIn = rejectOffWifiCheckIn;
 window.verifyShopWifiConnection = verifyShopWifiConnection;
 window.getShopWifiConfig = getShopWifiConfig;
+window.loadShopWifiConfig = loadShopWifiConfig;
 window.saveShopWifiConfig = saveShopWifiConfig;
 window.detectCurrentNetwork = detectCurrentNetwork;
 window.renderWifiAttendanceCard = renderWifiAttendanceCard;

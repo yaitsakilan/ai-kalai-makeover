@@ -42,6 +42,11 @@ export function getSelectedChips(groupId) {
   return selected.join(', ');
 }
 
+// For text typed by staff that is shown on the owner's screens
+export function escapeHtml(text) {
+  return String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 export function formatEmpTag(text) {
   if (!text) return { cleanText: '', tagHtml: '' };
   const match = text.match(/\[Emp(?::\s*([^\]]+))?\]/i);
@@ -127,6 +132,19 @@ export function getUniqueCustomersMap(customers) {
     }
   });
   return map;
+}
+
+/**
+ * Finds the existing customer for a full phone number, grouping duplicate records the same way
+ * getUniqueCustomersMap does. The group's primary is the record with the latest visit.
+ * @param {string} phone
+ * @param {Array} customers
+ * @returns {Object|null} { primary, records, totalVisits, totalSpend } or null if no match
+ */
+export function findRepeatCustomerByPhone(phone, customers) {
+  const cleanPhone = validateAndCleanPhone(phone);
+  if (!cleanPhone) return null;
+  return getUniqueCustomersMap(customers).get(`phone:${cleanPhone}`) || null;
 }
 
 /**

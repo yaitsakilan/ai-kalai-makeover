@@ -2,10 +2,11 @@
 import { state } from '../state.js';
 import { fetchCustomers, addCustomer, updateCustomer, deleteCustomer, addClassEnrollment, addClassPayment } from '../db.js';
 import { showToast, showModal, closeModal, closeFormOverlay, showConfirmDelete } from '../ui.js';
-import { validateAndCleanPhone, formatEmpTag, formatVisitedDate, getUniqueCustomersMap, getEffectiveVisits, sortCustomersList, getOrdinalVisit, getCustomerVisits, getAvailableYears } from '../utils.js';
+import { validateAndCleanPhone, formatEmpTag, formatVisitedDate, getUniqueCustomersMap, getEffectiveVisits, sortCustomersList, getOrdinalVisit, getCustomerVisits, getAvailableYears, findRepeatCustomerByPhone } from '../utils.js';
 import { callGroqAPI } from '../api.js';
 import { calculateModuleStreak, renderModuleStreakWidget } from '../streak.js';
 import { renderDateFilterTrigger, isDateInModuleFilter, getModuleDateFilter } from '../dateFilter.js';
+import { sendCustomerBill, billSendButtonHtml } from '../whatsappBill.js';
 
 export async function renderCustomers() {
   const customers = await fetchCustomers();
@@ -709,6 +710,14 @@ Make it concise, insightful, and formatted beautifully.`
 
 export function openShopCustomerForm() {
   window._selectedExistingCustomer = null;
+  window._phoneAutofill = null;
+  window._dismissedPhoneMatch = null;
+  // Load the latest customers so repeat clients are recognized from any page, including ones added this session
+  fetchCustomers().then(customers => {
+    window._cachedCustomers = customers;
+    const phoneInput = document.getElementById('sf-phone');
+    if (phoneInput && phoneInput.value) handlePhoneLookup(phoneInput.value);
+  }).catch(err => console.warn('Could not refresh customers for repeat lookup:', err));
   const today = new Date().toISOString().split('T')[0];
   const container = document.getElementById('form-overlay-container');
   if (!container) return;
@@ -810,19 +819,25 @@ export function openShopCustomerForm() {
     </div>`;
 }
 
-export function getServiceRowHtml(serviceName, rowId, amount = 0, method = 'Cash', chipName = '') {
-  const isBoth = method === 'Both';
-  const amountHtml = isBoth
-    ? `
-      <input type="number" placeholder="Cash" class="sa-cash-input" value="${amount ? Math.round(amount/2) : ''}" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+function getServiceAmountInputsHtml(amount, method) {
+  if (method === 'Both') {
+    const cash = amount ? Math.round(amount / 2) : '';
+    const gpay = amount ? amount - cash : '';
+    return `
+      <input type="number" placeholder="Cash" class="sa-cash-input" value="${cash}" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
       <span style="font-size:10px;color:#999">+</span>
-      <input type="number" placeholder="GPay" class="sa-gpay-input" value="${amount ? Math.round(amount/2) : ''}" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
-    `
-    : `
+      <input type="number" placeholder="GPay" class="sa-gpay-input" value="${gpay}" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
+    `;
+  }
+  return `
       <span style="font-size:12px;color:#888">₹</span>
       <input type="number" placeholder="Amount" class="sa-amount-input" value="${amount || ''}" oninput="window.updateServiceTotal()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
     `;
-    
+}
+
+export function getServiceRowHtml(serviceName, rowId, amount = 0, method = 'Cash', chipName = '') {
+  const amountHtml = getServiceAmountInputsHtml(amount, method);
+
   const isSaree = serviceName.toLowerCase().includes('saree');
   const qtyHtml = isSaree
     ? `
@@ -877,19 +892,15 @@ export function handleServiceMethodChange(selectEl) {
   if (!row) return;
   const container = row.querySelector('.sa-amount-container');
   if (!container) return;
-  
-  const val = selectEl.value;
-  if (val === 'Both') {
-    container.innerHTML = `
-      <input type="number" placeholder="Cash" class="sa-cash-input" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
-      <span style="font-size:10px;color:#999">+</span>
-      <input type="number" placeholder="GPay" class="sa-gpay-input" oninput="window.updateServiceTotal()" style="width: 65px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
-    `;
-  } else {
-    container.innerHTML = `
-      <span style="font-size:12px;color:#888">₹</span>
-      <input type="number" placeholder="Amount" class="sa-amount-input" oninput="window.updateServiceTotal()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
-    `;
+
+  // Carry the entered amount over to the new method instead of clearing it
+  const amountInput = container.querySelector('.sa-amount-input');
+  const amount = amountInput
+    ? parseInt(amountInput.value) || 0
+    : (parseInt(container.querySelector('.sa-cash-input')?.value) || 0) + (parseInt(container.querySelector('.sa-gpay-input')?.value) || 0);
+  // Cash <-> GPay share the same amount box, so only rebuild when moving to or from Both
+  if (selectEl.value === 'Both' || !amountInput) {
+    container.innerHTML = getServiceAmountInputsHtml(amount, selectEl.value);
   }
   updateServiceTotal();
 }
@@ -1025,6 +1036,69 @@ export function setStarRating(rating) {
   document.getElementById('form-rating-value').value = rating;
 }
 
+// Visit history stored on this one record. Other records with the same phone keep their own and
+// getUniqueCustomersMap adds them together, so they must not be copied in here.
+function getRecordVisitHistory(record) {
+  const hasHistory = Array.isArray(record.visit_history) && record.visit_history.length > 0;
+  if (hasHistory || (typeof record.visits === 'number' && record.visits > 1)) {
+    return getCustomerVisits(record, []);
+  }
+  // A single earlier visit keeps all its services together
+  const services = Array.isArray(record.services)
+    ? record.services
+    : (typeof record.services === 'string' && record.services.trim()
+      ? record.services.split(',').map(s => s.trim())
+      : []);
+  return [{
+    visit_num: 1,
+    date: record.last_visit || record.created_at,
+    services,
+    amount: Number(record.amount || record.total_spend || 0),
+    payment_method: record.payment_method || 'Cash'
+  }];
+}
+
+/**
+ * Adds a visit to an existing customer record (shop form and AI chat repeat clients).
+ * name and location replace the stored values only when provided.
+ */
+export async function recordRepeatVisit(existing, { name, location, services, amount, paymentMethod, paymentStatus = 'paid', date, rating }) {
+  const visitAmount = Number(amount) || 0;
+  const priorVisits = getRecordVisitHistory(existing);
+  const newVisits = Math.max(existing.visits || 1, priorVisits.length) + 1;
+  const visitHistory = [...priorVisits, {
+    visit_num: priorVisits.length + 1,
+    date,
+    services,
+    amount: visitAmount,
+    payment_method: paymentMethod
+  }];
+
+  const existingSvcs = Array.isArray(existing.services)
+    ? existing.services
+    : (typeof existing.services === 'string' && existing.services.trim()
+      ? existing.services.split(',').map(s => s.trim())
+      : []);
+  // Keep the "added by employee" tag on the stored name
+  const empTag = ((existing.name || '').match(/\s*\[Emp(?::\s*[^\]]+)?\]/i) || [''])[0];
+  // A backdated visit must not move last_visit earlier
+  const lastVisit = existing.last_visit && String(existing.last_visit).slice(0, 10) > date ? existing.last_visit : date;
+
+  return updateCustomer(existing.id, {
+    name: name ? formatEmpTag(name).cleanText + empTag : existing.name,
+    location: location || existing.location,
+    services: [...new Set([...existingSvcs, ...services])],
+    amount: visitAmount,
+    payment_status: paymentStatus,
+    payment_method: paymentMethod,
+    last_visit: lastVisit,
+    total_spend: (Number(existing.total_spend) || Number(existing.amount) || 0) + visitAmount,
+    visits: newVisits,
+    rating: rating || existing.rating || 5,
+    visit_history: visitHistory
+  });
+}
+
 export async function submitShopCustomerForm() {
   const name = document.getElementById('sf-name').value.trim();
   if (!name) { showToast('Please enter customer name', 'error'); return; }
@@ -1065,40 +1139,18 @@ export async function submitShopCustomerForm() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="dot-anim"><span></span><span></span><span></span></div> Saving...'; }
 
   let result;
-  if (window._selectedExistingCustomer && window._selectedExistingCustomer.id) {
-    const existing = window._selectedExistingCustomer;
-    const currentVisits = getCustomerVisits(existing, window._cachedCustomers || []);
-    const newVisits = (existing.visits || currentVisits.length || 1) + 1;
-    const newTotalSpend = (existing.total_spend || existing.amount || 0) + totalAmount;
-
-    const newVisitEntry = {
-      visit_num: newVisits,
-      date: date,
+  const existing = window._selectedExistingCustomer;
+  // Only a repeat visit when the recognized client's number is the one being saved
+  if (existing && existing.id && phoneVal && validateAndCleanPhone(existing.phone) === phoneVal) {
+    result = await recordRepeatVisit(existing, {
+      name,
+      location,
       services: serviceNames,
       amount: totalAmount,
-      payment_method: overallPaymentMethod
-    };
-    const updatedVisitHistory = [...currentVisits, newVisitEntry];
-
-    const existingSvcs = Array.isArray(existing.services)
-      ? existing.services
-      : (typeof existing.services === 'string' && existing.services.trim()
-        ? existing.services.split(',').map(s => s.trim())
-        : []);
-    const mergedServices = [...new Set([...existingSvcs, ...serviceNames])];
-
-    result = await updateCustomer(existing.id, {
-      name: name || existing.name,
-      location: location || existing.location,
-      services: mergedServices,
-      amount: totalAmount,
-      payment_status: 'paid',
-      payment_method: overallPaymentMethod,
-      last_visit: date,
-      total_spend: newTotalSpend,
-      visits: newVisits,
-      rating: rating || existing.rating || 5,
-      visit_history: updatedVisitHistory
+      paymentMethod: overallPaymentMethod,
+      paymentStatus: 'paid',
+      date,
+      rating
     });
   } else {
     const initialVisit = [{
@@ -1159,6 +1211,9 @@ export function promptWhatsAppBill(customerName, phone, services, amount, date, 
     return;
   }
 
+  // Names saved from staff phones carry an [Emp: ...] tag that must not appear on the customer's bill
+  customerName = formatEmpTag(customerName).cleanText;
+
   let servicesText = '';
   if (serviceBreakdown && Array.isArray(serviceBreakdown) && serviceBreakdown.length > 0) {
     servicesText = serviceBreakdown.map(s => `- ${s.name}: ₹${s.amount.toLocaleString()}`).join('\n');
@@ -1197,24 +1252,20 @@ Kalai Makeover
       <label class="form-label">WhatsApp Message Preview</label>
       <textarea class="form-input" id="wa-bill-message" style="height:200px;font-family:monospace;white-space:pre-wrap;resize:vertical;line-height:1.4;">${defaultMessage}</textarea>
     </div>
-  `, () => {
+  `, async () => {
     const editedMessage = document.getElementById('wa-bill-message').value.trim();
     if (!editedMessage) {
       showToast('Message text cannot be empty.', 'error');
       return;
     }
-    const fullPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone;
-    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(editedMessage)}`;
-    window.open(url, '_blank');
-    closeModal();
-    showToast('WhatsApp opened in a new tab!');
+    await sendCustomerBill({ customerName, phone: cleanedPhone, message: editedMessage, kind: 'Shop Bill' });
   });
 
   // Customize modal save button to represent WhatsApp action
   setTimeout(() => {
     const saveBtn = document.getElementById('modal-save-btn');
     if (saveBtn) {
-      saveBtn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Send Bill';
+      saveBtn.innerHTML = billSendButtonHtml('Send Bill');
       saveBtn.style.background = '#25d366';
       saveBtn.style.borderColor = '#25d366';
       saveBtn.style.color = '#fff';
@@ -1524,109 +1575,119 @@ export function updateClassesBothTotal() {
   }
 }
 
+// Fields filled from a recognized client's record: [input id, value from the record]
+const PHONE_AUTOFILL_FIELDS = [
+  ['sf-name', c => formatEmpTag(c.name).cleanText],
+  ['sf-location', c => c.location || ''],
+  ['form-rating-value', c => c.rating ? String(c.rating) : '']
+];
+
+function setShopFormField(id, value) {
+  if (id === 'form-rating-value') {
+    window.setStarRating(parseInt(value, 10) || 0);
+    return;
+  }
+  const el = document.getElementById(id);
+  if (el) el.value = value;
+}
+
+// Fills the form from the matched record, remembering each field's earlier value so it can be put back
+function applyPhoneAutofill(match, previous = {}) {
+  const fill = { id: match.id, previous: { ...previous }, filled: {} };
+  PHONE_AUTOFILL_FIELDS.forEach(([id, getValue]) => {
+    const el = document.getElementById(id);
+    const value = getValue(match);
+    if (!el || !value) return;
+    if (!(id in fill.previous)) fill.previous[id] = el.value;
+    setShopFormField(id, value);
+    fill.filled[id] = value;
+  });
+  window._phoneAutofill = fill;
+}
+
+// Puts back each auto-filled field's earlier value, unless the user has edited it since
+function undoPhoneAutofill() {
+  const fill = window._phoneAutofill;
+  window._phoneAutofill = null;
+  if (!fill) return;
+  Object.entries(fill.filled).forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el && el.value === value) setShopFormField(id, fill.previous[id] || '');
+  });
+}
+
 export function applyRecognizedCustomerDetails(customerId) {
   const match = window._selectedExistingCustomer || (window._cachedCustomers || []).find(c => String(c.id) === String(customerId));
   if (!match) return;
 
   window._selectedExistingCustomer = match;
-
-  const phoneInput = document.getElementById('sf-phone');
-  const nameInput = document.getElementById('sf-name');
-  const locInput = document.getElementById('sf-location');
-
-  if (phoneInput && match.phone) {
-    phoneInput.value = match.phone;
-  }
-
-  if (nameInput) {
-    const cleanName = match.name ? match.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim() : '';
-    nameInput.value = cleanName;
-  }
-
-  if (locInput && match.location) {
-    locInput.value = match.location;
-  }
-
-  if (match.rating && typeof window.setStarRating === 'function') {
-    window.setStarRating(match.rating);
-  }
+  const fill = window._phoneAutofill;
+  applyPhoneAutofill(match, fill && fill.id === match.id ? fill.previous : {});
 
   if (typeof window.showToast === 'function') {
-    window.showToast(`Auto-filled details for ${match.name ? match.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim() : 'Customer'}`, 'success');
+    window.showToast(`Auto-filled details for ${formatEmpTag(match.name).cleanText || 'Customer'}`, 'success');
   }
 }
 
 export function handlePhoneLookup(val) {
-  const cleanDigits = (val || '').replace(/\D/g, '');
   const matchCard = document.getElementById('sf-phone-match-card');
+  // Only a full, valid number identifies a client; partial digits match the wrong person
+  const cleanPhone = validateAndCleanPhone(val);
+  const isDismissed = !!cleanPhone && cleanPhone === window._dismissedPhoneMatch;
+  const group = cleanPhone && !isDismissed ? findRepeatCustomerByPhone(cleanPhone, window._cachedCustomers || []) : null;
 
-  if (cleanDigits.length < 3) {
+  if (!group) {
     window._selectedExistingCustomer = null;
-    if (matchCard) matchCard.innerHTML = '';
+    undoPhoneAutofill();
+    if (matchCard) {
+      matchCard.innerHTML = isDismissed
+        ? `<div style="font-size:11px; color:#888; margin:-4px 0 10px; display:flex; align-items:center; gap:4px;"><i class="ti ti-user-plus"></i> Will be saved as a new client with this number.</div>`
+        : '';
+    }
     return;
   }
 
-  const cached = window._cachedCustomers || [];
-  const match = cached.find(c => {
-    if (!c.phone) return false;
-    const cPhoneClean = c.phone.toString().replace(/\D/g, '');
-    return cPhoneClean.endsWith(cleanDigits) || cPhoneClean.includes(cleanDigits);
-  });
-
-  if (match) {
-    window._selectedExistingCustomer = match;
-    const nameInput = document.getElementById('sf-name');
-    const locInput = document.getElementById('sf-location');
-    if (nameInput && !nameInput.value.trim()) {
-      nameInput.value = match.name ? match.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim() : '';
-    }
-    if (locInput && !locInput.value.trim()) {
-      locInput.value = match.location || '';
-    }
-    if (match.rating) {
-      window.setStarRating(match.rating);
-    }
-
-    const cleanName = match.name ? match.name.replace(/\s*\[emp(?::\s*([^\]]+))?\]/gi, '').trim() : 'Customer';
-    const totalSpend = match.total_spend || match.amount || 0;
-    const visits = match.visits || 1;
-    const lastVisit = match.last_visit || 'N/A';
-
-    if (matchCard) {
-      matchCard.innerHTML = `
-        <div onclick="window.applyRecognizedCustomerDetails('${match.id}')" style="cursor:pointer; background: linear-gradient(135deg, rgba(217,119,6,0.1), rgba(245,200,66,0.18)); border: 1.5px dashed #d97706; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: 12px; animation: fadeIn 0.2s ease;" title="Click to auto-fill full phone, name & location">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-            <span style="font-weight:700; color:#d97706; font-size:12px; display:inline-flex; align-items:center; gap:4px;">
-              <i class="ti ti-sparkles" style="font-size:14px"></i> Repeat Client Recognized!
-            </span>
-            <button type="button" onclick="event.stopPropagation(); window.clearPhoneMatch()" style="background:none; border:none; color:#dc2626; font-size:11px; cursor:pointer; font-weight:600; text-decoration:underline;">Not this client?</button>
-          </div>
-          <div style="color:#1a1a1a; font-weight:700; font-size:13px; margin-bottom:2px;">${cleanName} · ${match.phone || ''}</div>
-          <div style="color:#555; font-size:11px; display:flex; gap:12px; flex-wrap:wrap; margin-bottom:4px">
-            <span>📍 <strong>Location:</strong> ${match.location || 'No location'}</span>
-            <span>📅 <strong>Last Visit:</strong> ${lastVisit}</span>
-            <span>⭐ <strong>Visits:</strong> ${visits}</span>
-            <span>💰 <strong>Total Spend:</strong> ₹${totalSpend.toLocaleString()}</span>
-          </div>
-          <div style="font-size:11px; color:#d97706; font-weight:600; display:flex; align-items:center; gap:4px">
-            <i class="ti ti-hand-click"></i> 👉 Tap here to auto-fill full phone number (${match.phone}), name & location!
-          </div>
-        </div>`;
-    }
-  } else {
-    window._selectedExistingCustomer = null;
-    if (matchCard) matchCard.innerHTML = '';
+  const match = group.primary;
+  window._selectedExistingCustomer = match;
+  if (!window._phoneAutofill || window._phoneAutofill.id !== match.id) {
+    undoPhoneAutofill();
+    applyPhoneAutofill(match);
   }
+
+  if (!matchCard) return;
+  const cleanName = formatEmpTag(match.name).cleanText || 'Customer';
+  // Visits and spend across every record with this number, matching the analytics totals
+  const visits = group.totalVisits;
+  const totalSpend = group.totalSpend;
+  const lastVisit = formatVisitedDate(match.last_visit);
+
+  matchCard.innerHTML = `
+    <div onclick="window.applyRecognizedCustomerDetails('${match.id}')" style="cursor:pointer; background: linear-gradient(135deg, rgba(217,119,6,0.1), rgba(245,200,66,0.18)); border: 1.5px dashed #d97706; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: 12px; animation: fadeIn 0.2s ease;" title="Click to re-apply name, location & rating">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+        <span style="font-weight:700; color:#d97706; font-size:12px; display:inline-flex; align-items:center; gap:4px;">
+          <i class="ti ti-sparkles" style="font-size:14px"></i> Repeat Client Recognized!
+        </span>
+        <button type="button" onclick="event.stopPropagation(); window.clearPhoneMatch()" style="background:none; border:none; color:#dc2626; font-size:11px; cursor:pointer; font-weight:600; text-decoration:underline;">Not this client?</button>
+      </div>
+      <div style="color:#1a1a1a; font-weight:700; font-size:13px; margin-bottom:2px;">${cleanName} · ${match.phone || ''}</div>
+      <div style="color:#555; font-size:11px; display:flex; gap:12px; flex-wrap:wrap; margin-bottom:4px">
+        <span>📍 <strong>Location:</strong> ${match.location || 'No location'}</span>
+        <span>📅 <strong>Last Visit:</strong> ${lastVisit}</span>
+        <span>⭐ <strong>Visits:</strong> ${visits}</span>
+        <span>💰 <strong>Total Spend:</strong> ₹${totalSpend.toLocaleString()}</span>
+      </div>
+      <div style="font-size:11px; color:#d97706; font-weight:600; display:flex; align-items:center; gap:4px">
+        <i class="ti ti-hand-click"></i> 👉 Name, location & rating filled from their record. Tap to re-apply.
+      </div>
+    </div>`;
 }
 
 export function clearPhoneMatch() {
-  window._selectedExistingCustomer = null;
-  const matchCard = document.getElementById('sf-phone-match-card');
-  if (matchCard) matchCard.innerHTML = '';
-  const nameInput = document.getElementById('sf-name');
-  const locInput = document.getElementById('sf-location');
-  if (nameInput) nameInput.value = '';
-  if (locInput) locInput.value = '';
+  const phoneInput = document.getElementById('sf-phone');
+  const phone = phoneInput ? phoneInput.value : '';
+  // Keep this number from re-selecting the same client while the form is open
+  window._dismissedPhoneMatch = validateAndCleanPhone(phone);
+  handlePhoneLookup(phone);
 }
 
 // Bind to window to allow HTML inline click handlers to execute

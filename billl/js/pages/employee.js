@@ -527,11 +527,18 @@ export async function renderEmployeePage() {
           <i class="ti ti-login"></i> Check In
         </button>
       `;
+    } else if (todayLog.status === 'Rejected') {
+      headerAttendanceHtml = `
+        <span style="font-size:10.5px; color:#dc2626; font-weight:600; background:rgba(220,38,38,0.08); padding:4px 8px; border-radius:8px; border:1px solid rgba(220,38,38,0.25); display:inline-flex; align-items:center; gap:4px;">
+          <i class="ti ti-x"></i> Check-in not approved
+        </span>
+      `;
     } else if (todayLog.check_in && !todayLog.check_out) {
       const checkInTime = new Date(todayLog.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      const isPending = todayLog.status === 'Pending';
       headerAttendanceHtml = `
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:10.5px; color:#22c55e; font-weight:600; background:rgba(34,197,94,0.1); padding:4px 8px; border-radius:8px; border:1px solid rgba(34,197,94,0.25);">In: ${checkInTime}</span>
+          <span style="font-size:10.5px; color:${isPending ? '#d97706' : '#22c55e'}; font-weight:600; background:${isPending ? 'rgba(217,119,6,0.1)' : 'rgba(34,197,94,0.1)'}; padding:4px 8px; border-radius:8px; border:1px solid ${isPending ? 'rgba(217,119,6,0.3)' : 'rgba(34,197,94,0.25)'};">In: ${checkInTime}${isPending ? ' · Awaiting approval' : ''}</span>
           <button class="btn btn-gold" onclick="window.handleEmpCheckOut('${todayLog.id}')" style="background:#eab308; color:#fff; font-weight:600; padding:4px 12px; font-size:11px; height:30px; border-radius:8px; border:none; cursor:pointer; display:flex; align-items:center; gap:4px; margin-top:0; box-shadow:0 4px 12px rgba(234,179,8,0.2);">
             <i class="ti ti-logout"></i> Check Out
           </button>
@@ -540,9 +547,10 @@ export async function renderEmployeePage() {
     } else {
       const checkInTime = new Date(todayLog.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       const checkOutTime = new Date(todayLog.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      const isPending = todayLog.status === 'Pending';
       headerAttendanceHtml = `
-        <span style="font-size:10.5px; color:#22c55e; font-weight:700; background:rgba(34,197,94,0.1); padding:4px 8px; border-radius:8px; border:1px solid rgba(34,197,94,0.25); display:inline-flex; align-items:center; gap:4px;" title="In: ${checkInTime} · Out: ${checkOutTime}">
-          <i class="ti ti-circle-check"></i> Shift Done
+        <span style="font-size:10.5px; color:${isPending ? '#d97706' : '#22c55e'}; font-weight:700; background:${isPending ? 'rgba(217,119,6,0.1)' : 'rgba(34,197,94,0.1)'}; padding:4px 8px; border-radius:8px; border:1px solid ${isPending ? 'rgba(217,119,6,0.3)' : 'rgba(34,197,94,0.25)'}; display:inline-flex; align-items:center; gap:4px;" title="In: ${checkInTime} · Out: ${checkOutTime}">
+          <i class="ti ti-circle-check"></i> Shift Done${isPending ? ' · Awaiting approval' : ''}
         </span>
       `;
     }
@@ -699,41 +707,9 @@ window.updateEmpPortalStatus = function() {
   }
 };
 
+// Staff can only check in through the salon WiFi check
 window.handleEmpCheckIn = async function(empId) {
-  if (typeof handleWifiCheckIn === 'function') {
-    return await handleWifiCheckIn(empId);
-  } else if (typeof window.handleWifiCheckIn === 'function') {
-    return await window.handleWifiCheckIn(empId);
-  }
-
-  const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
-  
-  // Calculate if check-in is Late
-  let status = 'Present';
-  const employees = window._cachedEmployees || [];
-  const emp = employees.find(e => e.id === empId);
-  if (emp && emp.shift_start) {
-    const [shHour, shMin] = emp.shift_start.split(':').map(Number);
-    const now = new Date();
-    const shiftTime = new Date(now);
-    shiftTime.setHours(shHour, shMin, 0, 0);
-    if (now > shiftTime) {
-      status = 'Late';
-    }
-  }
-
-  const result = await saveAttendance({
-    employee_id: empId,
-    date: todayStr,
-    check_in: new Date().toISOString(),
-    status: status,
-    notes: 'WiFi Verified'
-  });
-
-  if (result) {
-    showToast(status === 'Late' ? 'Checked in! Marked as Late Entry ⏰' : 'Checked in successfully!');
-    if (typeof window.render === 'function') await window.render();
-  }
+  return await handleWifiCheckIn(empId);
 };
 
 window.handleEmpCheckOut = async function(logId) {

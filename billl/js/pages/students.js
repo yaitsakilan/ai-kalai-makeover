@@ -10,6 +10,7 @@ import {
 } from '../db.js';
 import { showToast, showModal, closeModal, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone, formatEmpTag } from '../utils.js';
+import { sendCustomerBill, billSendButtonHtml } from '../whatsappBill.js';
 
 export async function renderStudents() {
   const students = await fetchClassEnrollments();
@@ -407,6 +408,8 @@ export function promptStudentWhatsAppBill(studentId, paidAmount = null, paymentD
     return;
   }
 
+  // Students enrolled from staff phones carry an [Emp: ...] tag that must not appear on the receipt
+  const studentName = formatEmpTag(student.name).cleanText;
   const totalFee = student.total_fee || 0;
   const totalPaid = student.total_paid || 0;
   const pending = totalFee - totalPaid;
@@ -426,7 +429,7 @@ export function promptStudentWhatsAppBill(studentId, paidAmount = null, paymentD
 
   const defaultMessage = `${billHeadline}
 
-Hello ${student.name},
+Hello ${studentName},
 
 Here is the update regarding your course enrollment fees.
 
@@ -447,30 +450,26 @@ Kalai Makeover
 
   showModal('Send Receipt via WhatsApp', `
     <div style="font-size:13px; color:#555; margin-bottom:14px;">
-      Customize WhatsApp invoice message for <strong>${student.name}</strong>:
+      Customize WhatsApp invoice message for <strong>${studentName}</strong>:
     </div>
     <div class="form-group">
       <label class="form-label">WhatsApp Message Preview</label>
       <textarea class="form-input" id="wa-student-message" style="height:220px; font-family:monospace; white-space:pre-wrap; resize:vertical; line-height:1.4;">${defaultMessage}</textarea>
     </div>
-  `, () => {
+  `, async () => {
     const editedMessage = document.getElementById('wa-student-message').value.trim();
     if (!editedMessage) {
       showToast('Message text cannot be empty.', 'error');
       return;
     }
-    const fullPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone;
-    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(editedMessage)}`;
-    window.open(url, '_blank');
-    closeModal();
-    showToast('WhatsApp opened in a new tab!');
+    await sendCustomerBill({ customerName: studentName, phone: cleanedPhone, message: editedMessage, kind: 'Student Receipt' });
   });
 
   // Customize modal button
   setTimeout(() => {
     const saveBtn = document.getElementById('modal-save-btn');
     if (saveBtn) {
-      saveBtn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Send Status';
+      saveBtn.innerHTML = billSendButtonHtml('Send Status');
       saveBtn.style.background = '#25d366';
       saveBtn.style.borderColor = '#25d366';
       saveBtn.style.color = '#fff';

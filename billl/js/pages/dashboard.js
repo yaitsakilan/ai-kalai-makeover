@@ -1,7 +1,97 @@
 // billl/js/pages/dashboard.js
-import { fetchCustomers, fetchEvents, fetchExpenses, fetchClassEnrollments, fetchJewels, fetchEmployees } from '../db.js';
-import { formatEmpTag } from '../utils.js';
+import { fetchCustomers, fetchEvents, fetchExpenses, fetchClassEnrollments, fetchJewels, fetchEmployees, fetchPendingBills, updatePendingBillStatus, fetchAttendance } from '../db.js';
+import { formatEmpTag, escapeHtml } from '../utils.js';
 import { calculateModuleStreak } from '../streak.js';
+import { showConfirmDelete } from '../ui.js';
+import { openWhatsAppChat } from '../whatsappBill.js';
+import { getOffWifiReason } from '../wifi.js';
+
+// Staff check-ins made away from the shop WiFi, waiting for the owner to approve
+function renderCheckInApprovals(pendingCheckIns, employees) {
+  if (!pendingCheckIns.length) return '';
+  return `
+  <div class="card" style="margin-bottom:20px;">
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+      <span style="display:inline-flex; align-items:center; gap:8px;">
+        <i class="ti ti-wifi-off" style="color:#d97706;font-size:17px"></i> Check-ins to Approve
+      </span>
+      <span class="badge badge-amber" style="font-size:11px; font-weight:600;">${pendingCheckIns.length} off shop WiFi</span>
+    </div>
+    ${pendingCheckIns.map(a => {
+      const emp = employees.find(e => e.id === a.employee_id);
+      const when = new Date(a.check_in).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return `
+      <div class="dash-subcard" style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; border-radius:10px;">
+        <div style="flex:1; min-width:0; margin-right:10px;">
+          <div class="dash-customer-name" style="font-size:13px; font-weight:600;">
+            ${escapeHtml(emp?.name || 'Staff')} <span class="dash-item-sub-muted" style="font-size:11px; font-weight:400;">· ${when}</span>
+          </div>
+          <div class="dash-item-sub-muted" style="font-size:11.5px; margin-top:2px; overflow-wrap:anywhere;">
+            ${escapeHtml(getOffWifiReason(a.notes) || 'No reason given')}
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="btn" onclick="window.approveOffWifiCheckIn('${a.id}')" style="background:#22c55e; color:#fff; padding:4px 10px; font-size:11px; height:26px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; border:none;">
+            <i class="ti ti-check" style="font-size:13px;"></i> Approve
+          </button>
+          <button class="btn btn-outline btn-icon" onclick="window.rejectOffWifiCheckIn('${a.id}')" title="Don't approve" style="width:26px; height:26px; padding:0;">
+            <i class="ti ti-x" style="font-size:12px;"></i>
+          </button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// Bills staff prepared on their phones. Sending them from here makes them go out from the owner's WhatsApp.
+function renderBillsToSend(bills) {
+  if (!bills.length) return '';
+  return `
+  <div class="card" style="margin-bottom:20px;">
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+      <span style="display:inline-flex; align-items:center; gap:8px;">
+        <i class="ti ti-brand-whatsapp" style="color:#25d366;font-size:17px"></i> Bills to Send
+      </span>
+      <span class="badge badge-amber" style="font-size:11px; font-weight:600;">${bills.length} from staff</span>
+    </div>
+    ${bills.map(b => `
+      <div class="dash-subcard" style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; border-radius:10px;">
+        <div style="flex:1; min-width:0; margin-right:10px;">
+          <div class="dash-customer-name" style="font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${b.customer_name}
+          </div>
+          <div class="dash-item-sub-muted" style="font-size:11px;">
+            ${b.kind || 'Bill'} · by ${b.created_by || 'Staff'} · ${new Date(b.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="btn" onclick="window.sendQueuedBill('${b.id}')" style="background:#25d366; color:#fff; padding:4px 10px; font-size:11px; height:26px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; border:none;" title="Open in your WhatsApp">
+            <i class="ti ti-brand-whatsapp" style="font-size:13px;"></i> Send
+          </button>
+          <button class="btn btn-outline btn-icon" onclick="window.dismissQueuedBill('${b.id}')" title="Remove without sending" style="width:26px; height:26px; padding:0;">
+            <i class="ti ti-x" style="font-size:12px;"></i>
+          </button>
+        </div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+window.sendQueuedBill = async function(billId) {
+  const bill = (window._cachedPendingBills || []).find(b => b.id === billId);
+  if (!bill) return;
+  // Open WhatsApp straight from the tap, before any waiting, so the browser doesn't block the new tab
+  openWhatsAppChat(bill.phone, bill.message);
+  await updatePendingBillStatus(billId, 'sent');
+  if (typeof window.render === 'function') window.render();
+};
+
+window.dismissQueuedBill = async function(billId) {
+  const confirmed = await showConfirmDelete('Remove Bill', 'Remove this bill without sending it to the customer?');
+  if (!confirmed) return;
+  await updatePendingBillStatus(billId, 'dismissed');
+  if (typeof window.render === 'function') window.render();
+};
 
 
 
@@ -381,14 +471,20 @@ function renderAcademyAndJewelsSnapshot(students, jewels) {
 
 
 export async function renderDashboard() {
-  const [customers, events, expenses, students, jewels, employees] = await Promise.all([
+  const [customers, events, expenses, students, jewels, employees, pendingBills, attendance] = await Promise.all([
     fetchCustomers(),
     fetchEvents(),
     fetchExpenses(),
     fetchClassEnrollments().catch(() => []),
     fetchJewels().catch(() => []),
-    fetchEmployees().catch(() => [])
+    fetchEmployees().catch(() => []),
+    fetchPendingBills().catch(() => []),
+    fetchAttendance().catch(() => [])
   ]);
+  window._cachedPendingBills = pendingBills;
+  const pendingCheckIns = attendance
+    .filter(a => a.status === 'Pending')
+    .sort((a, b) => String(a.check_in).localeCompare(String(b.check_in)));
 
   window._cachedAllModulesData = { customers, events, expenses, students, jewels, employees };
   const customerStreak = calculateModuleStreak(customers, 'last_visit', new Date().getMonth());
@@ -533,6 +629,10 @@ export async function renderDashboard() {
       <i class="ti ti-clock metric-icon"></i>
     </div>
   </div>
+
+  ${renderCheckInApprovals(pendingCheckIns, employees)}
+
+  ${renderBillsToSend(pendingBills)}
 
   <!-- 5. Upcoming Events (Left) + Pending Money on Event (Right) -->
   <div class="grid-2">

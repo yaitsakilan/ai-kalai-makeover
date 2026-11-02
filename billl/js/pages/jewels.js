@@ -8,11 +8,34 @@ import {
   fetchJewelRentals, 
   addJewelRental, 
   updateJewelRental, 
-  deleteJewelRental 
+  deleteJewelRental,
+  fetchEvents
 } from '../db.js';
 import { showToast, showModal, closeModal, showConfirmDelete } from '../ui.js';
 import { validateAndCleanPhone, formatEmpTag } from '../utils.js';
 import { callGroqAPI } from '../api.js';
+import { MAKEUP_PACKAGES, findMakeupPackage } from './events.js';
+
+// Jewels given as part of a bridal package are logged with no rental fee; the package price covers them
+const PACKAGE_RENTAL_NOTE = 'From package';
+const includesJewelSet = pkg => pkg.items.some(item => /jewel/i.test(item));
+
+function getJewelPackageBookings(events) {
+  const today = new Date().toISOString().split('T')[0];
+  return events
+    .map(event => {
+      const packages = (event.makeup_type || '').split(',').map(findMakeupPackage).filter(p => p && includesJewelSet(p));
+      return packages.length ? { event, packages: packages.map(p => p.name) } : null;
+    })
+    .filter(Boolean)
+    // Upcoming bookings first, soonest at the top, then past bookings, latest first
+    .sort((a, b) => {
+      const aDate = a.event.date || '', bDate = b.event.date || '';
+      const aUpcoming = aDate >= today, bUpcoming = bDate >= today;
+      if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+      return aUpcoming ? aDate.localeCompare(bDate) : bDate.localeCompare(aDate);
+    });
+}
 
 export async function renderJewels() {
   const jewels = await fetchJewels();
@@ -181,6 +204,9 @@ function renderJewelCards(jewels) {
         
         <div style="display:flex; gap:6px;">
           ${j.status === 'Available' ? `
+            <button class="btn btn-outline" onclick="window.openPackageJewelModal('${j.id}')" title="Give to a bride whose package includes a jewel set (no rental fee)" style="padding: 6px 10px; font-size:11.5px; height:32px;">
+              <i class="ti ti-gift"></i> From Package
+            </button>
             <button class="btn btn-gold" onclick="window.openRentJewelModal('${j.id}')" style="padding: 6px 12px; font-size:11.5px; height:32px;">
               <i class="ti ti-calendar-share"></i> Rent Out
             </button>
@@ -410,6 +436,92 @@ export function openRentJewelModal(jewelId) {
   });
 }
 
+export async function openPackageJewelModal(jewelId) {
+  const jewel = (window._cachedJewels || []).find(j => j.id === jewelId);
+  if (!jewel) return;
+
+  const bookings = getJewelPackageBookings(await fetchEvents());
+  window._packageJewelBookings = bookings;
+  const today = new Date().toISOString().split('T')[0];
+  const jewelPackageNames = MAKEUP_PACKAGES.filter(includesJewelSet).map(p => p.name).join(', ');
+
+  showModal('Give Jewel from Package', `
+    <div style="font-size:12.5px; color:#555; margin-bottom:14px;">
+      Give <strong>${jewel.name}</strong> to a bride whose package includes a jewel set.
+    </div>
+    ${bookings.length ? `
+      <div class="form-group">
+        <label class="form-label">Customer *</label>
+        <select class="form-input form-select" id="mpk-booking" onchange="window.selectPackageJewelBooking(this.value)">
+          <option value="">Choose the bride</option>
+          ${bookings.map(({ event, packages }) => `
+            <option value="${event.id}">${formatEmpTag(event.customer).cleanText} · ${event.date ? new Date(event.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date'} · ${packages.join(', ')}</option>
+          `).join('')}
+        </select>
+      </div>
+    ` : `
+      <div style="font-size:12px; color:#b45309; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
+        No event bookings with a jewel-set package yet (${jewelPackageNames}).
+      </div>
+    `}
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Given On</label>
+        <input class="form-input" id="mpk-rent-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Est. Return Date</label>
+        <input class="form-input" id="mpk-return-date" type="date" value="${today}" onclick="try{this.showPicker()}catch(e){}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Rental Fee</label>
+      <div style="font-size:13px; color:#15803d; font-weight:600;">₹0 · included in package</div>
+    </div>
+  `, async () => {
+    const bookingId = document.getElementById('mpk-booking')?.value;
+    const booking = bookings.find(b => b.event.id === bookingId);
+    if (!booking) {
+      showToast(bookings.length ? 'Please choose the customer' : 'No package booking to give this jewel to', 'error');
+      return;
+    }
+
+    const { event, packages } = booking;
+    const rental = await addJewelRental({
+      jewel_id: jewelId,
+      customer_name: formatEmpTag(event.customer).cleanText,
+      customer_phone: event.phone || '',
+      rental_date: document.getElementById('mpk-rent-date').value || today,
+      return_date: document.getElementById('mpk-return-date').value || null,
+      rental_fee: 0,
+      deposit: 0,
+      status: 'Active',
+      note: `${PACKAGE_RENTAL_NOTE}: ${packages.join(', ')} · ${event.type || 'Event'} on ${event.date || 'no date'}`
+    });
+
+    if (rental) {
+      // No fee, so the jewel's earnings stay the same
+      await updateJewel(jewelId, { status: 'Rented' });
+      closeModal();
+      if (typeof window.render === 'function') window.render();
+    } else {
+      const btn = document.getElementById('modal-save-btn');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-check"></i> Save';
+      }
+    }
+  });
+}
+
+// Default the dates to the chosen bride's booking date
+export function selectPackageJewelBooking(eventId) {
+  const booking = (window._packageJewelBookings || []).find(b => b.event.id === eventId);
+  if (!booking?.event.date) return;
+  document.getElementById('mpk-rent-date').value = booking.event.date;
+  document.getElementById('mpk-return-date').value = booking.event.date;
+}
+
 export async function openReturnJewelModal(jewelId) {
   const rentals = await fetchJewelRentals(jewelId);
   const activeRental = rentals.find(r => r.status === 'Active');
@@ -497,7 +609,7 @@ export async function openJewelHistoryModal(jewelId) {
         <div>
           <div style="font-weight:600; font-size:12.5px; color:#1a1a1a;">${r.customer_name} ${r.customer_phone ? `(${r.customer_phone})` : ''}</div>
           <div style="font-size:11px; color:#666; margin-top:2px;">
-            Fee: <strong>₹${r.rental_fee}</strong> · Deposit: <strong>₹${r.deposit}</strong>
+            Fee: <strong>${r.rental_fee === 0 && (r.note || '').startsWith(PACKAGE_RENTAL_NOTE) ? 'Included in package' : `₹${r.rental_fee}`}</strong> · Deposit: <strong>₹${r.deposit}</strong>
           </div>
           <div style="font-size:10px; color:#aaa; margin-top:1px;">
             Rented: ${r.rental_date} ${r.return_date ? `· Returned: ${r.return_date}` : '· Out on rent'}
@@ -688,6 +800,8 @@ window.filterJewelsStatus = filterJewelsStatus;
 window.updateJewelStatus = updateJewelStatus;
 window.openAddJewelModal = openAddJewelModal;
 window.openRentJewelModal = openRentJewelModal;
+window.openPackageJewelModal = openPackageJewelModal;
+window.selectPackageJewelBooking = selectPackageJewelBooking;
 window.openReturnJewelModal = openReturnJewelModal;
 window.openJewelHistoryModal = openJewelHistoryModal;
 window.handleDeleteJewelRentalRecord = handleDeleteJewelRentalRecord;

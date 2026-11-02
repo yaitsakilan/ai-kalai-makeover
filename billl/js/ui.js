@@ -106,7 +106,7 @@ window.handleModalSave = handleModalSave;
 window.closeFormOverlay = closeFormOverlay;
 window.chipToggle = chipToggle;
 
-export function showConfirmDelete(title, message) {
+export function showConfirmDelete(title, message, confirmLabel = 'Delete') {
   return new Promise((resolve) => {
     const confirmWrapper = document.createElement('div');
     confirmWrapper.id = 'confirm-overlay-wrapper';
@@ -120,7 +120,7 @@ export function showConfirmDelete(title, message) {
           <p style="font-size: 13px; line-height: 1.5; margin-bottom: 24px; padding: 0 8px; opacity: 0.85;">${message}</p>
           <div style="display: flex; gap: 10px; justify-content: center;">
             <button class="btn btn-outline" id="confirm-cancel-btn" style="flex: 1; justify-content: center;">Cancel</button>
-            <button class="btn btn-danger" id="confirm-ok-btn" style="flex: 1; justify-content: center; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; font-weight: 600; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.18);">Delete</button>
+            <button class="btn btn-danger" id="confirm-ok-btn" style="flex: 1; justify-content: center; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; font-weight: 600; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.18);">${confirmLabel}</button>
           </div>
         </div>
       </div>

@@ -1084,6 +1084,90 @@ function saveAttendanceLocally(fullLog) {
   } catch(e) { return null; }
 }
 
+// ==========================================
+//  SHOP SETTINGS (shared by every phone, e.g. the shop WiFi)
+// ==========================================
+
+// Returns the setting's value, or null if it has never been saved. Throws when the database can't be
+// read (e.g. shop_settings_migration.sql not run yet), so callers can tell "not set" from "unknown".
+export async function fetchShopSetting(key) {
+  const client = initDb();
+  if (!client) return getLocalItem(`shop_setting_${key}`, null);
+
+  const { data, error } = await client.from('shop_settings').select('value').eq('key', key).maybeSingle();
+  if (error) throw error;
+  return data ? data.value : null;
+}
+
+// Returns true once the setting is stored where every phone reads it
+export async function saveShopSetting(key, value) {
+  const client = initDb();
+  if (!client) {
+    setLocalItem(`shop_setting_${key}`, value);
+    return true;
+  }
+
+  const { error } = await client.from('shop_settings').upsert([{ key, value, updated_at: new Date().toISOString() }], { onConflict: 'key' });
+  if (error) {
+    console.warn('Save shop setting DB error:', error);
+    return false;
+  }
+  return true;
+}
+
+// ==========================================
+//  BILL QUEUE (bills staff prepare for the owner to send from the owner's WhatsApp)
+// ==========================================
+
+export async function fetchPendingBills() {
+  const client = initDb();
+  if (!client) return getLocalItem('bill_queue', []).filter(b => b.status === 'pending');
+
+  const { data, error } = await client.from('bill_queue').select('*').eq('status', 'pending').order('created_at', { ascending: true });
+  if (error) {
+    console.warn('Fetch bill queue DB error:', error);
+    return [];
+  }
+  return data || [];
+}
+
+// No local fallback when there is a database: a bill kept on a staff phone would never reach the owner
+export async function addPendingBill(bill) {
+  const client = initDb();
+  const fullBill = { ...bill, id: genUUID(), status: 'pending', created_at: new Date().toISOString() };
+
+  if (!client) {
+    const list = getLocalItem('bill_queue', []);
+    list.push(fullBill);
+    setLocalItem('bill_queue', list);
+    return fullBill;
+  }
+
+  const { data, error } = await client.from('bill_queue').insert([fullBill]).select();
+  if (error) {
+    console.warn('Add bill to queue DB error:', error);
+    return null;
+  }
+  return data?.[0] || fullBill;
+}
+
+export async function updatePendingBillStatus(id, status) {
+  const client = initDb();
+  const changes = { status, sent_at: status === 'sent' ? new Date().toISOString() : null };
+
+  if (!client) {
+    setLocalItem('bill_queue', getLocalItem('bill_queue', []).map(b => (b.id === id ? { ...b, ...changes } : b)));
+    return true;
+  }
+
+  const { error } = await client.from('bill_queue').update(changes).eq('id', id);
+  if (error) {
+    console.warn('Update bill queue DB error:', error);
+    return false;
+  }
+  return true;
+}
+
 export async function fetchPayslips() {
   const client = initDb();
   if (!client) return fetchPayslipsLocally();

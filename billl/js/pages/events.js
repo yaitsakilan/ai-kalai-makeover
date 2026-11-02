@@ -7,6 +7,26 @@ import { callGroqAPI } from '../api.js';
 import { renderMuhurthamWidget, bookMuhurthamEvent } from '../muhurtham.js';
 import { renderMonthBookingOverviewWidget, quickMarkEventFinished, filterEventByDate, clearEventDateFilter, navigateEventMonth } from '../monthBookings.js';
 import { renderDateFilterTrigger, isDateInModuleFilter, getModuleDateFilter } from '../dateFilter.js';
+import { sendCustomerBill, billSendButtonHtml } from '../whatsappBill.js';
+
+// Bridal makeup packages, prices and inclusions as listed on the landing page
+// (kalaimakeover.github.io/kalai-landing-page)
+export const MAKEUP_PACKAGES = [
+  { name: 'Basic Makeup', price: 6000, items: ['Normal makeup', 'Hair setting', 'Saree draping', 'Artificial flower'] },
+  { name: 'HD Makeup', price: 10000, items: ['HD makeup', 'Professional hairstyling', 'Saree draping', 'Artificial flower', 'Lashes', 'Jewel set'] },
+  { name: 'Glossy Makeup', price: 13000, items: ['Glossy makeup', 'Professional hairstyle', 'Saree draping', 'Artificial flower', 'Lashes', 'Jewel set', 'Saree pre-pleating'] },
+  { name: 'Air Brush', price: 15000, items: ['Matte airbrush makeup', 'Professional hairstyle', 'Saree draping', 'Artificial flower', 'Lashes', 'Jewel set', 'Saree pre-pleating', 'Lens'] },
+  { name: 'Transfer Proof', price: 20000, items: ['Transfer-proof makeup', 'Professional hairstyle', 'Saree draping', 'Artificial flower', 'Lashes', 'Jewel set', 'Saree pre-pleating', 'Lens', 'Brightening facial'] }
+];
+const OTHER_MAKEUP_FEE = 5000;
+// Names older bookings were saved under before a package was renamed
+const RENAMED_MAKEUP_PACKAGES = { 'airbrush makeup': 'air brush' };
+
+export function findMakeupPackage(name) {
+  const key = String(name || '').trim().toLowerCase();
+  const current = RENAMED_MAKEUP_PACKAGES[key] || key;
+  return MAKEUP_PACKAGES.find(p => p.name.toLowerCase() === current) || null;
+}
 
 export async function renderEvents() {
   const [events, customers, employees] = await Promise.all([
@@ -783,12 +803,8 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
           <div class="form-group">
             <div class="chip-group" id="ef-makeup-chips">
               ${[
-                ['Basic Makeup', 3000],
-                ['HD Makeup', 5000],
-                ['Advanced Makeup', 7000],
-                ['Airbrush Makeup', 15000],
-                ['Glass Skin Makeup', 12000],
-                ['Others', 5000]
+                ...MAKEUP_PACKAGES.map(p => [p.name, p.price]),
+                ['Others', OTHER_MAKEUP_FEE]
               ].map(([s, amt]) =>
                 `<div class="chip" onclick="window.makeupTypeChipToggle(this, ${amt})">${s}</div>`
               ).join('')}
@@ -907,10 +923,12 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
       // Extract metadata if exists
       let functionDates = {};
       let makeupFees = {};
+      let savedAddons = [];
       if (event.additional_makeup) {
         try {
           const arr = typeof event.additional_makeup === 'string' ? JSON.parse(event.additional_makeup) : event.additional_makeup;
           if (Array.isArray(arr)) {
+            savedAddons = arr.filter(a => a.name && !a.name.startsWith('Meta:'));
             const dateMeta = arr.find(a => a.name === 'Meta:FunctionDates');
             if (dateMeta && dateMeta.dates) {
               functionDates = dateMeta.dates;
@@ -921,6 +939,13 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
             }
           }
         } catch(e) {}
+      }
+
+      // Bookings saved before per-package fees were stored: keep a single package at its booked amount
+      const bookedMakeups = (event.makeup_type || '').split(',').map(m => m.trim()).filter(Boolean);
+      if (!Object.keys(makeupFees).length && bookedMakeups.length === 1) {
+        const addonTotal = savedAddons.reduce((sum, a) => sum + (a.amount || 0), 0);
+        makeupFees = { [bookedMakeups[0]]: Math.max(0, (event.total || 0) - addonTotal) };
       }
 
       // Pre-fill function chips
@@ -960,32 +985,33 @@ export function openEventCustomerForm(eventId = null, prefillDate = null, defaul
         const otherChip = Array.from(makeupChips).find(c => c.textContent.trim() === 'Others');
         const otherMakeups = [];
 
-        window._editMakeupFees = makeupFees;
+        window._editMakeupFees = { ...makeupFees };
+        const packageFeeKeys = new Set();
 
         selectedMakeups.forEach(mName => {
-          const match = Array.from(makeupChips).find(c => c.textContent.trim().toLowerCase() === mName.toLowerCase());
+          const pkg = findMakeupPackage(mName);
+          const match = pkg && Array.from(makeupChips).find(c => c.textContent.trim() === pkg.name);
           if (match) {
-            const amtMap = {
-              'Basic Makeup': 3000,
-              'HD Makeup': 5000,
-              'Advanced Makeup': 7000,
-              'Airbrush Makeup': 15000,
-              'Glass Skin Makeup': 12000
-            };
-            const defaultAmt = amtMap[match.textContent.trim()] || 5000;
-            window.makeupTypeChipToggle(match, defaultAmt);
+            // Keep the fee it was booked at, even if the package has since been renamed
+            if (makeupFees[mName] !== undefined) window._editMakeupFees[pkg.name] = makeupFees[mName];
+            packageFeeKeys.add(mName);
+            window.makeupTypeChipToggle(match, pkg.price);
           } else {
             otherMakeups.push(mName);
           }
         });
 
         if (otherMakeups.length > 0 && otherChip) {
-          otherChip.classList.add('selected');
-          const otherDiv = document.getElementById('ef-makeup-other')?.closest('.chip-other-input');
-          if (otherDiv) otherDiv.classList.add('show');
           const otherInput = document.getElementById('ef-makeup-other');
           if (otherInput) otherInput.value = otherMakeups.join(', ');
-          window.makeupTypeChipToggle(otherChip, 5000);
+          // Fees not taken by a package chip belong to the Others row (e.g. a retired package).
+          // The toggle selects the chip, shows the input and adds the row.
+          const otherFees = Object.entries(makeupFees).filter(([k]) => !packageFeeKeys.has(k));
+          const otherFee = otherFees.reduce((sum, [, v]) => sum + (parseInt(v) || 0), 0);
+          if (otherFee) window._editMakeupFees['Others'] = otherFee;
+          window.makeupTypeChipToggle(otherChip, OTHER_MAKEUP_FEE);
+          const otherLabel = document.getElementById('ef-makeup-other-label');
+          if (otherLabel && otherFees.length) otherLabel.value = otherFees.map(([k]) => k).join(', ');
         }
 
         delete window._editMakeupFees;
@@ -1694,12 +1720,15 @@ export function makeupTypeChipToggle(chipEl, defaultAmount) {
         row.dataset.label = name;
         
         const savedFee = window._editMakeupFees?.[name] || defaultAmount;
+        const pkg = findMakeupPackage(name);
+        if (pkg) row.style.flexWrap = 'wrap';
 
         row.innerHTML = `
           <div class="sa-name"><i class="ti ti-sparkles"></i><input type="text" class="sa-name-input" value="${name}"></div>
           <span style="font-size:12px;color:#888">₹</span>
           <input type="number" class="ef-makeup-amount-input" value="${savedFee}" oninput="window.updateEventTotalDisplay()" style="width: 80px; padding: 4px 6px; font-size: 12px; height: 32px; border: 1px solid #ddd; border-radius: 6px;">
-          <div class="sa-remove" onclick="window.removeMakeupRow('${rowId}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>`;
+          <div class="sa-remove" onclick="window.removeMakeupRow('${rowId}', '${name}')" title="Remove"><i class="ti ti-x" style="font-size:14px"></i></div>
+          ${pkg ? `<div class="ef-makeup-includes" style="flex-basis:100%;font-size:11px;color:#888;padding-left:20px">Includes: ${pkg.items.join(', ')}</div>` : ''}`;
         amountList.appendChild(row);
       }
     } else {
@@ -2069,7 +2098,8 @@ export function quickEditTransport(eventId) {
 }
 
 export function promptEventWhatsAppBill(event) {
-  const customerName = event.customer;
+  // Bookings saved from staff phones carry an [Emp: ...] tag that must not appear on the customer's invoice
+  const customerName = formatEmpTag(event.customer).cleanText;
   const phone = event.phone;
   const cleanedPhone = validateAndCleanPhone(phone);
   if (!cleanedPhone) {
@@ -2131,23 +2161,19 @@ Kalai Makeover
       <label class="form-label">WhatsApp Message Preview</label>
       <textarea class="form-input" id="wa-event-message" style="height:250px;font-family:monospace;white-space:pre-wrap;resize:vertical;line-height:1.4;">${defaultMessage}</textarea>
     </div>
-  `, () => {
+  `, async () => {
     const editedMessage = document.getElementById('wa-event-message').value.trim();
     if (!editedMessage) {
       showToast('Message text cannot be empty.', 'error');
       return;
     }
-    const fullPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone;
-    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(editedMessage)}`;
-    window.open(url, '_blank');
-    closeModal();
-    showToast('WhatsApp opened in a new tab!');
+    await sendCustomerBill({ customerName, phone: cleanedPhone, message: editedMessage, kind: 'Event Invoice' });
   });
 
   setTimeout(() => {
     const saveBtn = document.getElementById('modal-save-btn');
     if (saveBtn) {
-      saveBtn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Send Invoice';
+      saveBtn.innerHTML = billSendButtonHtml('Send Invoice');
       saveBtn.style.background = '#25d366';
       saveBtn.style.borderColor = '#25d366';
       saveBtn.style.color = '#fff';

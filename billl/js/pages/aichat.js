@@ -1,9 +1,13 @@
 // billl/js/pages/aichat.js
 import { state } from '../state.js';
 import { callGroqAPI, transcribeAudio } from '../api.js';
-import { addCustomer, addEvent, addExpense } from '../db.js';
+import { addCustomer, addEvent, addExpense, fetchCustomers } from '../db.js';
 import { showToast } from '../ui.js';
-import { validateAndCleanPhone } from '../utils.js';
+import { validateAndCleanPhone, findRepeatCustomerByPhone, formatEmpTag } from '../utils.js';
+import { recordRepeatVisit } from './customers.js';
+import { MAKEUP_PACKAGES, findMakeupPackage } from './events.js';
+
+const MAKEUP_TYPE_OPTIONS = [...MAKEUP_PACKAGES.map(p => `"${p.name}"`), '"Others"'].join(', ');
 
 export function renderAIChat() {
   return `
@@ -375,7 +379,7 @@ Extract the fields and return ONLY a JSON object:
   "location": string (default null),
   "date": "YYYY-MM-DD" format (default null),
   "functionType": string (one of: "Puberty Function", "Baby Shower", "Engagement", "Reception", "Muhurtham", "Party Makeup", "Others") (default null),
-  "makeupType": string (one of: "Basic Makeup", "HD Makeup", "Advanced Makeup", "Airbrush Makeup", "Glass Skin Makeup", "Others") (default null),
+  "makeupType": string (one of: ${MAKEUP_TYPE_OPTIONS}) (default null),
   "amount": number (total main booking fee, default null),
   "advance": number (advance paid, default 0),
   "referred_by": string (default null)
@@ -430,7 +434,11 @@ Guidelines:
       if (parsed.name) document.getElementById('sf-name').value = parsed.name;
       if (parsed.phone) {
         const cleaned = validateAndCleanPhone(parsed.phone);
-        if (cleaned) document.getElementById('sf-phone').value = cleaned;
+        if (cleaned) {
+          document.getElementById('sf-phone').value = cleaned;
+          // Same repeat-client check as typing the number
+          if (typeof window.handlePhoneLookup === 'function') window.handlePhoneLookup(cleaned);
+        }
       }
       if (parsed.location) document.getElementById('sf-location').value = parsed.location;
       if (parsed.date) document.getElementById('sf-date').value = parsed.date;
@@ -524,10 +532,12 @@ Guidelines:
         const chips = document.querySelectorAll('#ef-makeup-chips .chip');
         chips.forEach(c => c.classList.remove('selected'));
         
-        const chip = Array.from(chips).find(c => c.textContent.trim().toLowerCase() === parsed.makeupType.toLowerCase());
+        const pkg = findMakeupPackage(parsed.makeupType);
+        const chip = pkg && Array.from(chips).find(c => c.textContent.trim() === pkg.name);
         if (chip) {
           if (typeof window.makeupTypeChipToggle === 'function') {
-            window.makeupTypeChipToggle(chip, 5000);
+            // A spoken amount wins over the package's listed price
+            window.makeupTypeChipToggle(chip, parsed.amount || pkg.price);
           } else {
             chip.classList.add('selected');
           }
@@ -798,7 +808,7 @@ Extract and return ONLY a JSON object with these fields (use null for missing):
 
 Guidelines:
 1. For customer_visit type, target fields to collect: customer, service, amount, payment_status, payment_method, location, phone, rating. If missing, list in missing_fields.
-2. For event_booking type, target fields to collect: customer, phone, date, location, event_type (one of: "Puberty Function", "Baby Shower", "Engagement", "Reception", "Muhurtham", "Party Makeup", "Others"), makeup_type (one of: "Basic Makeup", "HD Makeup", "Advanced Makeup", "Airbrush Makeup", "Glass Skin Makeup", "Others"), amount (total booking amount), and advance_amount.
+2. For event_booking type, target fields to collect: customer, phone, date, location, event_type (one of: "Puberty Function", "Baby Shower", "Engagement", "Reception", "Muhurtham", "Party Makeup", "Others"), makeup_type (one of: ${MAKEUP_TYPE_OPTIONS}), amount (total booking amount), and advance_amount.
 3. For single expense type, target fields: expense_category (Rent, Salary, Products, Electricity, Water, Travel, Miscellaneous), amount, and expense_note (the specific item or description, e.g. "hair dryer", "shampoo", "Rent for June"). Classify inputs about operational costs, salaries, bills, rent, or buying supplies as "expense".
 4. For multiple_expenses type, if the user lists multiple items/expenses with their respective amounts (e.g. a list of products purchased or a list of separate operational costs, e.g., "Chutti 159, Gloves 174, Apron 186 on May 31"), classify as "multiple_expenses" and populate the "expenses" array with each item extracted. Map categories for each item appropriately (usually Products for supplies, Utilities for bills, Rent, Travel, etc.).
 5. For greeting type, if the user greets you or says hello (e.g. "hi", "hello", "நமஸ்தே", "thank you"), reply back warmly addressing the owner "Kalai" directly (e.g. "Vanakkam Kalai! How can I assist you with your salon management today?" or "Hello Kalai! Ready to update some salon entries?"). Provide a helpful, friendly message in Tamil or English (matching her style). Store this message in "conversational_reply".
@@ -1201,20 +1211,37 @@ export async function confirmEntry() {
         .filter(Boolean)
         .map(s => `${s} (${svcMethod})`);
 
-      const result = await addCustomer({
-        name: p.customer || 'Unknown',
-        phone: p.phone || '',
-        location: p.location || '',
-        services: servicesList,
-        amount: p.amount || 0,
-        payment_status: p.payment_status || 'pending',
-        payment_method: svcMethod,
-        last_visit: new Date().toISOString().split('T')[0],
-        total_spend: p.amount || 0,
-        visits: 1,
-        rating: p.rating || 5,
-        referred_by: p.referred_by || null
-      });
+      const today = new Date().toISOString().split('T')[0];
+      // A known number is a repeat visit on that client's record, not a new customer
+      const repeatClient = findRepeatCustomerByPhone(p.phone, await fetchCustomers());
+      const result = repeatClient
+        ? await recordRepeatVisit(repeatClient.primary, {
+          location: p.location,
+          services: servicesList,
+          amount: p.amount || 0,
+          paymentMethod: svcMethod,
+          paymentStatus: p.payment_status || 'pending',
+          date: today,
+          rating: p.rating
+        })
+        : await addCustomer({
+          name: p.customer || 'Unknown',
+          phone: p.phone || '',
+          location: p.location || '',
+          services: servicesList,
+          amount: p.amount || 0,
+          payment_status: p.payment_status || 'pending',
+          payment_method: svcMethod,
+          last_visit: today,
+          total_spend: p.amount || 0,
+          visits: 1,
+          rating: p.rating || 5,
+          referred_by: p.referred_by || null
+        });
+      if (repeatClient) {
+        p.repeat_visit = true;
+        p.customer = formatEmpTag(repeatClient.primary.name).cleanText || p.customer;
+      }
       saved = !!result;
     } else if(p.type === 'event_booking') {
       const total = p.amount || 0;
@@ -1264,7 +1291,7 @@ export async function confirmEntry() {
     const name = p.type === 'multiple_expenses' ? `${p.saved_count || (p.expenses || []).length} bulk expense items` : (p.customer || p.expense_category || 'Record');
 
     if(saved) {
-      let typeName = 'customer records';
+      let typeName = p.repeat_visit ? "the existing client's visit history" : 'customer records';
       if (p.type === 'expense' || p.type === 'multiple_expenses') typeName = 'expenses';
       else if (p.type === 'event_booking') typeName = 'events';
       

@@ -16,9 +16,11 @@ import {
   fetchJewels
 } from '../db.js';
 import { showToast, showModal, closeModal, showConfirmDelete } from '../ui.js';
-import { 
-  renderWifiAttendanceCard, 
-  initLiveWifiStatus, 
+import { escapeHtml } from '../utils.js';
+import {
+  renderWifiAttendanceCard,
+  initLiveWifiStatus,
+  loadShopWifiConfig,
   openCaptureWifiModal, 
   openWifiSettingsModal, 
   openQuickWifiPunchModal 
@@ -42,6 +44,7 @@ export async function renderEmployees() {
   }
 
   if (window._employeesTab === 'attendance') {
+    await loadShopWifiConfig();
     initLiveWifiStatus();
   }
 
@@ -214,14 +217,16 @@ function renderAttendanceTab(employees, attendance) {
             }
 
             let badgeClass = 'badge-green';
-            if (a.status === 'Late') badgeClass = 'badge-amber';
+            if (a.status === 'Late' || a.status === 'Pending') badgeClass = 'badge-amber';
             if (a.status === 'Half-day') badgeClass = 'badge-blue';
-            if (a.status === 'Absent') badgeClass = 'badge-red';
+            if (a.status === 'Absent' || a.status === 'Rejected') badgeClass = 'badge-red';
 
-            const isWifiVerified = a.notes && a.notes.toLowerCase().includes('wifi');
-            const wifiBadge = isWifiVerified
-              ? `<span class="badge badge-green" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;" title="${a.notes || 'Verified on salon WiFi router'}"><i class="ti ti-wifi"></i> WiFi Verified</span>`
-              : `<span class="badge badge-gray" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;" title="${a.notes || 'Manual Entry'}"><i class="ti ti-pencil"></i> Manual Entry</span>`;
+            const notes = (a.notes || '').toLowerCase();
+            const wifiBadge = notes.startsWith('wifi verified')
+              ? `<span class="badge badge-green" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;" title="${escapeHtml(a.notes)}"><i class="ti ti-wifi"></i> WiFi Verified</span>`
+              : notes.includes('off wifi')
+                ? `<span class="badge badge-amber" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;" title="${escapeHtml(a.notes)}"><i class="ti ti-wifi-off"></i> Off WiFi</span>`
+                : `<span class="badge badge-gray" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;" title="${escapeHtml(a.notes || 'Manual Entry')}"><i class="ti ti-pencil"></i> Manual Entry</span>`;
 
             return `
             <tr>
@@ -230,7 +235,7 @@ function renderAttendanceTab(employees, attendance) {
               <td style="padding:12px 16px; opacity:0.85;">${inTime}</td>
               <td style="padding:12px 16px; opacity:0.85;">${outTime}</td>
               <td style="padding:12px 16px; font-weight:600; color:#f5c842;">${hoursStr}</td>
-              <td style="padding:12px 16px;"><span class="badge ${badgeClass}">${a.status}</span></td>
+              <td style="padding:12px 16px;"><span class="badge ${badgeClass}" ${a.status === 'Pending' ? 'title="Approve or reject it on the Dashboard"' : ''}>${a.status}</span></td>
               <td style="padding:12px 16px;">${wifiBadge}</td>
               <td style="padding:12px 16px; text-align:right;">
                 <button class="btn btn-danger btn-icon" onclick="window.handleDeleteAttendance('${a.id}')" style="width:28px; height:28px; padding:0; color:#dc2626;" title="Delete log">
@@ -903,7 +908,8 @@ window.showEmployeePerformance = async function(empId) {
 
     // 1. Attendance Metrics
     const empAttendance = attendanceList.filter(a => a.employee_id === empId);
-    const totalLogs = empAttendance.length;
+    // An off-WiFi check-in the owner hasn't decided yet doesn't count either way
+    const totalLogs = empAttendance.filter(a => a.status !== 'Pending').length;
     const statusCounts = { Present: 0, Late: 0, 'Half-day': 0, Absent: 0 };
     empAttendance.forEach(a => {
       if (statusCounts.hasOwnProperty(a.status)) {
@@ -919,6 +925,7 @@ window.showEmployeePerformance = async function(empId) {
     // Calculate working hours (assuming standard 8 hours per shift)
     let totalWorkingHours = 0;
     empAttendance.forEach(a => {
+      if (a.status === 'Pending' || a.status === 'Rejected') return;
       if (a.check_in && a.check_out) {
         const diffMs = new Date(a.check_out) - new Date(a.check_in);
         totalWorkingHours += diffMs / (1000 * 60 * 60);
@@ -1215,7 +1222,7 @@ window.showEmployeePerformance = async function(empId) {
                     <td style="font-weight:600;">${a.date}</td>
                     <td style="opacity:0.85;">${a.check_in ? new Date(a.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                     <td style="opacity:0.85;">${a.check_out ? new Date(a.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                    <td style="text-align:right;"><span class="badge ${a.status === 'Present' ? 'badge-green' : a.status === 'Late' ? 'badge-amber' : a.status === 'Half-day' ? 'badge-blue' : 'badge-red'}" style="font-size:9.5px; padding:1px 6px;">${a.status}</span></td>
+                    <td style="text-align:right;"><span class="badge ${a.status === 'Present' ? 'badge-green' : a.status === 'Late' || a.status === 'Pending' ? 'badge-amber' : a.status === 'Half-day' ? 'badge-blue' : 'badge-red'}" style="font-size:9.5px; padding:1px 6px;">${a.status}</span></td>
                   </tr>
                 `).join('')}
               </tbody>

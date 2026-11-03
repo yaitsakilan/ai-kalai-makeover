@@ -17,6 +17,21 @@ import { showToast, showModal, closeModal } from '../ui.js';
 import { handleWifiCheckIn } from '../wifi.js';
 const PINS = { owner: 'kalai1610', employee: 'emp123' };
 
+// Forms an employee can open from their page; the owner picks which ones in the employee's profile
+export const EMPLOYEE_FORMS = [
+  { key: 'shop', title: 'Shop Customer', sub: 'Service, amount, payment &amp; rating', icon: 'ti-scissors', cls: 'ea-shop', onclick: 'window.openShopCustomerForm()', btnId: 'emp-add-customer-btn' },
+  { key: 'class', title: 'Class Enrollment', sub: 'Student name, fee &amp; date', icon: 'ti-school', cls: 'ea-class', onclick: 'window.openClassesForm()', btnId: 'emp-add-class-btn' },
+  { key: 'jewel', title: 'Add Jewel Purchase', sub: 'Jewel type, price, photo &amp; details', icon: 'ti-diamond', cls: 'ea-jewel', onclick: 'window.openAddJewelModal()', btnId: 'emp-add-jewel-btn' },
+  { key: 'expense', title: 'Add General Expense', sub: 'Rent, salary, products, utilities &amp; method', icon: 'ti-receipt', cls: 'ea-expense-single', onclick: 'window.showAddExpenseModal()', btnId: 'emp-add-expense-btn' },
+  { key: 'bulk_expense', title: 'Bulk Expense Form', sub: 'Add multiple expense rows at once', icon: 'ti-receipt-2', cls: 'ea-expense-bulk', onclick: 'window.openBulkExpenseForm()', btnId: 'emp-add-bulk-expense-btn' },
+  { key: 'event', title: 'Book Event', sub: 'Bridal makeup, function dates &amp; advance', icon: 'ti-calendar-heart', cls: 'ea-event', onclick: 'window.openEventCustomerForm()', btnId: 'emp-add-event-btn' }
+];
+
+// Keys of the forms turned on for this employee; every form until the owner has chosen
+export function getEmployeeFormKeys(emp) {
+  return Array.isArray(emp?.allowed_forms) ? emp.allowed_forms : EMPLOYEE_FORMS.map(f => f.key);
+}
+
 // ─────────────────────────────────────────────
 //  ROLE SELECTOR OVERLAY (shown on every load)
 // ─────────────────────────────────────────────
@@ -421,9 +436,11 @@ export async function renderEmployeePage() {
   window._cachedStudents = students;
   window._cachedJewels = jewels;
 
-  const selectedEmp = window._selectedPortalEmployeeId 
+  const selectedEmp = window._selectedPortalEmployeeId
     ? employees.find(e => e.id === window._selectedPortalEmployeeId)
     : null;
+  const allowedFormKeys = getEmployeeFormKeys(selectedEmp);
+  const empForms = EMPLOYEE_FORMS.filter(f => allowedFormKeys.includes(f.key));
 
   let selectedEmpName = null;
   if (selectedEmp) {
@@ -625,63 +642,20 @@ export async function renderEmployeePage() {
         <i class="ti ti-users"></i>
       </div>
       <h1 class="employee-welcome-title">Employee Actions</h1>
-      <p class="employee-welcome-sub">Record customer visits, enrollments, purchases, expenses or event bookings below</p>
+      <p class="employee-welcome-sub">${empForms.length ? 'Choose what you want to record below' : 'The owner hasn\'t turned on any forms for you yet'}</p>
     </div>
 
     <div class="employee-action-grid">
-      <button class="employee-action-btn ea-shop" onclick="window.openShopCustomerForm()" id="emp-add-customer-btn">
-        <div class="ea-icon"><i class="ti ti-scissors"></i></div>
+      ${empForms.map(f => `
+      <button class="employee-action-btn ${f.cls}" onclick="${f.onclick}" id="${f.btnId}">
+        <div class="ea-icon"><i class="ti ${f.icon}"></i></div>
         <div class="ea-content">
-          <div class="ea-title">Shop Customer</div>
-          <div class="ea-sub">Service, amount, payment &amp; rating</div>
+          <div class="ea-title">${f.title}</div>
+          <div class="ea-sub">${f.sub}</div>
         </div>
         <i class="ti ti-chevron-right ea-arrow"></i>
       </button>
-
-      <button class="employee-action-btn ea-class" onclick="window.openClassesForm()" id="emp-add-class-btn">
-        <div class="ea-icon"><i class="ti ti-school"></i></div>
-        <div class="ea-content">
-          <div class="ea-title">Class Enrollment</div>
-          <div class="ea-sub">Student name, fee &amp; date</div>
-        </div>
-        <i class="ti ti-chevron-right ea-arrow"></i>
-      </button>
-
-      <button class="employee-action-btn ea-jewel" onclick="window.openAddJewelModal()" id="emp-add-jewel-btn">
-        <div class="ea-icon"><i class="ti ti-diamond"></i></div>
-        <div class="ea-content">
-          <div class="ea-title">Add Jewel Purchase</div>
-          <div class="ea-sub">Jewel type, price, photo &amp; details</div>
-        </div>
-        <i class="ti ti-chevron-right ea-arrow"></i>
-      </button>
-
-      <button class="employee-action-btn ea-expense-single" onclick="window.showAddExpenseModal()" id="emp-add-expense-btn">
-        <div class="ea-icon"><i class="ti ti-receipt"></i></div>
-        <div class="ea-content">
-          <div class="ea-title">Add General Expense</div>
-          <div class="ea-sub">Rent, salary, products, utilities &amp; method</div>
-        </div>
-        <i class="ti ti-chevron-right ea-arrow"></i>
-      </button>
-
-      <button class="employee-action-btn ea-expense-bulk" onclick="window.openBulkExpenseForm()" id="emp-add-bulk-expense-btn">
-        <div class="ea-icon"><i class="ti ti-receipt-2"></i></div>
-        <div class="ea-content">
-          <div class="ea-title">Bulk Expense Form</div>
-          <div class="ea-sub">Add multiple expense rows at once</div>
-        </div>
-        <i class="ti ti-chevron-right ea-arrow"></i>
-      </button>
-
-      <button class="employee-action-btn ea-event" onclick="window.openEventCustomerForm()" id="emp-add-event-btn">
-        <div class="ea-icon"><i class="ti ti-calendar-heart"></i></div>
-        <div class="ea-content">
-          <div class="ea-title">Book Event</div>
-          <div class="ea-sub">Bridal makeup, function dates &amp; advance</div>
-        </div>
-        <i class="ti ti-chevron-right ea-arrow"></i>
-      </button>
+      `).join('')}
     </div>
 
     <div class="employee-notice">

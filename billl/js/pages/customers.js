@@ -1629,9 +1629,52 @@ export function applyRecognizedCustomerDetails(customerId) {
   }
 }
 
+// From this many digits, clients whose number starts with them are offered to tap.
+// Nothing is filled in until a client is tapped or the full number is typed.
+const PHONE_SUGGEST_MIN_DIGITS = 5;
+const PHONE_SUGGEST_LIMIT = 3;
+
+function renderPhoneSuggestions(digits) {
+  const matches = [];
+  getUniqueCustomersMap(window._cachedCustomers || []).forEach((group, key) => {
+    if (key.startsWith(`phone:${digits}`)) matches.push({ phone: key.slice('phone:'.length), group });
+  });
+  if (!matches.length) return '';
+  // Most recent visitors first
+  matches.sort((a, b) => String(b.group.primary.last_visit || '').localeCompare(String(a.group.primary.last_visit || '')));
+  const more = matches.length - PHONE_SUGGEST_LIMIT;
+
+  return `
+    <div style="border:1.5px dashed #d97706; border-radius:10px; padding:6px 0; margin-bottom:10px; font-size:12px; animation: fadeIn 0.2s ease;">
+      <div style="font-size:11px; color:#d97706; font-weight:700; padding:0 12px 4px; display:flex; align-items:center; gap:4px;">
+        <i class="ti ti-sparkles"></i> Repeat client? Tap to choose
+      </div>
+      ${matches.slice(0, PHONE_SUGGEST_LIMIT).map(({ phone, group }) => {
+        const c = group.primary;
+        const visits = group.totalVisits;
+        return `
+        <div onclick="window.choosePhoneSuggestion('${phone}')" style="cursor:pointer; padding:6px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <span style="color:#1a1a1a; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${formatEmpTag(c.name).cleanText || 'Customer'} · ${phone}</span>
+          <span style="color:#555; font-size:11px; max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${c.location ? `${c.location} · ` : ''}${visits} visit${visits === 1 ? '' : 's'}</span>
+        </div>`;
+      }).join('')}
+      ${more > 0 ? `<div style="color:#555; font-size:11px; padding:2px 12px 0;">+${more} more · keep typing</div>` : ''}
+    </div>`;
+}
+
+// Tapping a suggested client completes the number, which recognizes them as if it was typed in full
+export function choosePhoneSuggestion(phone) {
+  const phoneInput = document.getElementById('sf-phone');
+  if (!phoneInput) return;
+  phoneInput.value = phone;
+  if (window._dismissedPhoneMatch === phone) window._dismissedPhoneMatch = null;
+  handlePhoneLookup(phone);
+}
+
 export function handlePhoneLookup(val) {
   const matchCard = document.getElementById('sf-phone-match-card');
-  // Only a full, valid number identifies a client; partial digits match the wrong person
+  // Only a full, valid number fills in a client; partial digits just offer matches to tap,
+  // since filling from them could pick the wrong person
   const cleanPhone = validateAndCleanPhone(val);
   const isDismissed = !!cleanPhone && cleanPhone === window._dismissedPhoneMatch;
   const group = cleanPhone && !isDismissed ? findRepeatCustomerByPhone(cleanPhone, window._cachedCustomers || []) : null;
@@ -1640,9 +1683,10 @@ export function handlePhoneLookup(val) {
     window._selectedExistingCustomer = null;
     undoPhoneAutofill();
     if (matchCard) {
+      const digits = String(val || '').replace(/\D/g, '');
       matchCard.innerHTML = isDismissed
         ? `<div style="font-size:11px; color:#888; margin:-4px 0 10px; display:flex; align-items:center; gap:4px;"><i class="ti ti-user-plus"></i> Will be saved as a new client with this number.</div>`
-        : '';
+        : !cleanPhone && digits.length >= PHONE_SUGGEST_MIN_DIGITS ? renderPhoneSuggestions(digits) : '';
     }
     return;
   }
@@ -1695,6 +1739,7 @@ window.openShopCustomerForm = openShopCustomerForm;
 window.submitShopCustomerForm = submitShopCustomerForm;
 window.handlePhoneLookup = handlePhoneLookup;
 window.clearPhoneMatch = clearPhoneMatch;
+window.choosePhoneSuggestion = choosePhoneSuggestion;
 window.serviceChipToggle = serviceChipToggle;
 window.addOtherServiceAmount = addOtherServiceAmount;
 window.removeServiceRow = removeServiceRow;

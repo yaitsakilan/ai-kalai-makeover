@@ -181,6 +181,7 @@ CREATE TABLE IF NOT EXISTS employees (
   leave_balance INTEGER DEFAULT 12,
   bank_details TEXT,
   shift_start TEXT DEFAULT '09:00',
+  allowed_forms JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -202,6 +203,7 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS employee_msg TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS leave_balance INTEGER DEFAULT 12;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS bank_details TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS shift_start TEXT DEFAULT '09:00';
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS allowed_forms JSONB;
 
 -- ============================================================
 -- 10. ATTENDANCE & 11. PAYSLIPS

@@ -987,6 +987,23 @@ export async function addEmployee(emp) {
   return data?.[0];
 }
 
+// Saved apart from the rest of the profile: if the allowed_forms column is missing (migration not run),
+// only this fails, instead of the whole profile update falling back to this phone
+export async function saveEmployeeForms(empId, forms) {
+  const client = initDb();
+  if (!client) {
+    setLocalItem('employees', fetchEmployeesLocally().map(e => (e.id === empId ? { ...e, allowed_forms: forms } : e)));
+    return true;
+  }
+
+  const { error } = await client.from('employees').update({ allowed_forms: forms }).eq('id', empId);
+  if (error) {
+    console.warn('Save employee forms DB error:', error);
+    return false;
+  }
+  return true;
+}
+
 export async function updateEmployee(emp) {
   const client = initDb();
   if (!client) {

@@ -4,6 +4,7 @@ import {
   fetchEmployees, 
   addEmployee, 
   updateEmployee,
+  saveEmployeeForms,
   deleteEmployee, 
   fetchAttendance, 
   saveAttendance, 
@@ -17,6 +18,7 @@ import {
 } from '../db.js';
 import { showToast, showModal, closeModal, showConfirmDelete } from '../ui.js';
 import { escapeHtml } from '../utils.js';
+import { EMPLOYEE_FORMS, getEmployeeFormKeys } from './employee.js';
 import {
   renderWifiAttendanceCard,
   initLiveWifiStatus,
@@ -1569,6 +1571,19 @@ window.toggleEditProfile = function(empId) {
         <input class="form-input" id="edit-emp-password" value="${emp.password || ''}" placeholder="Login password">
       </div>
 
+      ${isOwner ? `
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label" style="font-weight:600;">Forms shown to this employee</label>
+        <div class="chip-group" id="edit-emp-forms">
+          ${EMPLOYEE_FORMS.map(f => `
+            <div class="chip ${getEmployeeFormKeys(emp).includes(f.key) ? 'selected' : ''}" data-form="${f.key}" onclick="this.classList.toggle('selected')">
+              <i class="ti ${f.icon}" style="font-size:13px"></i> ${f.title}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      ` : ''}
+
       <div class="edit-profile-footer" style="display:flex; gap:12px; margin-top:22px; border-top:1px solid var(--border-gold-subtle, rgba(245,200,66,0.18)); padding-top:16px;">
         <button class="btn btn-outline" onclick="window.showEmployeePerformance('${empId}')" style="flex:1; justify-content:center;">Cancel</button>
         <button class="btn btn-gold" onclick="window.saveEditedProfile('${empId}')" style="flex:1.5; justify-content:center; background:linear-gradient(135deg, #f5c842, #e8a020); color:#1a1005; font-weight:700;">
@@ -1651,6 +1666,21 @@ window.saveEditedProfile = async function(empId) {
     if (idx !== -1) {
       window._cachedEmployees[idx] = { ...window._cachedEmployees[idx], ...updatedPayload };
     }
+
+    // Only the owner chooses which forms an employee sees
+    const formChips = document.querySelectorAll('#edit-emp-forms .chip');
+    if (state.userRole === 'owner' && formChips.length) {
+      const forms = [...formChips].filter(c => c.classList.contains('selected')).map(c => c.dataset.form);
+      const unchanged = JSON.stringify(forms) === JSON.stringify(EMPLOYEE_FORMS.map(f => f.key).filter(k => getEmployeeFormKeys(emp).includes(k)));
+      if (!unchanged) {
+        if (await saveEmployeeForms(empId, forms)) {
+          if (idx !== -1) window._cachedEmployees[idx].allowed_forms = forms;
+        } else {
+          showToast('Couldn\'t save which forms this employee sees. Run shop_settings_migration.sql in Supabase, then try again.', 'error');
+        }
+      }
+    }
+
     showToast('Employee profile updated!');
     window.showEmployeePerformance(empId);
     if (typeof window.render === 'function') window.render();

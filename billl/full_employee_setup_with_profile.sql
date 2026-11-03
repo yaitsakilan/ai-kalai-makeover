@@ -34,6 +34,7 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS leave_balance INTEGER DEFAULT 12;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS bank_details TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS emergency_contact TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS shift_start TEXT DEFAULT '09:00';
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS allowed_forms JSONB; -- forms shown on the staff page; NULL = all
 
 -- 3. Create attendance table if not exists
 CREATE TABLE IF NOT EXISTS attendance (
